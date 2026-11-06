@@ -478,6 +478,89 @@ export async function handleDynamicAutonomousResponse(
   else if (p.includes("sweep") || p.includes("triage") || p.includes("untagged") || p.includes("eod")) {
     reply = "End-of-day audit complete. I identified 1 unassigned charge requiring your attention:\n\n• **$34.20** at 'SQ* Urban Blend' (Yesterday, 4:15 PM)\n\nWas this Dining, Work Supplies, or a Group Split with someone? Tell me and I will tag it and update your budget ledger.";
   }
+  // 8. Scheduled Item Analysis & Payment Reminders
+  else if (
+    p.includes("scheduled") ||
+    p.includes("reminder") ||
+    p.includes("dave chen") ||
+    p.includes("alex miller") ||
+    p.includes("sarah jenkins") ||
+    p.includes("aws") ||
+    p.includes("infrastructure") ||
+    p.includes("saas") ||
+    p.includes("checkpoint") ||
+    p.includes("due")
+  ) {
+    if (
+      p.includes("dave") ||
+      p.includes("alex") ||
+      p.includes("sarah") ||
+      p.includes("split") ||
+      p.includes("invoice")
+    ) {
+      let debtorName = "Dave Chen";
+      let amount = 65.0;
+      let memo = "Downtown Craft Bar & Grill Split";
+
+      if (p.includes("alex")) {
+        debtorName = "Alex Miller";
+        amount = 42.5;
+        memo = "Dinner & Social Gathering Split";
+      } else if (p.includes("sarah")) {
+        debtorName = "Sarah Jenkins";
+        amount = 79.0;
+        memo = "Zara Mall Galleria ($65) & Starbucks ($14)";
+      }
+
+      const invArgs = {
+        recipients: [
+          {
+            email: `${debtorName.toLowerCase().replace(/[^a-z0-9]/g, "")}@example.com`,
+            name: debtorName,
+            amount,
+            description: memo,
+          },
+        ],
+        isConfirmed: false,
+      };
+
+      const invResult = (await executeAgentTool("dispatch_paypal_invoices", invArgs)) as Record<string, unknown>;
+      executedTools.push({ name: "dispatch_paypal_invoices", args: invArgs, result: invResult });
+      handlers.onToolCall?.("dispatch_paypal_invoices", invArgs, invResult);
+      actionCard = invResult;
+      handlers.onActionCard?.(actionCard);
+
+      gridMutation = {
+        filter: { debtor_name: debtorName },
+        statusMessage: `Payment Reminder: Drafted $${amount.toFixed(2)} PayPal invoice for ${debtorName}.`,
+      };
+      handlers.onGridMutation?.(gridMutation);
+
+      reply = `I reviewed the scheduled payment for **${debtorName}**:\n\n• **Amount Due:** $${amount.toFixed(2)}\n• **Settlement Status:** Unpaid Split\n• **Linked Memo:** ${memo}\n\nI have generated an itemized PayPal invoice reminder ready to dispatch to their sandbox account. Please review the card below and tap **Confirm & Send**.`;
+    } else if (
+      p.includes("aws") ||
+      p.includes("cloud") ||
+      p.includes("saas") ||
+      p.includes("dev tools") ||
+      p.includes("entertainment") ||
+      p.includes("streaming")
+    ) {
+      const isAws = p.includes("aws") || p.includes("cloud") || p.includes("infrastructure");
+      const billTitle = isAws ? "Cloud Infrastructure (AWS & DO)" : "SaaS Dev Tools (GitHub & OpenAI)";
+      const billAmount = isAws ? 95.0 : 45.0;
+      const billCategory = "Utilities";
+
+      gridMutation = {
+        filter: { category: billCategory },
+        statusMessage: `Scheduled Bill: ${billTitle} ($${billAmount.toFixed(2)}) verified against ${billCategory} budget.`,
+      };
+      handlers.onGridMutation?.(gridMutation);
+
+      reply = `I analyzed your upcoming scheduled recurring charge: **${billTitle}**:\n\n• **Amount:** $${billAmount.toFixed(2)}\n• **Category:** ${billCategory}\n• **Scheduled Date:** Due on Nov ${isAws ? "12" : "20"}, 2026\n• **Budget Pacing:** Pacing within healthy limits. No threshold overrun detected.\n• **Payment Method:** Auto-debit via linked PayPal Business debit.`;
+    } else {
+      reply = `I reviewed this milestone checkpoint against your active ledger. Your budget caps remain steady with **$474.30** remaining under your global monthly ceiling across all categories.`;
+    }
+  }
   // Default General Assistant Guidance
   else {
     reply = `I am active as your Autonomous Financial Orchestrator. You can speak to me naturally to:\n\n• Split multi-venue charges (e.g. *"split last 3 hours 5 ways with Alex and Dave"*)\n• Invoicing and client billing (e.g. *"draft invoice to Acme Corp for 20 hrs at $95/hr"*)\n• Budget limits (e.g. *"did I overspend on Groceries this month?"*)\n• Audit bills (drop a receipt image or say *"audit dinner bill against PayPal"*)\n• Reconfigure your live AG Grid ledger.`;
