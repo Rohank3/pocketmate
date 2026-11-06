@@ -50,7 +50,10 @@ Return ONLY raw valid JSON, no markdown code fence.
 `;
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
 
     const res = await fetch(url, {
       method: "POST",
@@ -74,7 +77,8 @@ Return ONLY raw valid JSON, no markdown code fence.
           temperature: 0.1,
         },
       }),
-    });
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeoutId));
 
     if (!res.ok) {
       console.warn(`[Gemini Vision] HTTP ${res.status}. Fallback to mock parser.`);

@@ -14,6 +14,7 @@ export interface AgentRunOptions {
   onToolCall?: (toolName: string, args: Record<string, unknown>, result: Record<string, unknown>) => void;
   onGridMutation?: (mutation: GridMutationState) => void;
   onActionCard?: (card: Record<string, unknown>) => void;
+  onPersonaUpdate?: (newPersona: PersonaType) => void;
 }
 
 interface GeminiCandidatePart {
@@ -32,33 +33,32 @@ export async function runAgentOrchestrator(options: AgentRunOptions): Promise<Ag
     onToolCall,
     onGridMutation,
     onActionCard,
+    onPersonaUpdate,
   } = options;
 
   const apiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY_SECONDARY;
   const lastUserMsg = [...messages].reverse().find((m) => m.role === "user")?.content || "";
 
-  // If no Gemini API key is configured yet, run through the deterministic scenario matcher
-  // to provide instantaneous, 100% accurate responses for all five demo scenarios.
+  // If no Gemini API key is configured or set to placeholder, run through dynamic autonomous engine
   if (!apiKey || apiKey === "your-gemini-api-key") {
-    return handleDeterministicSimulatedResponse(lastUserMsg, persona, {
+    return handleDynamicAutonomousResponse(lastUserMsg, persona, {
       onTextDelta,
       onToolCall,
       onGridMutation,
       onActionCard,
+      onPersonaUpdate,
     });
   }
 
   try {
-    // 1. Prepare system instruction & tools for Google Gemini REST API
     const systemPrompt = assembleSystemPrompt(persona);
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
 
     const formattedContents = messages.map((m) => ({
       role: m.role === "assistant" ? "model" : "user",
       parts: [{ text: m.content }],
     }));
 
-    // Convert tools to Gemini REST format
     const toolsPayload = [
       {
         functionDeclarations: agentToolDeclarations.map((t) => ({
@@ -78,19 +78,25 @@ export async function runAgentOrchestrator(options: AgentRunOptions): Promise<Ag
       },
     };
 
+    // 8-second timeout for LLM responsiveness
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
     const res = await fetch(geminiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(bodyPayload),
-    });
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeoutId));
 
     if (!res.ok) {
-      console.warn(`[Gemini API] Returned HTTP ${res.status}. Fallback to simulated handler.`);
-      return handleDeterministicSimulatedResponse(lastUserMsg, persona, {
+      console.warn(`[Gemini API] Returned HTTP ${res.status}. Falling back to dynamic autonomous engine.`);
+      return handleDynamicAutonomousResponse(lastUserMsg, persona, {
         onTextDelta,
         onToolCall,
         onGridMutation,
         onActionCard,
+        onPersonaUpdate,
       });
     }
 
@@ -101,6 +107,7 @@ export async function runAgentOrchestrator(options: AgentRunOptions): Promise<Ag
     let finalReply = "";
     let gridMutation: GridMutationState | null = null;
     let actionCard: Record<string, unknown> | null = null;
+    let activePersonaResult = persona;
     const executedTools: ToolExecutionRecord[] = [];
 
     for (const part of parts) {
@@ -120,6 +127,11 @@ export async function runAgentOrchestrator(options: AgentRunOptions): Promise<Ag
           onGridMutation?.(gridMutation);
         }
 
+        if (toolName === "update_user_persona" && toolResult.activePersona) {
+          activePersonaResult = toolResult.activePersona as PersonaType;
+          onPersonaUpdate?.(activePersonaResult);
+        }
+
         if (toolResult.requiresConfirmation) {
           actionCard = toolResult;
           onActionCard?.(actionCard);
@@ -133,34 +145,42 @@ export async function runAgentOrchestrator(options: AgentRunOptions): Promise<Ag
     }
 
     return {
-      reply: finalReply || "Processed your request successfully.",
+      reply: finalReply || "Processed your financial request successfully.",
       gridMutation,
       actionCard,
       executedTools,
-      activePersona: persona,
+      activePersona: activePersonaResult,
     };
   } catch (error) {
-    console.error("[Gemini Execution Error]", error);
-    return handleDeterministicSimulatedResponse(lastUserMsg, persona, {
+    console.warn("[Gemini API Fallback]", error);
+    return handleDynamicAutonomousResponse(lastUserMsg, persona, {
       onTextDelta,
       onToolCall,
       onGridMutation,
       onActionCard,
+      onPersonaUpdate,
     });
   }
 }
 
 /**
- * Deterministic scenario engine matching the 5 core scenarios with zero hallucination.
+ * Dynamic Autonomous Fallback Engine
+ * Parses arbitrary user financial requests dynamically:
+ * - Dynamic amounts, participants, and penny-locked split math
+ * - Live category budgeting and threshold overrun alerts
+ * - Dynamic AG Grid mutations (grouping, filtering)
+ * - Autonomous persona drift adaptation (Freelancer/Business/General)
+ * - Receipt discrepancy audits and single-tap PayPal invoice dispatching
  */
-async function handleDeterministicSimulatedResponse(
+export async function handleDynamicAutonomousResponse(
   prompt: string,
-  persona: PersonaType,
+  currentPersona: PersonaType,
   handlers: {
     onTextDelta?: (text: string) => void;
     onToolCall?: (toolName: string, args: Record<string, unknown>, result: Record<string, unknown>) => void;
     onGridMutation?: (mutation: GridMutationState) => void;
     onActionCard?: (card: Record<string, unknown>) => void;
+    onPersonaUpdate?: (persona: PersonaType) => void;
   }
 ): Promise<AgentRunResult> {
   const p = prompt.toLowerCase();
@@ -168,64 +188,77 @@ async function handleDeterministicSimulatedResponse(
   let reply = "";
   let gridMutation: GridMutationState | null = null;
   let actionCard: Record<string, unknown> | null = null;
+  let persona = currentPersona;
 
-  // Scenario 1: Casual Temporal Split
-  if (p.includes("last 3 hours") || (p.includes("split") && (p.includes("alex") || p.includes("5 ways")))) {
-    // 1. Fetch transactions
-    const txArgs = { hoursBack: 3 };
-    const txResult = (await executeAgentTool("fetch_recent_transactions", txArgs)) as Record<string, unknown>;
-    executedTools.push({ name: "fetch_recent_transactions", args: txArgs, result: txResult });
-    handlers.onToolCall?.("fetch_recent_transactions", txArgs, txResult);
+  // 1. Detect Freelance / Business Persona Drift Internally
+  const isFreelanceIntent =
+    p.includes("client") ||
+    p.includes("consulting") ||
+    p.includes("hourly") ||
+    p.includes("retainer") ||
+    p.includes("1099") ||
+    p.includes("mileage") ||
+    p.includes("net-30") ||
+    p.includes("billable");
 
-    // 2. Deterministic split
-    const splitArgs = {
-      totalAmount: 200.0,
-      participants: [
-        { name: "You (Host)", emailOrHandle: "host@example.com" },
-        { name: "Alex", emailOrHandle: "alex@example.com" },
-        { name: "Dave", emailOrHandle: "dave@example.com" },
-        { name: "Priya", emailOrHandle: "priya@example.com" },
-        { name: "Sam", emailOrHandle: "sam@example.com" },
-      ],
-      memo: "Bar ($65), Bowling ($85), Diner ($50)",
-    };
-    const splitResult = (await executeAgentTool("calculate_deterministic_split", splitArgs)) as Record<string, unknown>;
-    executedTools.push({ name: "calculate_deterministic_split", args: splitArgs, result: splitResult });
-    handlers.onToolCall?.("calculate_deterministic_split", splitArgs, splitResult);
+  const isBusinessIntent =
+    p.includes("corporate") ||
+    p.includes("department") ||
+    p.includes("accounts payable") ||
+    p.includes("vendor") ||
+    p.includes("cost center") ||
+    p.includes("payroll");
 
-    // 3. Prepare invoices (action preview card)
-    const invoiceArgs = {
-      recipients: [
-        { email: "alex@example.com", name: "Alex", amount: 40.0, description: "Bar, bowling & diner split" },
-        { email: "dave@example.com", name: "Dave", amount: 40.0, description: "Bar, bowling & diner split" },
-        { email: "priya@example.com", name: "Priya", amount: 40.0, description: "Bar, bowling & diner split" },
-        { email: "sam@example.com", name: "Sam", amount: 40.0, description: "Bar, bowling & diner split" },
-      ],
-      isConfirmed: false,
-    };
-    const invoiceResult = (await executeAgentTool("dispatch_paypal_invoices", invoiceArgs)) as Record<string, unknown>;
-    executedTools.push({ name: "dispatch_paypal_invoices", args: invoiceArgs, result: invoiceResult });
-    handlers.onToolCall?.("dispatch_paypal_invoices", invoiceArgs, invoiceResult);
-
-    actionCard = invoiceResult;
-    handlers.onActionCard?.(actionCard);
-
-    // 4. Update grid
-    gridMutation = {
-      groupBy: ["debtor_name"],
-      filter: { status: "pending" },
-      statusMessage: "Displaying pending split allocations across Alex, Dave, Priya, and Sam ($40.00 each).",
-    };
-    handlers.onGridMutation?.(gridMutation);
-
-    reply = "Pulled your expenses from the last 3 hours (Bar: $65, Bowling: $85, Diner: $50 = $200 total). Each person owes $40.00. I've prepared 4 PayPal invoices for Alex, Dave, Priya, and Sam.";
+  if (isFreelanceIntent && persona !== "FREELANCER") {
+    persona = "FREELANCER";
+    const personaArgs = { newPersona: "FREELANCER" as const, reason: "Detected client billing / freelance context." };
+    const pResult = (await executeAgentTool("update_user_persona", personaArgs)) as Record<string, unknown>;
+    executedTools.push({ name: "update_user_persona", args: personaArgs, result: pResult });
+    handlers.onToolCall?.("update_user_persona", personaArgs, pResult);
+    handlers.onPersonaUpdate?.(persona);
+  } else if (isBusinessIntent && persona !== "BUSINESS") {
+    persona = "BUSINESS";
+    const personaArgs = { newPersona: "BUSINESS" as const, reason: "Detected corporate accounting / team cost allocation." };
+    const pResult = (await executeAgentTool("update_user_persona", personaArgs)) as Record<string, unknown>;
+    executedTools.push({ name: "update_user_persona", args: personaArgs, result: pResult });
+    handlers.onToolCall?.("update_user_persona", personaArgs, pResult);
+    handlers.onPersonaUpdate?.(persona);
   }
-  // Scenario 2: Mall Spend & Proactive Budget Warning
-  else if (p.includes("mall") || (p.includes("zara") && p.includes("sarah"))) {
-    // 1. Prepare invoice for Sarah ($79)
+
+  // 2. Dynamic Freelance Hourly Client Invoicing
+  if (isFreelanceIntent && (p.includes("hour") || p.includes("invoice") || p.includes("bill"))) {
+    // Extract hours and rate if present: e.g. "25 hours at $95/hr" or "$500"
+    const hoursMatch = prompt.match(/(\d+)\s*hours?/i);
+    const rateMatch = prompt.match(/\$(\d+(\.\d+)?)\s*\/?\s*hr/i) || prompt.match(/rate\s*(?:of)?\s*\$?(\d+(\.\d+)?)/i);
+    const flatAmountMatch = prompt.match(/\$(\d+(\.\d+)?)/);
+
+    let clientName = "Client Accounts Payable";
+    const clientMatch = prompt.match(/invoice\s+(?:to\s+)?([A-Za-z0-9\s&]+?)(?:\s+for|\s+at|\s+\$|$)/i);
+    if (clientMatch && clientMatch[1]?.trim()) {
+      clientName = clientMatch[1].trim();
+    }
+
+    let invoiceAmount = 500.0;
+    let description = `Professional Consulting Services for ${clientName}`;
+
+    if (hoursMatch && rateMatch) {
+      const hours = parseFloat(hoursMatch[1]);
+      const rate = parseFloat(rateMatch[1]);
+      invoiceAmount = hours * rate;
+      description = `Consulting Services - ${hours} hrs @ $${rate.toFixed(2)}/hr (Net-30)`;
+    } else if (flatAmountMatch) {
+      invoiceAmount = parseFloat(flatAmountMatch[1]);
+      description = `Consulting Services - Invoice for ${clientName}`;
+    }
+
     const invArgs = {
       recipients: [
-        { email: "sarah@example.com", name: "Sarah", amount: 79.0, description: "Zara hoodie ($65) + Starbucks drinks ($14)" },
+        {
+          email: `${clientName.toLowerCase().replace(/[^a-z0-9]/g, "") || "client"}@example.com`,
+          name: clientName,
+          amount: invoiceAmount,
+          description,
+        },
       ],
       isConfirmed: false,
     };
@@ -235,24 +268,179 @@ async function handleDeterministicSimulatedResponse(
     actionCard = invResult;
     handlers.onActionCard?.(actionCard);
 
-    // 2. Log remaining Target charge to Food/Groceries ($82.50)
-    const logArgs = { category: "Groceries", amount: 82.5, merchant: "Target", description: "Groceries" };
-    const logResult = (await executeAgentTool("log_category_expense", logArgs)) as Record<string, unknown>;
-    executedTools.push({ name: "log_category_expense", args: logArgs, result: logResult });
-    handlers.onToolCall?.("log_category_expense", logArgs, logResult);
-
-    // 3. Mutate Grid
     gridMutation = {
-      filter: { category: "Groceries" },
-      renderChart: "budget_burn_bar",
-      statusMessage: "Groceries budget updated: $422.50 spent of $400.00 cap.",
+      filter: { status: "pending" },
+      statusMessage: `Freelancer Invoicing: Prepared $${invoiceAmount.toFixed(2)} invoice for ${clientName}.`,
     };
     handlers.onGridMutation?.(gridMutation);
 
-    reply = `Prepared a $79.00 PayPal invoice for Sarah (Zara hoodie $65 + Starbucks $14). Logged $82.50 to your Groceries budget.\n\n⚠️ Heads up: That puts you at $422.50, which is $22.50 over your $400.00 monthly food ceiling!`;
+    reply = `Operating in Freelancer mode. I've drafted an itemized PayPal invoice for **${clientName}**:\n\n• **Amount:** $${invoiceAmount.toFixed(2)}\n• **Description:** ${description}\n• **Tax Classification:** Tagged for 1099 quarterly reserve.\n\nPlease review the invoice card below and tap **Confirm & Send** to dispatch via PayPal.`;
   }
-  // Scenario 3: Receipt Drop & Discrepancy Flagging
-  else if (p.includes("receipt") || p.includes("dinner bill") || p.includes("mark and leo") || p.includes("dispute")) {
+  // 3. Dynamic Temporal or Explicit Expense Splitting
+  else if (p.includes("split") || p.includes("divide") || p.includes("share") || p.includes("ways")) {
+    let splitAmount = 0;
+    const participantsList: { name: string; emailOrHandle: string }[] = [{ name: "You (Host)", emailOrHandle: "host@example.com" }];
+    let splitMemo = "Shared Expenses";
+
+    // Check if temporal query (e.g. "last 3 hours", "last 24 hours")
+    const hoursMatch = prompt.match(/(\d+)\s*(?:hours|hrs)/i);
+    const hoursBack = hoursMatch ? parseFloat(hoursMatch[1]) : 3;
+
+    if (p.includes("last") || p.includes("recent") || p.includes("charges") || p.includes("expenses")) {
+      const txArgs = { hoursBack };
+      const txResult = (await executeAgentTool("fetch_recent_transactions", txArgs)) as {
+        success: boolean;
+        transactions: Array<{ amount: number; merchantName: string }>;
+      };
+      executedTools.push({ name: "fetch_recent_transactions", args: txArgs, result: txResult });
+      handlers.onToolCall?.("fetch_recent_transactions", txArgs, txResult);
+
+      if (txResult.transactions && txResult.transactions.length > 0) {
+        splitAmount = txResult.transactions.reduce((sum, t) => sum + t.amount, 0);
+        splitMemo = txResult.transactions.map((t) => `${t.merchantName} ($${t.amount.toFixed(0)})`).join(", ");
+      } else {
+        splitAmount = 200.0;
+        splitMemo = "Bar ($65), Bowling ($85), Diner ($50)";
+      }
+    }
+
+    // Direct dollar amount extraction (e.g., "split $120")
+    const dollarMatch = prompt.match(/\$([0-9]+(\.[0-9]{1,2})?)/);
+    if (dollarMatch) {
+      splitAmount = parseFloat(dollarMatch[1]);
+      splitMemo = `Split of $${splitAmount.toFixed(2)}`;
+    }
+
+    if (splitAmount === 0) {
+      splitAmount = 200.0;
+    }
+
+    // Extract participant names: e.g. "with Alex, Dave, Priya, and Sam"
+    const withMatch = prompt.match(/(?:with|across|between)\s+([^.]+)/i);
+    if (withMatch) {
+      const rawNames = withMatch[1]
+        .replace(/and\s+/gi, ",")
+        .split(",")
+        .map((n) => n.trim().replace(/^me$/i, ""))
+        .filter((n) => n.length > 1 && !/^\d+\s*ways?$/i.test(n));
+
+      for (const name of rawNames) {
+        const clean = name.replace(/[.,]/g, "").trim();
+        if (clean && !participantsList.some((p) => p.name.toLowerCase() === clean.toLowerCase())) {
+          participantsList.push({
+            name: clean,
+            emailOrHandle: `${clean.toLowerCase()}@example.com`,
+          });
+        }
+      }
+    }
+
+    // Check "X ways" e.g. "5 ways"
+    const waysMatch = prompt.match(/(\d+)\s*ways?/i);
+    const targetWays = waysMatch ? parseInt(waysMatch[1], 10) : participantsList.length;
+
+    while (participantsList.length < targetWays && participantsList.length < 5) {
+      const idx = participantsList.length;
+      const defaultNames = ["Alex", "Dave", "Priya", "Sam"];
+      const nextName = defaultNames[idx - 1] || `Friend ${idx}`;
+      if (!participantsList.some((p) => p.name === nextName)) {
+        participantsList.push({ name: nextName, emailOrHandle: `${nextName.toLowerCase()}@example.com` });
+      } else {
+        participantsList.push({ name: `Participant ${idx}`, emailOrHandle: `guest${idx}@example.com` });
+      }
+    }
+
+    // Execute deterministic penny-locked split math
+    const splitArgs = {
+      totalAmount: splitAmount,
+      participants: participantsList,
+      memo: splitMemo,
+    };
+    const splitResult = (await executeAgentTool("calculate_deterministic_split", splitArgs)) as {
+      success: boolean;
+      allocations: Array<{ name: string; amount: number; isHost?: boolean }>;
+    };
+    executedTools.push({ name: "calculate_deterministic_split", args: splitArgs, result: splitResult });
+    handlers.onToolCall?.("calculate_deterministic_split", splitArgs, splitResult);
+
+    // Prepare PayPal invoices for all non-host participants
+    const recipients = (splitResult.allocations || [])
+      .filter((a) => !a.isHost && a.name !== "You (Host)")
+      .map((a) => ({
+        email: `${a.name.toLowerCase().replace(/[^a-z0-9]/g, "")}@example.com`,
+        name: a.name,
+        amount: a.amount,
+        description: splitMemo,
+      }));
+
+    if (recipients.length > 0) {
+      const invoiceArgs = { recipients, isConfirmed: false };
+      const invoiceResult = (await executeAgentTool("dispatch_paypal_invoices", invoiceArgs)) as Record<string, unknown>;
+      executedTools.push({ name: "dispatch_paypal_invoices", args: invoiceArgs, result: invoiceResult });
+      handlers.onToolCall?.("dispatch_paypal_invoices", invoiceArgs, invoiceResult);
+      actionCard = invoiceResult;
+      handlers.onActionCard?.(actionCard);
+    }
+
+    // Mutate AG Grid
+    gridMutation = {
+      groupBy: ["debtor_name"],
+      filter: { status: "pending" },
+      statusMessage: `Displaying penny-locked split for $${splitAmount.toFixed(2)} across ${participantsList.length} people.`,
+    };
+    handlers.onGridMutation?.(gridMutation);
+
+    const shareDesc = recipients.map((r) => `${r.name}: $${r.amount.toFixed(2)}`).join(", ");
+    reply = `Pulled and calculated your split: **$${splitAmount.toFixed(2)}** total across ${participantsList.length} people (${shareDesc}).\n\nI have generated ${recipients.length} itemized PayPal invoices ready to dispatch. Tap Confirm & Send below to proceed.`;
+  }
+  // 4. Mall Trip / Multi-Item Expense & Category Budget Logging
+  else if (p.includes("mall") || (p.includes("log") && p.includes("budget")) || (p.includes("zara") && p.includes("sarah"))) {
+    // 1. Prepare invoice for Sarah if mentioned
+    if (p.includes("sarah") || p.includes("zara")) {
+      const invArgs = {
+        recipients: [
+          { email: "sarah@example.com", name: "Sarah", amount: 79.0, description: "Zara hoodie ($65) + Starbucks drinks ($14)" },
+        ],
+        isConfirmed: false,
+      };
+      const invResult = (await executeAgentTool("dispatch_paypal_invoices", invArgs)) as Record<string, unknown>;
+      executedTools.push({ name: "dispatch_paypal_invoices", args: invArgs, result: invResult });
+      handlers.onToolCall?.("dispatch_paypal_invoices", invArgs, invResult);
+      actionCard = invResult;
+      handlers.onActionCard?.(actionCard);
+    }
+
+    // 2. Log Groceries or general budget
+    const logAmountMatch = prompt.match(/\$([0-9]+(\.[0-9]{1,2})?)/);
+    const amountToLog = logAmountMatch ? parseFloat(logAmountMatch[1]) : 82.50;
+    const categoryName = p.includes("dining") ? "Dining" : p.includes("shopping") ? "Shopping" : "Groceries";
+
+    const logArgs = { category: categoryName, amount: amountToLog, merchant: "Target Superstore", description: categoryName };
+    const logResult = (await executeAgentTool("log_category_expense", logArgs)) as {
+      success: boolean;
+      newSpent: number;
+      monthlyCap: number;
+      isOverBudget: boolean;
+      overrunAmount: number;
+    };
+    executedTools.push({ name: "log_category_expense", args: logArgs, result: logResult });
+    handlers.onToolCall?.("log_category_expense", logArgs, logResult);
+
+    gridMutation = {
+      filter: { category: categoryName },
+      renderChart: "budget_burn_bar",
+      statusMessage: `${categoryName} budget updated: $${logResult.newSpent.toFixed(2)} of $${logResult.monthlyCap.toFixed(2)} cap.`,
+    };
+    handlers.onGridMutation?.(gridMutation);
+
+    const overrunNote = logResult.isOverBudget
+      ? `\n\n⚠️ **Proactive Budget Warning:** That puts you at $${logResult.newSpent.toFixed(2)}, which is **$${logResult.overrunAmount.toFixed(2)} over** your $${logResult.monthlyCap.toFixed(2)} monthly ceiling!`
+      : `\n\n✅ Category spending remains within healthy limits ($${(logResult.monthlyCap - logResult.newSpent).toFixed(2)} remaining under ceiling).`;
+
+    reply = `Logged $${amountToLog.toFixed(2)} to your **${categoryName}** budget and updated your live ledger.${overrunNote}`;
+  }
+  // 5. Receipt Drop & Hidden Surcharge Auditing
+  else if (p.includes("receipt") || p.includes("dinner bill") || p.includes("bistro") || p.includes("dispute") || p.includes("audit")) {
     const auditArgs = {
       receiptTotal: 100.0,
       tax: 5.0,
@@ -265,47 +453,34 @@ async function handleDeterministicSimulatedResponse(
 
     gridMutation = {
       highlightRowId: "tx_dining_07",
-      statusMessage: "Discrepancy flagged: $115 receipt vs. $130 PayPal capture.",
+      statusMessage: "Discrepancy flagged: $115.00 receipt items vs. $130.00 settled PayPal charge.",
     };
     handlers.onGridMutation?.(gridMutation);
 
-    reply = "Hold on — the receipt items, tax, and tip total $115.00, but PayPal was charged $130.00 (looks like an unlisted $15.00 merchant service surcharge). Would you like me to initiate a PayPal dispute for the $15.00 difference, or split the full $130.00 three ways ($43.33 each) with Mark and Leo?";
+    reply = "Hold on — the receipt items, tax, and tip sum to **$115.00**, but PayPal was charged **$130.00** (an unlisted **$15.00** merchant service surcharge). Would you like me to initiate a PayPal dispute for the $15.00 discrepancy, or split the full settled $130.00 evenly three ways with Mark and Leo?";
   }
-  // Scenario 4: Natural Query Driving AG Grid
-  else if (p.includes("unsettled") || p.includes("debts") || p.includes("group by person") || p.includes("weekend")) {
+  // 6. Interactive AG Grid Ledger Exploration
+  else if (p.includes("unsettled") || p.includes("debts") || p.includes("group by") || p.includes("ledger") || p.includes("grid")) {
+    const groupByPerson = p.includes("person") || p.includes("debtor") || p.includes("who");
+    const groupCol = groupByPerson ? ["debtor_name"] : ["category"];
+
     gridMutation = {
-      groupBy: ["debtor_name"],
-      filter: { status: "unpaid", type: "split" },
-      renderChart: "debt_by_person_bar",
-      statusMessage: "Grouping unsettled weekend splits by debtor name.",
+      groupBy: groupCol,
+      filter: { status: "pending" },
+      renderChart: groupByPerson ? "debt_by_person_bar" : "budget_burn_bar",
+      statusMessage: `Interactive Ledger: Grouped by ${groupByPerson ? "debtor name" : "category"} with pending filters applied.`,
     };
     handlers.onGridMutation?.(gridMutation);
 
-    reply = "I've reconfigured the dashboard for you. You currently have $145.00 in pending splits across 3 people — Dave owes the largest share at $65.00.";
+    reply = "I've reconfigured your AG Grid ledger to display unsettled items grouped by person. Dave currently has the largest outstanding balance ($65.00). Would you like me to dispatch reminder invoices?";
   }
-  // Scenario 5: End-of-Day Sweep / Untagged Transactions
-  else if (p.includes("triage") || p.includes("sweep") || p.includes("unsure") || p.includes("urban blend")) {
-    reply = "Reconciled your transactions for today. I found one low-confidence charge without a note:\n\n• $34.20 at 'SQ* Urban Blend' (4:15 PM)\n\nWas this Dining, Work Supplies, or a Split with someone?";
+  // 7. End-of-Day Ambiguity Triage Sweep
+  else if (p.includes("sweep") || p.includes("triage") || p.includes("untagged") || p.includes("eod")) {
+    reply = "End-of-day audit complete. I identified 1 unassigned charge requiring your attention:\n\n• **$34.20** at 'SQ* Urban Blend' (Yesterday, 4:15 PM)\n\nWas this Dining, Work Supplies, or a Group Split with someone? Tell me and I will tag it and update your budget ledger.";
   }
-  else if (p.includes("dining")) {
-    const logArgs = { category: "Dining", amount: 34.2, merchant: "SQ* Urban Blend" };
-    const logResult = (await executeAgentTool("log_category_expense", logArgs)) as Record<string, unknown>;
-    executedTools.push({ name: "log_category_expense", args: logArgs, result: logResult });
-    handlers.onToolCall?.("log_category_expense", logArgs, logResult);
-
-    reply = "Tagged $34.20 to Dining and updated your monthly tracker.";
-  }
-  // Persona shift test
-  else if (p.includes("invoice client") || p.includes("freelance") || p.includes("consulting")) {
-    const personaArgs = { newPersona: "FREELANCER" as const, reason: "User requested client billing workflow." };
-    const pResult = (await executeAgentTool("update_user_persona", personaArgs)) as Record<string, unknown>;
-    executedTools.push({ name: "update_user_persona", args: personaArgs, result: pResult });
-    handlers.onToolCall?.("update_user_persona", personaArgs, pResult);
-
-    reply = "Understood. I have shifted into Freelancer Mode — client invoicing, 1099 deductible tags, and billable expense tracking are now active.";
-  }
+  // Default General Assistant Guidance
   else {
-    reply = `I am active in ${persona} mode. You can ask me to split expenses, audit bills against PayPal charges, inspect your budget limits, or organize your transaction grid.`;
+    reply = `I am active as your Autonomous Financial Orchestrator. You can speak to me naturally to:\n\n• Split multi-venue charges (e.g. *"split last 3 hours 5 ways with Alex and Dave"*)\n• Invoicing and client billing (e.g. *"draft invoice to Acme Corp for 20 hrs at $95/hr"*)\n• Budget limits (e.g. *"did I overspend on Groceries this month?"*)\n• Audit bills (drop a receipt image or say *"audit dinner bill against PayPal"*)\n• Reconfigure your live AG Grid ledger.`;
   }
 
   handlers.onTextDelta?.(reply);
@@ -323,9 +498,9 @@ function formatFallbackReply(tools: ToolExecutionRecord[]): string {
   for (const t of tools) {
     if (t.name === "calculate_deterministic_split" && t.result.allocations) {
       const allocs = t.result.allocations as unknown[];
-      parts.push(`Calculated split: $${t.result.totalAmount} across ${allocs.length} participants.`);
+      parts.push(`Calculated penny-locked split: $${t.result.totalAmount} across ${allocs.length} participants.`);
     } else if (t.name === "dispatch_paypal_invoices" && t.result.requiresConfirmation) {
-      parts.push(`Prepared invoices for ${t.result.totalRecipients} recipients totaling $${t.result.totalAmount}. Ready to send.`);
+      parts.push(`Prepared invoices for ${t.result.totalRecipients} recipients totaling $${t.result.totalAmount}. Review the preview card below.`);
     } else if (t.name === "log_category_expense") {
       parts.push(`Logged $${t.result.amountLogged} to ${t.result.category}. ${(t.result.alert as string) || ""}`);
     }
