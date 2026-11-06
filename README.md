@@ -16,6 +16,7 @@ PocketMate is an autonomous financial assistant that bridges conversational AI w
 ### 2. Autonomous Invoicing & Payment Dispatch
 - Direct integration with PayPal Developer APIs for drafting and dispatching itemized invoices and money requests.
 - Single-tap confirmation cards for write-actions to ensure strict user control over money movements while keeping friction near zero.
+- **Log in with PayPal (OpenID Connect)**: Seamless account linking with PayPal Identity API alongside zero-friction instant demo access.
 
 ### 3. Intelligent Receipt Auditing (Multimodal Vision)
 - Upload paper receipts or digital bills to cross-check itemized charges, taxes, and tips against settled transaction totals.
