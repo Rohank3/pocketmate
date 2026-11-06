@@ -6,6 +6,7 @@ import { ChatPanel, ChatMessageItem } from "@/components/chat/ChatPanel";
 import { TransactionGrid, TransactionRow } from "@/components/grid/TransactionGrid";
 import { ActionCardData } from "@/components/cards/ActionConfirmCard";
 import { GridMutationState } from "@/types/agent";
+import { CategoryControlBar, CategoryItem } from "@/components/categories/CategoryControlBar";
 import {
   Wallet,
   TrendingDown,
@@ -132,6 +133,35 @@ export default function Home() {
   const [transactions, setTransactions] = useState<TransactionRow[]>(INITIAL_TRANSACTIONS);
   const [gridMutation, setGridMutation] = useState<GridMutationState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  const [categories, setCategories] = useState<CategoryItem[]>([
+    { id: "cat_groceries", name: "Groceries", monthlyCap: 400, color: "#10b981" },
+    { id: "cat_dining", name: "Dining", monthlyCap: 250, color: "#3b82f6" },
+    { id: "cat_entertainment", name: "Entertainment", monthlyCap: 150, color: "#8b5cf6" },
+    { id: "cat_shopping", name: "Shopping", monthlyCap: 200, color: "#ec4899" },
+  ]);
+  const [selectedCategory, setSelectedCategory] = useState<string>("All");
+
+  const handleAddCategory = (newCat: Omit<CategoryItem, "id">) => {
+    const id = `cat_${Date.now()}`;
+    setCategories((prev) => [...prev, { ...newCat, id }]);
+    setSelectedCategory(newCat.name);
+  };
+
+  const handleEditCategory = (categoryId: string, updatedCap: number, updatedName?: string) => {
+    setCategories((prev) =>
+      prev.map((c) =>
+        c.id === categoryId
+          ? { ...c, monthlyCap: updatedCap, ...(updatedName ? { name: updatedName } : {}) }
+          : c
+      )
+    );
+  };
+
+  const handleDeleteCategory = (categoryId: string) => {
+    setCategories((prev) => prev.filter((c) => c.id !== categoryId));
+    setSelectedCategory("All");
+  };
   const [authenticatedUser, setAuthenticatedUser] = useState<{ name: string; email: string } | null>(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -367,6 +397,12 @@ export default function Home() {
     ]);
   };
 
+  const groceriesCategory = categories.find((c) => c.name.toLowerCase() === "groceries");
+  const groceriesCap = groceriesCategory?.monthlyCap ?? 400;
+  const groceriesSpent = 422.5; // running monthly groceries spend
+  const groceriesOver = groceriesSpent > groceriesCap;
+  const groceriesDiff = Math.abs(groceriesSpent - groceriesCap);
+
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col p-3 md:p-6 lg:p-8">
       {/* Top Bar / Branding */}
@@ -453,12 +489,28 @@ export default function Home() {
         <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800/80 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-xs text-zinc-400">Groceries Budget Cap</p>
-            <p className="text-lg font-bold text-zinc-100 font-mono mt-0.5">$422.50 / $400</p>
-            <p className="text-[11px] text-rose-400 mt-0.5">
-              ⚠️ $22.50 over monthly ceiling (106%)
+            <p className="text-lg font-bold text-zinc-100 font-mono mt-0.5">
+              ${groceriesSpent.toFixed(2)} / ${groceriesCap.toFixed(0)}
+            </p>
+            <p
+              className={`text-[11px] mt-0.5 ${
+                groceriesOver ? "text-rose-400" : "text-emerald-400"
+              }`}
+            >
+              {groceriesOver
+                ? `⚠️ $${groceriesDiff.toFixed(2)} over monthly ceiling (${Math.round(
+                    (groceriesSpent / groceriesCap) * 100
+                  )}%)`
+                : `✅ $${groceriesDiff.toFixed(2)} remaining under ceiling`}
             </p>
           </div>
-          <div className="w-10 h-10 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
+          <div
+            className={`w-10 h-10 rounded-lg border flex items-center justify-center ${
+              groceriesOver
+                ? "bg-rose-500/10 border-rose-500/20 text-rose-400"
+                : "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+            }`}
+          >
             <ShieldCheck className="w-5 h-5" />
           </div>
         </div>
@@ -503,6 +555,17 @@ export default function Home() {
 
         {/* Right Column: AG Grid Reactive Ledger + Bryntum Timeline (7 Cols) */}
         <div className="lg:col-span-7 flex flex-col h-[650px] lg:h-auto gap-3">
+          {/* Universal Category Command & Roundabout Carousel Bar */}
+          <CategoryControlBar
+            categories={categories}
+            selectedCategory={selectedCategory}
+            transactions={transactions}
+            onSelectCategory={setSelectedCategory}
+            onAddCategory={handleAddCategory}
+            onEditCategory={handleEditCategory}
+            onDeleteCategory={handleDeleteCategory}
+          />
+
           {/* View Tab Switcher */}
           <div className="flex items-center justify-between bg-zinc-900/90 border border-zinc-800 p-1.5 rounded-xl">
             <div className="flex flex-wrap items-center gap-1.5">
@@ -564,6 +627,7 @@ export default function Home() {
               <TransactionGrid
                 rowData={transactions}
                 gridMutation={gridMutation}
+                selectedCategory={selectedCategory}
               />
             )}
             {activeRightTab === "studio" && (
@@ -571,6 +635,8 @@ export default function Home() {
             )}
             {activeRightTab === "scheduler" && (
               <BudgetScheduler
+                categories={categories}
+                selectedCategory={selectedCategory}
                 onEventClick={handleSchedulerEventClick}
               />
             )}
