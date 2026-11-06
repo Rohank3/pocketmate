@@ -3,6 +3,7 @@ import { agentToolDeclarations, executeAgentTool } from "./tools";
 import { GridMutationState, ToolExecutionRecord, AgentRunResult } from "@/types/agent";
 import { SandboxStore } from "@/lib/sandbox/sandboxStore";
 import { paypalClient } from "@/lib/paypal/client";
+import { findSandboxAccount, ALL_SANDBOX_ACCOUNTS } from "@/lib/sandbox/sandboxAccounts";
 
 export interface AgentMessage {
   role: "user" | "assistant" | "system";
@@ -227,8 +228,57 @@ export async function handleDynamicAutonomousResponse(
     handlers.onPersonaUpdate?.(persona);
   }
 
+  // 1. Direct Peer Settlement / Transfer via PayPal Payouts API
+  // e.g. "Pay Dave $50", "Send $30 to Sarah", "Transfer $45 to Dave Chen", "Settle $65 with Dave"
+  const isPayoutIntent =
+    (p.startsWith("pay") ||
+      p.startsWith("send") ||
+      p.startsWith("transfer") ||
+      p.includes("payout") ||
+      p.includes("reimburse") ||
+      (p.includes("settle") && !p.includes("split"))) &&
+    !p.includes("invoice") &&
+    !p.includes("bill me");
+
+  if (isPayoutIntent) {
+    const dollarMatch = prompt.match(/\$([0-9]+(\.[0-9]{1,2})?)/) || prompt.match(/(\d+(\.\d+)?)\s*(?:dollars?|usd)/i);
+    const amount = dollarMatch ? parseFloat(dollarMatch[1]) : 50.0;
+
+    let recipientQuery = "";
+    const toMatch = prompt.match(/(?:to|pay|send|transfer|settle with|reimburse)\s+([A-Za-z0-9._%+-]+(?:@[A-Za-z0-9.-]+\.[A-Za-z]{2,})?|[A-Za-z]+(?:\s+[A-Za-z]+)?)/i);
+    if (toMatch && toMatch[1]) {
+      recipientQuery = toMatch[1].replace(/for\b.*/i, "").trim();
+    }
+
+    const matchedAccount = recipientQuery ? findSandboxAccount(recipientQuery) : null;
+    const recipientEmail = matchedAccount ? matchedAccount.email : recipientQuery.includes("@") ? recipientQuery : "dave.chen.pm@personal.example.com";
+    const recipientName = matchedAccount ? matchedAccount.name : recipientQuery || "Dave Chen";
+
+    const noteMatch = prompt.match(/for\s+([^.$]+)/i);
+    const note = noteMatch ? noteMatch[1].trim() : `Direct P2P Settlement to ${recipientName} via PocketMate`;
+
+    const payoutArgs = {
+      recipientEmail,
+      amount,
+      note,
+      isConfirmed: false,
+    };
+
+    const payoutResult = (await executeAgentTool("send_direct_payout", payoutArgs)) as Record<string, unknown>;
+    executedTools.push({ name: "send_direct_payout", args: payoutArgs, result: payoutResult });
+    handlers.onToolCall?.("send_direct_payout", payoutArgs, payoutResult);
+    actionCard = payoutResult;
+    handlers.onActionCard?.(actionCard);
+
+    gridMutation = {
+      statusMessage: `PayPal Payouts Rail: Prepared $${amount.toFixed(2)} direct transfer to ${recipientName}.`,
+    };
+    handlers.onGridMutation?.(gridMutation);
+
+    reply = `I've prepared a direct peer-to-peer transfer via the **PayPal Payouts API**:\n\n• **Recipient:** ${recipientName} (\`${recipientEmail}\`)\n• **Amount:** $${amount.toFixed(2)} USD\n• **Note:** "${note}"\n• **Rail:** Live virtual funds transfer\n\nPlease review the transfer card below and tap **Confirm & Transfer Funds** to execute.`;
+  }
   // 2. Dynamic Freelance Hourly Client Invoicing
-  if (isFreelanceIntent && (p.includes("hour") || p.includes("invoice") || p.includes("bill"))) {
+  else if (isFreelanceIntent && (p.includes("hour") || p.includes("invoice") || p.includes("bill"))) {
     // Extract hours and rate if present: e.g. "25 hours at $95/hr" or "$500"
     const hoursMatch = prompt.match(/(\d+)\s*hours?/i);
     const rateMatch = prompt.match(/\$(\d+(\.\d+)?)\s*\/?\s*hr/i) || prompt.match(/rate\s*(?:of)?\s*\$?(\d+(\.\d+)?)/i);
@@ -331,23 +381,31 @@ export async function handleDynamicAutonomousResponse(
       for (const name of rawNames) {
         const clean = name.replace(/[.,]/g, "").trim();
         if (clean) {
-          // Resolve contact against user's past transaction history & contacts
-          const res = SandboxStore.resolveContactByName("usr_alex", clean);
-          if (res.match) {
+          const matchedAcc = findSandboxAccount(clean);
+          if (matchedAcc) {
             participantsList.push({
-              name: res.match.name,
-              emailOrHandle: res.match.email,
+              name: matchedAcc.name,
+              emailOrHandle: matchedAcc.email,
             });
-            if (res.reason) {
-              disambiguationNotes.push(res.reason);
-            }
-          } else if (clean.includes("@")) {
-            participantsList.push({ name: clean.split("@")[0], emailOrHandle: clean });
           } else {
-            participantsList.push({
-              name: clean,
-              emailOrHandle: `${clean.toLowerCase().replace(/[^a-z0-9]/g, "")}@sandbox.paypal.com`,
-            });
+            // Resolve contact against user's past transaction history & contacts
+            const res = SandboxStore.resolveContactByName("usr_alex", clean);
+            if (res.match) {
+              participantsList.push({
+                name: res.match.name,
+                emailOrHandle: res.match.email,
+              });
+              if (res.reason) {
+                disambiguationNotes.push(res.reason);
+              }
+            } else if (clean.includes("@")) {
+              participantsList.push({ name: clean.split("@")[0], emailOrHandle: clean });
+            } else {
+              participantsList.push({
+                name: clean,
+                emailOrHandle: `${clean.toLowerCase().replace(/[^a-z0-9]/g, "")}.pm@personal.example.com`,
+              });
+            }
           }
         }
       }
@@ -357,18 +415,19 @@ export async function handleDynamicAutonomousResponse(
     const waysMatch = prompt.match(/(\d+)\s*ways?/i);
     const targetWays = waysMatch ? parseInt(waysMatch[1], 10) : participantsList.length;
 
+    const availableSandboxUsers = ALL_SANDBOX_ACCOUNTS.filter((a) => a.type === "PERSONAL");
+    let sandboxUserIdx = 0;
     while (participantsList.length < targetWays && participantsList.length < 5) {
-      const idx = participantsList.length;
-      const defaultNames = ["Dave Chen", "Sarah Jenkins", "Alex Rivera", "Sam"];
-      const nextName = defaultNames[idx - 1] || `Participant ${idx}`;
-      if (!participantsList.some((p) => p.name === nextName)) {
-        const res = SandboxStore.resolveContactByName("usr_alex", nextName);
+      const nextAcc = availableSandboxUsers[sandboxUserIdx % availableSandboxUsers.length];
+      sandboxUserIdx++;
+      if (nextAcc && !participantsList.some((p) => p.emailOrHandle === nextAcc.email)) {
         participantsList.push({
-          name: res.match?.name || nextName,
-          emailOrHandle: res.match?.email || `${nextName.toLowerCase().replace(/[^a-z0-9]/g, "")}@sandbox.paypal.com`,
+          name: nextAcc.name,
+          emailOrHandle: nextAcc.email,
         });
       } else {
-        participantsList.push({ name: `Participant ${idx}`, emailOrHandle: `guest${idx}@sandbox.paypal.com` });
+        const idx = participantsList.length;
+        participantsList.push({ name: `Participant ${idx}`, emailOrHandle: `guest${idx}.pm@personal.example.com` });
       }
     }
 

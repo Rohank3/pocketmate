@@ -35,6 +35,13 @@ export const DispatchInvoicesSchema = z.object({
   isConfirmed: z.boolean().default(false), // Layer D: Requires explicit confirmation before live write
 });
 
+export const SendPayoutSchema = z.object({
+  recipientEmail: z.string().email(),
+  amount: z.number().positive(),
+  note: z.string().optional(),
+  isConfirmed: z.boolean().default(false),
+});
+
 export const LogCategoryExpenseSchema = z.object({
   category: z.string().min(1),
   amount: z.number().positive(),
@@ -170,6 +177,23 @@ export const agentToolDeclarations = [
         },
       },
       required: ["recipients"],
+    },
+  },
+  {
+    name: "send_direct_payout",
+    description: "Transfers funds directly from your PayPal Sandbox account to a recipient using PayPal Payouts API. Used for direct settlements, reimbursements, or payments ('pay Dave $50', 'send $30 to Sarah'). Returns an interactive preview card if not confirmed.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        recipientEmail: { type: "STRING", description: "PayPal email of recipient." },
+        amount: { type: "NUMBER", description: "Dollar amount to transfer." },
+        note: { type: "STRING", description: "Payment reason or description." },
+        isConfirmed: {
+          type: "BOOLEAN",
+          description: "True if user explicitly clicked Confirm Transfer in the preview card.",
+        },
+      },
+      required: ["recipientEmail", "amount"],
     },
   },
   {
@@ -320,6 +344,43 @@ export async function executeAgentTool(name: string, rawArgs: Record<string, unk
         success: true,
         dispatchedCount: results.length,
         invoices: results,
+      };
+    }
+
+    case "send_direct_payout": {
+      const { recipientEmail, amount, note, isConfirmed } = SendPayoutSchema.parse(rawArgs);
+
+      if (!isConfirmed) {
+        return {
+          requiresConfirmation: true,
+          action: "DISPATCH_PAYOUT",
+          recipientEmail,
+          amount,
+          note: note || "Direct P2P Settlement via PocketMate",
+          recipients: [
+            {
+              email: recipientEmail,
+              name: recipientEmail.split("@")[0].replace(/[._]/g, " "),
+              amount,
+              description: note || "Direct P2P Settlement via PocketMate",
+            },
+          ],
+          totalRecipients: 1,
+          totalAmount: amount,
+          message: `Preview prepared: Ready to transfer $${amount.toFixed(2)} to ${recipientEmail} via PayPal Payouts API.`,
+        };
+      }
+
+      const payoutRes = await paypalClient.sendPayout({
+        recipientEmail,
+        amount,
+        note: note || "Direct P2P Settlement via PocketMate",
+      });
+
+      return {
+        success: true,
+        action: "PAYOUT_COMPLETED",
+        ...payoutRes,
       };
     }
 

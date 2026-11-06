@@ -21,6 +21,25 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    if (actionToConfirm && actionToConfirm.action === "DISPATCH_PAYOUT") {
+      const recipientEmail = actionToConfirm.recipientEmail || actionToConfirm.recipients?.[0]?.email;
+      const amount = actionToConfirm.amount || actionToConfirm.totalAmount;
+      const note = actionToConfirm.note || actionToConfirm.recipients?.[0]?.description || "Direct Settlement via PocketMate";
+
+      const payoutResult = await executeAgentTool("send_direct_payout", {
+        recipientEmail,
+        amount,
+        note,
+        isConfirmed: true,
+      });
+
+      return NextResponse.json({
+        reply: `✅ Successfully transferred $${Number(amount).toFixed(2)} to ${recipientEmail} via PayPal Payouts API.`,
+        actionCard: null,
+        executedTools: [{ name: "send_direct_payout", args: actionToConfirm, result: payoutResult }],
+      });
+    }
+
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json(
         { error: "Invalid payload: 'messages' array is required." },
