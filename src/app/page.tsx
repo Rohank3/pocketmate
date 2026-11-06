@@ -17,6 +17,7 @@ import {
   Briefcase,
   Table2,
   BarChart3,
+  CalendarDays,
   Sparkles,
 } from "lucide-react";
 
@@ -30,6 +31,21 @@ const FinancialStudio = dynamic(
         <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mb-3" />
         <p className="text-sm font-semibold text-zinc-300">Loading AG Studio Pro Analytics...</p>
         <p className="text-xs text-zinc-500 mt-1">Initializing self-serve embedded dashboard engine</p>
+      </div>
+    ),
+  }
+);
+
+// Dynamically import BryntumScheduler client-only component
+const BudgetScheduler = dynamic(
+  () => import("@/components/scheduler/BudgetScheduler"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-full w-full min-h-[550px] bg-zinc-950 rounded-xl border border-zinc-800 flex flex-col items-center justify-center p-8 text-center animate-pulse">
+        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mb-3" />
+        <p className="text-sm font-semibold text-zinc-300">Loading Bryntum Scheduler Enterprise...</p>
+        <p className="text-xs text-zinc-500 mt-1">Initializing timeline engine & license validation</p>
       </div>
     ),
   }
@@ -112,7 +128,7 @@ const INITIAL_TRANSACTIONS: TransactionRow[] = [
 
 export default function Home() {
   const [activePersona, setActivePersona] = useState<"GENERAL" | "FREELANCER" | "BUSINESS">("GENERAL");
-  const [activeRightTab, setActiveRightTab] = useState<"grid" | "studio">("grid");
+  const [activeRightTab, setActiveRightTab] = useState<"grid" | "studio" | "scheduler">("grid");
   const [transactions, setTransactions] = useState<TransactionRow[]>(INITIAL_TRANSACTIONS);
   const [gridMutation, setGridMutation] = useState<GridMutationState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -340,6 +356,17 @@ export default function Home() {
     }
   };
 
+  const handleSchedulerEventClick = (eventName: string) => {
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `msg_${Date.now()}`,
+        role: "assistant",
+        content: `Selected timeline event: **${eventName}**\n\nI can analyze this entry against your monthly category ceilings or draft a PayPal payment reminder if this involves an unsettled split.`,
+      },
+    ]);
+  };
+
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col p-3 md:p-6 lg:p-8">
       {/* Top Bar / Branding */}
@@ -478,53 +505,74 @@ export default function Home() {
         <div className="lg:col-span-7 flex flex-col h-[650px] lg:h-auto gap-3">
           {/* View Tab Switcher */}
           <div className="flex items-center justify-between bg-zinc-900/90 border border-zinc-800 p-1.5 rounded-xl">
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               <button
                 onClick={() => setActiveRightTab("grid")}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   activeRightTab === "grid"
                     ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
                     : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
                 }`}
               >
                 <Table2 className="w-3.5 h-3.5" />
-                <span>AG Grid Ledger</span>
+                <span>AG Grid</span>
                 <span className="text-[10px] px-1.5 py-0.2 rounded bg-blue-950/60 text-blue-200 border border-blue-800/40">
-                  Live Mutating
+                  Live
                 </span>
               </button>
 
               <button
                 onClick={() => setActiveRightTab("studio")}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   activeRightTab === "studio"
                     ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
                     : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
                 }`}
               >
                 <BarChart3 className="w-3.5 h-3.5" />
-                <span>AG Studio Embedded Analytics</span>
+                <span>AG Studio</span>
                 <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-950/60 text-emerald-200 border border-emerald-800/40">
-                  Self-Serve Studio
+                  Analytics
+                </span>
+              </button>
+
+              <button
+                onClick={() => setActiveRightTab("scheduler")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  activeRightTab === "scheduler"
+                    ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
+                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
+                }`}
+              >
+                <CalendarDays className="w-3.5 h-3.5" />
+                <span>Bryntum Timeline</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-950/60 text-purple-200 border border-purple-800/40">
+                  Scheduler
                 </span>
               </button>
             </div>
 
             <div className="hidden sm:flex items-center gap-1.5 pr-2 text-[11px] text-zinc-400">
               <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-              <span>PayPal & AG Studio Hackathon Tier</span>
+              <span>Multi-View Financial Engine</span>
             </div>
           </div>
 
           {/* Active View Container */}
           <div className="flex-1 min-h-[560px]">
-            {activeRightTab === "grid" ? (
+            {activeRightTab === "grid" && (
               <TransactionGrid
                 rowData={transactions}
                 gridMutation={gridMutation}
               />
-            ) : (
+            )}
+            {activeRightTab === "studio" && (
               <FinancialStudio />
+            )}
+            {activeRightTab === "scheduler" && (
+              <BudgetScheduler
+                onEventClick={handleSchedulerEventClick}
+              />
             )}
           </div>
         </div>
