@@ -2,11 +2,28 @@
 
 import React, { useMemo } from "react";
 import { AgGridReact } from "ag-grid-react";
-import { ColDef, ICellRendererParams } from "ag-grid-community";
-import "ag-grid-community/styles/ag-grid.css";
-import "ag-grid-community/styles/ag-theme-quartz.css";
+import {
+  ColDef,
+  ICellRendererParams,
+  ModuleRegistry,
+  AllCommunityModule,
+  themeQuartz,
+  colorSchemeDark,
+} from "ag-grid-community";
 import { DollarSign, ShieldAlert, CheckCircle2, Clock, Sparkles } from "lucide-react";
 import { GridMutationState } from "@/types/agent";
+
+// Register all community features (RowSelection, Pagination, ColumnFilter, NumberFilter, Validation)
+ModuleRegistry.registerModules([AllCommunityModule]);
+
+const darkTheme = themeQuartz.withPart(colorSchemeDark).withParams({
+  backgroundColor: "#09090b",
+  headerBackgroundColor: "#18181b",
+  borderColor: "#27272a",
+  foregroundColor: "#f4f4f5",
+  accentColor: "#3b82f6",
+  rowHoverColor: "#1e293b",
+});
 
 export interface TransactionRow {
   id: string;
@@ -175,14 +192,15 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
         )}
       </div>
 
-      {/* Grid container with ag-theme-quartz dark styling */}
-      <div className="ag-theme-quartz-dark flex-1 w-full min-h-[380px]">
+      {/* Grid container with modern AG Grid Theming API */}
+      <div className="flex-1 w-full min-h-[380px]">
         <AgGridReact
+          theme={darkTheme}
           rowData={filteredData}
           columnDefs={columnDefs}
           defaultColDef={defaultColDef}
           animateRows={true}
-          rowSelection="single"
+          rowSelection={{ mode: "singleRow" }}
           pagination={true}
           paginationPageSize={10}
           paginationPageSizeSelector={[10, 20, 50]}
