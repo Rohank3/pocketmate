@@ -193,7 +193,7 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
       <div className="px-4 py-2.5 bg-zinc-900/90 border-b border-zinc-800 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <DollarSign className="w-4 h-4 text-emerald-400" />
-          <h2 className="text-sm font-semibold text-zinc-100">Live Financial Ledger (PayPal & AG Grid)</h2>
+          <h2 className="text-sm font-semibold text-zinc-100">Live Financial Ledger</h2>
           <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700/60">
             {filteredData.length} of {rowData.length} records
           </span>
