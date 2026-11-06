@@ -86,6 +86,8 @@ export async function POST(req: NextRequest) {
           const reader = geminiRes.body.getReader();
           const decoder = new TextDecoder();
           let buffer = "";
+          let hasGeneratedText = false;
+          const liveExecutedTools: Array<{ name: string; result: Record<string, unknown> }> = [];
 
           while (true) {
             const { done, value } = await reader.read();
@@ -104,6 +106,7 @@ export async function POST(req: NextRequest) {
 
                   for (const part of parts) {
                     if (part.text) {
+                      hasGeneratedText = true;
                       sendEvent("text_delta", { text: part.text });
                     } else if (part.functionCall) {
                       const toolName = part.functionCall.name;
@@ -111,6 +114,7 @@ export async function POST(req: NextRequest) {
 
                       sendEvent("tool_start", { name: toolName });
                       const toolResult = (await executeAgentTool(toolName, toolArgs)) as Record<string, unknown>;
+                      liveExecutedTools.push({ name: toolName, result: toolResult });
                       sendEvent("tool_call", { name: toolName, args: toolArgs, result: toolResult });
 
                       if (toolName === "mutate_ag_grid" && toolResult.gridMutation) {
@@ -127,6 +131,22 @@ export async function POST(req: NextRequest) {
                 }
               }
             }
+          }
+
+          // If Gemini called tools without emitting final text, synthesize conversational summary
+          if (!hasGeneratedText && liveExecutedTools.length > 0) {
+            const summaryParts: string[] = [];
+            for (const t of liveExecutedTools) {
+              if (t.name === "calculate_deterministic_split" && t.result.totalAmount) {
+                summaryParts.push(`Calculated split of $${t.result.totalAmount} with exact penny conservation.`);
+              } else if (t.name === "dispatch_paypal_invoices" && t.result.requiresConfirmation) {
+                summaryParts.push(`Prepared ${t.result.totalRecipients} PayPal invoices totaling $${t.result.totalAmount}. Review the card below and confirm dispatch.`);
+              } else if (t.name === "log_category_expense") {
+                summaryParts.push(`Logged $${t.result.amountLogged} to ${t.result.category}. ${(t.result.alert as string) || ""}`);
+              }
+            }
+            const fallbackSummary = summaryParts.join(" ") || "Tools executed successfully.";
+            sendEvent("text_delta", { text: fallbackSummary });
           }
 
           sendEvent("done", { status: "complete" });
