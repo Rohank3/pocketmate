@@ -16,20 +16,20 @@ import {
   Building2,
   Briefcase,
   Table2,
-  CalendarDays,
+  BarChart3,
   Sparkles,
 } from "lucide-react";
 
-// Dynamically import BryntumScheduler client-only component to satisfy Next.js SSR constraints
-const BudgetScheduler = dynamic(
-  () => import("@/components/scheduler/BudgetScheduler"),
+// Dynamically import AG Studio embedded analytics component
+const FinancialStudio = dynamic(
+  () => import("@/components/studio/FinancialStudio"),
   {
     ssr: false,
     loading: () => (
       <div className="h-full w-full min-h-[550px] bg-zinc-950 rounded-xl border border-zinc-800 flex flex-col items-center justify-center p-8 text-center animate-pulse">
-        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mb-3" />
-        <p className="text-sm font-semibold text-zinc-300">Loading Bryntum Scheduler Enterprise...</p>
-        <p className="text-xs text-zinc-500 mt-1">Initializing timeline engine & license validation</p>
+        <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mb-3" />
+        <p className="text-sm font-semibold text-zinc-300">Loading AG Studio Pro Analytics...</p>
+        <p className="text-xs text-zinc-500 mt-1">Initializing self-serve embedded dashboard engine</p>
       </div>
     ),
   }
@@ -112,7 +112,7 @@ const INITIAL_TRANSACTIONS: TransactionRow[] = [
 
 export default function Home() {
   const [activePersona, setActivePersona] = useState<"GENERAL" | "FREELANCER" | "BUSINESS">("GENERAL");
-  const [activeRightTab, setActiveRightTab] = useState<"grid" | "scheduler">("grid");
+  const [activeRightTab, setActiveRightTab] = useState<"grid" | "studio">("grid");
   const [transactions, setTransactions] = useState<TransactionRow[]>(INITIAL_TRANSACTIONS);
   const [gridMutation, setGridMutation] = useState<GridMutationState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -340,17 +340,6 @@ export default function Home() {
     }
   };
 
-  const handleSchedulerEventClick = (eventName: string) => {
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: `msg_${Date.now()}`,
-        role: "assistant",
-        content: `Selected timeline event: **${eventName}**\n\nI can analyze this entry against your monthly category ceilings or draft a PayPal payment reminder if this involves an unsettled split.`,
-      },
-    ]);
-  };
-
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col p-3 md:p-6 lg:p-8">
       {/* Top Bar / Branding */}
@@ -506,24 +495,24 @@ export default function Home() {
               </button>
 
               <button
-                onClick={() => setActiveRightTab("scheduler")}
+                onClick={() => setActiveRightTab("studio")}
                 className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  activeRightTab === "scheduler"
+                  activeRightTab === "studio"
                     ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
                     : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
                 }`}
               >
-                <CalendarDays className="w-3.5 h-3.5" />
-                <span>Budget & Invoicing Timeline</span>
+                <BarChart3 className="w-3.5 h-3.5" />
+                <span>AG Studio Embedded Analytics</span>
                 <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-950/60 text-emerald-200 border border-emerald-800/40">
-                  Bryntum Enterprise
+                  Self-Serve Studio
                 </span>
               </button>
             </div>
 
             <div className="hidden sm:flex items-center gap-1.5 pr-2 text-[11px] text-zinc-400">
               <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-              <span>Multi-View Financial Orchestrator</span>
+              <span>PayPal & AG Studio Hackathon Tier</span>
             </div>
           </div>
 
@@ -535,9 +524,7 @@ export default function Home() {
                 gridMutation={gridMutation}
               />
             ) : (
-              <BudgetScheduler
-                onEventClick={handleSchedulerEventClick}
-              />
+              <FinancialStudio />
             )}
           </div>
         </div>
