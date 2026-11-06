@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Bot, User, Sparkles, Receipt, ArrowRight } from "lucide-react";
+import { Bot, User, Sparkles, Receipt, ArrowRight, Paperclip } from "lucide-react";
 import { ActionConfirmCard, ActionCardData } from "../cards/ActionConfirmCard";
 
 export interface ChatMessageItem {
@@ -17,6 +17,7 @@ interface ChatPanelProps {
   activePersona: "GENERAL" | "FREELANCER" | "BUSINESS";
   isLoading: boolean;
   onSendMessage: (text: string) => void;
+  onUploadReceipt: (file: File) => void;
   onConfirmAction: (cardData: ActionCardData) => Promise<void>;
   onSelectPersona: (persona: "GENERAL" | "FREELANCER" | "BUSINESS") => void;
 }
@@ -26,11 +27,13 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   activePersona,
   isLoading,
   onSendMessage,
+  onUploadReceipt,
   onConfirmAction,
   onSelectPersona,
 }) => {
   const [inputText, setInputText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -46,6 +49,13 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     const msg = inputText;
     setInputText("");
     onSendMessage(msg);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      onUploadReceipt(file);
+    }
   };
 
   const sampleScenarios = [
@@ -73,6 +83,15 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden shadow-2xl">
+      {/* Hidden file picker for real receipt audits */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        accept="image/*,application/pdf"
+        className="hidden"
+      />
+
       {/* Header with Persona Switcher */}
       <div className="px-4 py-3 bg-zinc-900/90 border-b border-zinc-800 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -204,11 +223,21 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             placeholder="Type a request (e.g. 'split last 3h bar & diner charges 5 ways')..."
-            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-4 pr-24 py-3 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 transition-all"
+            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-4 pr-28 py-3 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 transition-all"
           />
 
           <div className="absolute right-2 flex items-center gap-1.5">
-            {/* Quick Receipt Trigger */}
+            {/* Upload Real Receipt Image Button */}
+            <button
+              type="button"
+              title="Upload receipt image for Gemini Vision audit"
+              onClick={() => fileInputRef.current?.click()}
+              className="p-1.5 text-zinc-400 hover:text-emerald-400 hover:bg-zinc-800 rounded-lg transition-colors"
+            >
+              <Paperclip className="w-4 h-4" />
+            </button>
+
+            {/* Quick Demo Receipt Trigger */}
             <button
               type="button"
               title="Drop sample receipt"

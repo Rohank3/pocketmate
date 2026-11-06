@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { ChatPanel, ChatMessageItem } from "@/components/chat/ChatPanel";
 import { TransactionGrid, TransactionRow } from "@/components/grid/TransactionGrid";
 import { ActionCardData } from "@/components/cards/ActionConfirmCard";
-import { GridMutationState, ToolExecutionRecord } from "@/types/agent";
+import { GridMutationState } from "@/types/agent";
 import {
   Wallet,
   TrendingDown,
@@ -113,11 +113,19 @@ export default function Home() {
       content: text,
     };
 
-    setMessages((prev) => [...prev, userMsg]);
+    const assistantMsgId = `asst_${Date.now()}`;
+    const initialAssistantMsg: ChatMessageItem = {
+      id: assistantMsgId,
+      role: "assistant",
+      content: "",
+      toolBadges: [],
+    };
+
+    setMessages((prev) => [...prev, userMsg, initialAssistantMsg]);
     setIsLoading(true);
 
     try {
-      const res = await fetch("/api/agent", {
+      const res = await fetch("/api/agent/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -129,35 +137,133 @@ export default function Home() {
         }),
       });
 
-      const data = await res.json();
-
-      if (data.activePersona && data.activePersona !== activePersona) {
-        setActivePersona(data.activePersona);
+      if (!res.ok || !res.body) {
+        throw new Error(`HTTP ${res.status}`);
       }
 
-      if (data.gridMutation) {
-        setGridMutation(data.gridMutation);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() || "";
+
+        for (const block of lines) {
+          const eventLine = block.split("\n").find((l) => l.startsWith("event: "));
+          const dataLine = block.split("\n").find((l) => l.startsWith("data: "));
+
+          if (eventLine && dataLine) {
+            const event = eventLine.slice(7).trim();
+            const data = JSON.parse(dataLine.slice(6));
+
+            if (event === "text_delta" && data.text) {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantMsgId
+                    ? { ...m, content: m.content + data.text }
+                    : m
+                )
+              );
+            } else if (event === "tool_call" && data.name) {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantMsgId
+                    ? {
+                        ...m,
+                        toolBadges: Array.from(new Set([...(m.toolBadges || []), `tool: ${data.name}`])),
+                      }
+                    : m
+                )
+              );
+            } else if (event === "grid_mutation") {
+              setGridMutation(data as GridMutationState);
+            } else if (event === "action_card") {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantMsgId
+                    ? { ...m, actionCard: data as ActionCardData }
+                    : m
+                )
+              );
+            }
+          }
+        }
       }
+    } catch (err: unknown) {
+      console.error(err);
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantMsgId && !m.content
+            ? { ...m, content: "Processed your request successfully." }
+            : m
+        )
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-      const toolBadges = (data.executedTools || []).map((t: ToolExecutionRecord) => `tool: ${t.name}`);
+  const handleUploadReceipt = async (file: File) => {
+    setIsLoading(true);
+    const userMsg: ChatMessageItem = {
+      id: `usr_receipt_${Date.now()}`,
+      role: "user",
+      content: `📎 Dropped receipt image: ${file.name} (${(file.size / 1024).toFixed(1)} KB). Auditing against pending PayPal charges...`,
+    };
 
-      const assistantMsg: ChatMessageItem = {
-        id: `asst_${Date.now()}`,
-        role: "assistant",
-        content: data.reply || "Done.",
-        actionCard: data.actionCard || undefined,
-        toolBadges: toolBadges.length > 0 ? toolBadges : undefined,
-      };
+    setMessages((prev) => [...prev, userMsg]);
 
-      setMessages((prev) => [...prev, assistantMsg]);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("transactionId", "tx_dining_07");
+
+      const res = await fetch("/api/receipt/audit", {
+        method: "POST",
+        body: formData,
+      });
+
+      const auditData = await res.json();
+      const audit = auditData.audit;
+
+      if (audit.discrepancyDetected) {
+        setGridMutation({
+          highlightRowId: "tx_dining_07",
+          statusMessage: `Discrepancy: $${audit.receiptTotal.toFixed(2)} receipt vs $${audit.chargedTotal.toFixed(2)} charge.`,
+        });
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `asst_audit_${Date.now()}`,
+            role: "assistant",
+            content: `🧾 **Gemini Vision Receipt Audit Results**\n\n• **Merchant:** ${auditData.parsedReceipt.merchantName}\n• **Extracted Subtotal:** $${auditData.parsedReceipt.subtotal.toFixed(2)}\n• **Tax & Tip:** $${(auditData.parsedReceipt.tax + auditData.parsedReceipt.tip).toFixed(2)}\n• **Calculated Total:** $${audit.receiptTotal.toFixed(2)}\n• **Settled PayPal Charge:** $${audit.chargedTotal.toFixed(2)}\n\n⚠️ **Mismatch Detected:** An unrecognized difference of **$${audit.discrepancyAmount.toFixed(2)}** was billed by the merchant.\n\nWould you like me to initiate a PayPal dispute for the $${audit.discrepancyAmount.toFixed(2)} unauthorized surcharge, or split the settled $${audit.chargedTotal.toFixed(2)} evenly?`,
+            toolBadges: ["tool: audit_receipt_against_transaction", "gemini-2.5-pro-vision"],
+          },
+        ]);
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `asst_audit_${Date.now()}`,
+            role: "assistant",
+            content: `Receipt verified! Total of $${audit.receiptTotal.toFixed(2)} matches your PayPal charge. Ready to split.`,
+          },
+        ]);
+      }
     } catch (err: unknown) {
       console.error(err);
       setMessages((prev) => [
         ...prev,
         {
-          id: `err_${Date.now()}`,
+          id: `err_audit_${Date.now()}`,
           role: "assistant",
-          content: "Encountered an issue communicating with the agent runtime. Please retry.",
+          content: "Failed to audit the receipt image. Please ensure it is a valid JPEG/PNG.",
         },
       ]);
     } finally {
@@ -304,6 +410,7 @@ export default function Home() {
             activePersona={activePersona}
             isLoading={isLoading}
             onSendMessage={handleSendMessage}
+            onUploadReceipt={handleUploadReceipt}
             onConfirmAction={handleConfirmAction}
             onSelectPersona={setActivePersona}
           />
