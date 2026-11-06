@@ -1,6 +1,7 @@
 import { assembleSystemPrompt, PersonaType } from "./prompts";
 import { agentToolDeclarations, executeAgentTool } from "./tools";
 import { GridMutationState, ToolExecutionRecord, AgentRunResult } from "@/types/agent";
+import { SandboxStore } from "@/lib/sandbox/sandboxStore";
 
 export interface AgentMessage {
   role: "user" | "assistant" | "system";
@@ -317,6 +318,13 @@ export async function handleDynamicAutonomousResponse(
 
     // Extract participant names: e.g. "with Alex, Dave, Priya, and Sam"
     const withMatch = prompt.match(/(?:with|across|between)\s+([^.]+)/i);
+    const disambiguationNotes: string[] = [];
+    const categoryHint = p.includes("dining") || p.includes("bar") || p.includes("dinner") || p.includes("lunch")
+      ? "Dining"
+      : p.includes("work") || p.includes("office") || p.includes("saas") || p.includes("client")
+      ? "Work"
+      : undefined;
+
     if (withMatch) {
       const rawNames = withMatch[1]
         .replace(/and\s+/gi, ",")
@@ -326,11 +334,25 @@ export async function handleDynamicAutonomousResponse(
 
       for (const name of rawNames) {
         const clean = name.replace(/[.,]/g, "").trim();
-        if (clean && !participantsList.some((p) => p.name.toLowerCase() === clean.toLowerCase())) {
-          participantsList.push({
-            name: clean,
-            emailOrHandle: `${clean.toLowerCase()}@example.com`,
-          });
+        if (clean) {
+          // Resolve contact against user's past transaction history & contacts
+          const res = SandboxStore.resolveContactByName("usr_alex", clean, categoryHint);
+          if (res.match) {
+            participantsList.push({
+              name: res.match.name,
+              emailOrHandle: res.match.email,
+            });
+            if (res.reason) {
+              disambiguationNotes.push(res.reason);
+            }
+          } else if (clean.includes("@")) {
+            participantsList.push({ name: clean.split("@")[0], emailOrHandle: clean });
+          } else {
+            participantsList.push({
+              name: clean,
+              emailOrHandle: `${clean.toLowerCase().replace(/[^a-z0-9]/g, "")}@sandbox.paypal.com`,
+            });
+          }
         }
       }
     }
@@ -341,12 +363,16 @@ export async function handleDynamicAutonomousResponse(
 
     while (participantsList.length < targetWays && participantsList.length < 5) {
       const idx = participantsList.length;
-      const defaultNames = ["Alex", "Dave", "Priya", "Sam"];
-      const nextName = defaultNames[idx - 1] || `Friend ${idx}`;
+      const defaultNames = ["Dave Chen", "Sarah Jenkins", "Alex Rivera", "Sam"];
+      const nextName = defaultNames[idx - 1] || `Participant ${idx}`;
       if (!participantsList.some((p) => p.name === nextName)) {
-        participantsList.push({ name: nextName, emailOrHandle: `${nextName.toLowerCase()}@example.com` });
+        const res = SandboxStore.resolveContactByName("usr_alex", nextName, categoryHint);
+        participantsList.push({
+          name: res.match?.name || nextName,
+          emailOrHandle: res.match?.email || `${nextName.toLowerCase().replace(/[^a-z0-9]/g, "")}@sandbox.paypal.com`,
+        });
       } else {
-        participantsList.push({ name: `Participant ${idx}`, emailOrHandle: `guest${idx}@example.com` });
+        participantsList.push({ name: `Participant ${idx}`, emailOrHandle: `guest${idx}@sandbox.paypal.com` });
       }
     }
 
@@ -366,12 +392,15 @@ export async function handleDynamicAutonomousResponse(
     // Prepare PayPal invoices for all non-host participants
     const recipients = (splitResult.allocations || [])
       .filter((a) => !a.isHost && a.name !== "You (Host)")
-      .map((a) => ({
-        email: `${a.name.toLowerCase().replace(/[^a-z0-9]/g, "")}@example.com`,
-        name: a.name,
-        amount: a.amount,
-        description: splitMemo,
-      }));
+      .map((a) => {
+        const pObj = participantsList.find((p) => p.name === a.name);
+        return {
+          email: pObj?.emailOrHandle || `${a.name.toLowerCase().replace(/[^a-z0-9]/g, "")}@sandbox.paypal.com`,
+          name: a.name,
+          amount: a.amount,
+          description: splitMemo,
+        };
+      });
 
     if (recipients.length > 0) {
       const invoiceArgs = { recipients, isConfirmed: false };
@@ -390,8 +419,9 @@ export async function handleDynamicAutonomousResponse(
     };
     handlers.onGridMutation?.(gridMutation);
 
-    const shareDesc = recipients.map((r) => `${r.name}: $${r.amount.toFixed(2)}`).join(", ");
-    reply = `Pulled and calculated your split: **$${splitAmount.toFixed(2)}** total across ${participantsList.length} people (${shareDesc}).\n\nI have generated ${recipients.length} itemized PayPal invoices ready to dispatch. Tap Confirm & Send below to proceed.`;
+    const shareDesc = recipients.map((r) => `${r.name} (${r.email}): $${r.amount.toFixed(2)}`).join(", ");
+    const noteSection = disambiguationNotes.length > 0 ? `\n\n🔍 **Contact History:** ${disambiguationNotes.join(" ")}` : "";
+    reply = `Pulled and calculated your split: **$${splitAmount.toFixed(2)}** total across ${participantsList.length} people.\n\n• ${shareDesc}${noteSection}\n\nI have generated ${recipients.length} itemized PayPal invoices ready to dispatch. Tap Confirm & Send below to proceed.`;
   }
   // 4. Mall Trip / Multi-Item Expense & Category Budget Logging
   else if (p.includes("mall") || (p.includes("log") && p.includes("budget")) || (p.includes("zara") && p.includes("sarah"))) {
