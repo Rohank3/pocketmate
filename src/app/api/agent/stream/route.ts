@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { assembleSystemPrompt, PersonaType } from "@/lib/agent/prompts";
 import { agentToolDeclarations, executeAgentTool } from "@/lib/agent/tools";
 import { GridMutationState } from "@/types/agent";
+import { persistChatMessage } from "@/lib/agent/dbSync";
 
 interface StreamMessage {
   role: "user" | "assistant" | "system";
@@ -32,6 +33,9 @@ export async function POST(req: NextRequest) {
         };
 
         const lastUserMsg = [...messages].reverse().find((m) => m.role === "user")?.content || "";
+        if (lastUserMsg) {
+          persistChatMessage("user", lastUserMsg, persona);
+        }
 
         // If no live Gemini key configured, stream through our deterministic scenario engine
         if (!apiKey || apiKey === "your-gemini-api-key") {

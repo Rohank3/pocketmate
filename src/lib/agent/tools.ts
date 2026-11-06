@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { paypalClient } from "../paypal/client";
 import { calculateEqualSplit, SplitParticipant } from "../math/split";
+import { syncBudgetExpenseToDB } from "./dbSync";
 
 // ============================================================================
 // Parameter Validation Schemas (Layer B: Validation Middleware)
@@ -323,11 +324,12 @@ export async function executeAgentTool(name: string, rawArgs: Record<string, unk
 
     case "log_category_expense": {
       const { category, amount, merchant, description } = LogCategoryExpenseSchema.parse(rawArgs);
-      void merchant;
-      void description;
       const targetCat = Object.keys(inMemoryBudgets).find(
         (c) => c.toLowerCase() === category.toLowerCase()
       ) || category;
+
+      // Sync to live PostgreSQL database in background
+      syncBudgetExpenseToDB(targetCat, amount, merchant, description);
 
       if (!inMemoryBudgets[targetCat]) {
         inMemoryBudgets[targetCat] = { monthlyCap: 350.0, currentSpent: 0 };
