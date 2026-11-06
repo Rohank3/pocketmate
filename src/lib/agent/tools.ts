@@ -2,6 +2,7 @@ import { z } from "zod";
 import { paypalClient } from "../paypal/client";
 import { calculateEqualSplit, SplitParticipant } from "../math/split";
 import { syncBudgetExpenseToDB } from "./dbSync";
+import { prisma } from "../db";
 
 // ============================================================================
 // Parameter Validation Schemas (Layer B: Validation Middleware)
@@ -324,25 +325,49 @@ export async function executeAgentTool(name: string, rawArgs: Record<string, unk
 
     case "log_category_expense": {
       const { category, amount, merchant, description } = LogCategoryExpenseSchema.parse(rawArgs);
-      const targetCat = Object.keys(inMemoryBudgets).find(
-        (c) => c.toLowerCase() === category.toLowerCase()
-      ) || category;
 
-      // Sync to live PostgreSQL database in background
-      syncBudgetExpenseToDB(targetCat, amount, merchant, description);
+      let prevSpent = 0;
+      let cap = 350.0;
+      let targetCat = category;
 
-      if (!inMemoryBudgets[targetCat]) {
-        inMemoryBudgets[targetCat] = { monthlyCap: 350.0, currentSpent: 0 };
+      try {
+        const dbCat = await prisma.budgetCategory.findFirst({
+          where: { name: { equals: category, mode: "insensitive" } },
+        });
+
+        if (dbCat) {
+          targetCat = dbCat.name;
+          prevSpent = dbCat.currentSpent;
+          cap = dbCat.monthlyCap;
+          await prisma.budgetCategory.update({
+            where: { id: dbCat.id },
+            data: { currentSpent: dbCat.currentSpent + amount },
+          });
+          await prisma.budgetEntry.create({
+            data: {
+              categoryId: dbCat.id,
+              amount,
+              description: description || "Logged via PocketMate Assistant",
+              merchant: merchant || null,
+            },
+          });
+          prevSpent = dbCat.currentSpent;
+        } else {
+          syncBudgetExpenseToDB(category, amount, merchant, description);
+          if (inMemoryBudgets[category]) {
+            prevSpent = inMemoryBudgets[category].currentSpent;
+            cap = inMemoryBudgets[category].monthlyCap;
+            inMemoryBudgets[category].currentSpent += amount;
+          }
+        }
+      } catch {
+        syncBudgetExpenseToDB(category, amount, merchant, description);
       }
 
-      const prevSpent = inMemoryBudgets[targetCat].currentSpent;
       const newSpent = prevSpent + amount;
-      inMemoryBudgets[targetCat].currentSpent = newSpent;
-      const cap = inMemoryBudgets[targetCat].monthlyCap;
-
       const isOverBudget = newSpent > cap;
       const overrunAmount = isOverBudget ? newSpent - cap : 0;
-      const percentUsed = Math.round((newSpent / cap) * 100);
+      const percentUsed = cap > 0 ? Math.round((newSpent / cap) * 100) : 0;
 
       return {
         success: true,
@@ -364,10 +389,28 @@ export async function executeAgentTool(name: string, rawArgs: Record<string, unk
 
     case "check_budget_status": {
       const { category } = CheckBudgetStatusSchema.parse(rawArgs);
+
+      try {
+        const dbCat = await prisma.budgetCategory.findFirst({
+          where: { name: { equals: category, mode: "insensitive" } },
+        });
+
+        if (dbCat) {
+          return {
+            category: dbCat.name,
+            monthlyCap: dbCat.monthlyCap,
+            currentSpent: dbCat.currentSpent,
+            remaining: Math.max(0, dbCat.monthlyCap - dbCat.currentSpent),
+            percentUsed: dbCat.monthlyCap > 0 ? Math.round((dbCat.currentSpent / dbCat.monthlyCap) * 100) : 0,
+          };
+        }
+      } catch {
+        // fallback
+      }
+
       const target = Object.keys(inMemoryBudgets).find(
         (c) => c.toLowerCase() === category.toLowerCase()
-      ) || "Food";
-
+      ) || "Dining";
       const budget = inMemoryBudgets[target] || { monthlyCap: 300, currentSpent: 100 };
       return {
         category: target,

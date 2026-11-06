@@ -2,6 +2,7 @@ import { assembleSystemPrompt, PersonaType } from "./prompts";
 import { agentToolDeclarations, executeAgentTool } from "./tools";
 import { GridMutationState, ToolExecutionRecord, AgentRunResult } from "@/types/agent";
 import { SandboxStore } from "@/lib/sandbox/sandboxStore";
+import { paypalClient } from "@/lib/paypal/client";
 
 export interface AgentMessage {
   role: "user" | "assistant" | "system";
@@ -466,23 +467,27 @@ export async function handleDynamicAutonomousResponse(
   }
   // 5. Receipt Drop & Hidden Surcharge Auditing
   else if (p.includes("receipt") || p.includes("dinner bill") || p.includes("bistro") || p.includes("dispute") || p.includes("audit")) {
+    const liveTxs = await paypalClient.fetchRecentTransactions(168).catch(() => []);
+    const targetTx = liveTxs.find((t) => t.status !== "COMPLETED") || liveTxs[0];
+    const targetTxId = targetTx?.id || "tx_latest";
+
     const auditArgs = {
       receiptTotal: 100.0,
       tax: 5.0,
       tip: 10.0,
-      transactionId: "tx_dining_07",
+      transactionId: targetTxId,
     };
     const auditResult = (await executeAgentTool("audit_receipt_against_transaction", auditArgs)) as Record<string, unknown>;
     executedTools.push({ name: "audit_receipt_against_transaction", args: auditArgs, result: auditResult });
     handlers.onToolCall?.("audit_receipt_against_transaction", auditArgs, auditResult);
 
     gridMutation = {
-      highlightRowId: "tx_dining_07",
+      highlightRowId: targetTxId,
       statusMessage: "Discrepancy flagged: $115.00 receipt items vs. $130.00 settled PayPal charge.",
     };
     handlers.onGridMutation?.(gridMutation);
 
-    reply = "Hold on — the receipt items, tax, and tip sum to **$115.00**, but PayPal was charged **$130.00** (an unlisted **$15.00** merchant service surcharge). Would you like me to initiate a PayPal dispute for the $15.00 discrepancy, or split the full settled $130.00 evenly three ways with Mark and Leo?";
+    reply = "Hold on — the receipt items, tax, and tip sum to **$115.00**, but PayPal was charged **$130.00** (an unlisted **$15.00** merchant service surcharge). Would you like me to initiate a PayPal dispute for the $15.00 discrepancy, or split the full settled $130.00 evenly three ways?";
   }
   // 6. Interactive AG Grid Ledger Exploration
   else if (p.includes("unsettled") || p.includes("debts") || p.includes("group by") || p.includes("ledger") || p.includes("grid")) {
