@@ -302,29 +302,18 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
           )}
         </div>
 
-        {/* Category Actions */}
-        <div className="flex items-center gap-1.5 ml-auto">
-          <button
-            onClick={() => {
-              setModalTab("add");
-              setIsModalOpen(true);
-            }}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white text-xs font-semibold cursor-pointer shadow-sm transition-all focus-visible:outline-2 focus-visible:outline-blue-400"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Add Category</span>
-          </button>
-
+        {/* Category Actions: Streamlined Single Manage Button */}
+        <div className="flex items-center ml-auto">
           <button
             onClick={() => {
               setModalTab("manage");
               setEditingCategoryId(null);
               setIsModalOpen(true);
             }}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-750 text-zinc-300 hover:text-zinc-100 text-xs font-medium cursor-pointer transition-all border border-zinc-700/60 focus-visible:outline-2 focus-visible:outline-zinc-400"
-            title="Manage, rename, and set budget caps"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white text-xs font-semibold cursor-pointer shadow-sm transition-all focus-visible:outline-2 focus-visible:outline-blue-400"
+            title="Manage, rename, add, and set budget caps"
           >
-            <Settings2 className="w-3.5 h-3.5 text-zinc-400" />
+            <Settings2 className="w-3.5 h-3.5" />
             <span>Manage Categories</span>
           </button>
         </div>
