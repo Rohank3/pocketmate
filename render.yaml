@@ -10,7 +10,7 @@ services:
   - type: web
     name: pocketmate
     runtime: node
-    plan: starter # Starter plan ($7/mo) paid via $50 credit; ensures 24/7 uptime with zero cold starts for judges
+    plan: free # 100% Free Tier - No credit card or payment info required!
     region: oregon
     buildCommand: npm install && npx prisma generate && npm run build
     startCommand: npm start
@@ -32,32 +32,8 @@ services:
       - key: NEXTAUTH_SECRET
         generateValue: true # Render automatically generates a cryptographically secure secret
       - key: CRON_SECRET
-        generateValue: true # Render automatically generates a secret token for the daily audit
+        generateValue: true # Secret token for the audit endpoint
       - key: NEXT_PUBLIC_AG_STUDIO_LICENSE_KEY
         sync: false
       - key: NEXT_PUBLIC_BRYNTUM_LICENSE_KEY
         sync: false
-
-  # ----------------------------------------------------------------------------
-  # Cron Job: Autonomous End-of-Day Financial Sweep & Triage
-  # Pings /api/cron/sweep daily at midnight UTC to audit untagged transactions
-  # ----------------------------------------------------------------------------
-  - type: cron
-    name: pocketmate-daily-sweep
-    runtime: node
-    plan: starter
-    region: oregon
-    schedule: "0 0 * * *" # Daily midnight UTC
-    buildCommand: npm install
-    startCommand: "node -e \"const https = require('https'); const host = process.env.RENDER_EXTERNAL_HOSTNAME || 'pocketmate.onrender.com'; const secret = process.env.CRON_SECRET || ''; https.get(`https://${host}/api/cron/sweep?secret=${secret}`, res => { console.log('Audit Sweep status:', res.statusCode); process.exit(res.statusCode === 200 ? 0 : 1); });\""
-    envVars:
-      - key: CRON_SECRET
-        fromService:
-          type: web
-          name: pocketmate
-          envVarKey: CRON_SECRET
-      - key: RENDER_EXTERNAL_HOSTNAME
-        fromService:
-          type: web
-          name: pocketmate
-          property: host
