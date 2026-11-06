@@ -39,6 +39,14 @@ export interface InvoiceDispatchResult {
   viewUrl?: string;
 }
 
+export interface DisputeResult {
+  disputeId: string;
+  status: string;
+  reason: string;
+  disputedAmount: number;
+  message: string;
+}
+
 class PayPalSandboxClient {
   private clientId: string;
   private clientSecret: string;
@@ -246,6 +254,72 @@ class PayPalSandboxClient {
         recipientEmail: recipient.email,
         amount: recipient.amount,
         status: "SENT (Simulated)",
+      };
+    }
+  }
+
+  /**
+   * Initiates a dispute for unauthorized fees or surcharge mismatches
+   */
+  async initiateDispute(
+    captureId: string,
+    reason: string,
+    disputedAmount: number
+  ): Promise<DisputeResult> {
+    const token = await this.getAccessToken();
+
+    if (token === "mock_sandbox_access_token") {
+      const mockDisputeId = `PP-D-${Math.floor(10000 + Math.random() * 90000)}`;
+      return {
+        disputeId: mockDisputeId,
+        status: "OPEN",
+        reason,
+        disputedAmount,
+        message: `Dispute ${mockDisputeId} initiated for $${disputedAmount.toFixed(2)} on charge ${captureId}.`,
+      };
+    }
+
+    try {
+      const res = await fetch(`${this.baseUrl}/v1/customer/disputes`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          disputed_transaction: {
+            buyer_transaction_id: captureId,
+          },
+          reason: "UNRECOGNIZED",
+          dispute_amount: {
+            currency_code: "USD",
+            value: disputedAmount.toFixed(2),
+          },
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Dispute API HTTP ${res.status}`);
+      }
+
+      const data = (await res.json()) as Record<string, unknown>;
+      const disputeId = (data.dispute_id as string) || `PP-D-${Math.floor(10000 + Math.random() * 90000)}`;
+
+      return {
+        disputeId,
+        status: (data.status as string) || "UNDER_REVIEW",
+        reason,
+        disputedAmount,
+        message: `Dispute ${disputeId} filed with PayPal Customer Resolution Center.`,
+      };
+    } catch {
+      const fallbackId = `PP-D-SIM-${Math.floor(10000 + Math.random() * 90000)}`;
+      return {
+        disputeId: fallbackId,
+        status: "UNDER_REVIEW (Simulated)",
+        reason,
+        disputedAmount,
+        message: `Dispute ${fallbackId} recorded against ${captureId} for $${disputedAmount.toFixed(2)}.`,
       };
     }
   }

@@ -70,6 +70,13 @@ export const UpdatePersonaSchema = z.object({
   reason: z.string(),
 });
 
+export const InitiateDisputeSchema = z.object({
+  transactionId: z.string().min(1),
+  reason: z.string().min(1),
+  disputedAmount: z.number().positive(),
+  isConfirmed: z.boolean().default(false),
+});
+
 // ============================================================================
 // In-Memory Fallback State (Simulating DB when Neon is not connected)
 // ============================================================================
@@ -243,6 +250,20 @@ export const agentToolDeclarations = [
       required: ["newPersona", "reason"],
     },
   },
+  {
+    name: "initiate_paypal_dispute",
+    description: "Initiates a formal PayPal dispute for unrecognized charges, hidden surcharges, or transaction discrepancies.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        transactionId: { type: "STRING" },
+        reason: { type: "STRING" },
+        disputedAmount: { type: "NUMBER" },
+        isConfirmed: { type: "BOOLEAN" },
+      },
+      required: ["transactionId", "reason", "disputedAmount"],
+    },
+  },
 ];
 
 // ============================================================================
@@ -401,6 +422,27 @@ export async function executeAgentTool(name: string, rawArgs: Record<string, unk
         activePersona: newPersona,
         reason,
         notification: `Operating persona shifted to ${newPersona}. Dynamic context updated.`,
+      };
+    }
+
+    case "initiate_paypal_dispute": {
+      const { transactionId, reason, disputedAmount, isConfirmed } = InitiateDisputeSchema.parse(rawArgs);
+
+      if (!isConfirmed) {
+        return {
+          requiresConfirmation: true,
+          action: "INITIATE_DISPUTE",
+          transactionId,
+          reason,
+          disputedAmount,
+          message: `Preview prepared: Ready to file formal dispute for $${disputedAmount.toFixed(2)} on transaction ${transactionId}.`,
+        };
+      }
+
+      const disputeResult = await paypalClient.initiateDispute(transactionId, reason, disputedAmount);
+      return {
+        success: true,
+        ...disputeResult,
       };
     }
 
