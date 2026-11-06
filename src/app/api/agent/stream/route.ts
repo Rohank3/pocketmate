@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
 import { assembleSystemPrompt, PersonaType } from "@/lib/agent/prompts";
 import { agentToolDeclarations, executeAgentTool } from "@/lib/agent/tools";
-import { GridMutationState } from "@/types/agent";
 import { persistChatMessage } from "@/lib/agent/dbSync";
+import { handleDynamicAutonomousResponse } from "@/lib/agent/orchestrator";
 
 interface StreamMessage {
   role: "user" | "assistant" | "system";
@@ -37,16 +37,43 @@ export async function POST(req: NextRequest) {
           persistChatMessage("user", lastUserMsg, persona);
         }
 
-        // If no live Gemini key configured, stream through our deterministic scenario engine
+        // Helper to stream through dynamic autonomous engine with pacing
+        const runDynamicFallback = async () => {
+          const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+          await handleDynamicAutonomousResponse(lastUserMsg, persona, {
+            onTextDelta: async (text: string) => {
+              for (const word of text.split(" ")) {
+                sendEvent("text_delta", { text: word + " " });
+                await delay(20);
+              }
+            },
+            onToolCall: (name, args, result) => {
+              sendEvent("tool_start", { name });
+              sendEvent("tool_call", { name, args, result });
+            },
+            onGridMutation: (mutation) => {
+              sendEvent("grid_mutation", mutation);
+            },
+            onActionCard: (card) => {
+              sendEvent("action_card", card);
+            },
+            onPersonaUpdate: (newPersona) => {
+              sendEvent("persona_update", { persona: newPersona });
+            },
+          });
+          sendEvent("done", { status: "complete" });
+        };
+
+        // If no Gemini key configured or is placeholder, run through dynamic autonomous engine
         if (!apiKey || apiKey === "your-gemini-api-key") {
-          await streamDeterministicSimulatedScenario(lastUserMsg, persona, sendEvent);
+          await runDynamicFallback();
           controller.close();
           return;
         }
 
         try {
           const systemPrompt = assembleSystemPrompt(persona);
-          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?key=${apiKey}&alt=sse`;
+          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:streamGenerateContent?key=${apiKey}&alt=sse`;
 
           const formattedContents = messages.map((m) => ({
             role: m.role === "assistant" ? "model" : "user",
@@ -70,15 +97,20 @@ export async function POST(req: NextRequest) {
             generationConfig: { temperature: 0.2 },
           };
 
+          // 8-second timeout for streaming connection
+          const abortController = new AbortController();
+          const timeoutId = setTimeout(() => abortController.abort(), 8000);
+
           const geminiRes = await fetch(geminiUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(bodyPayload),
-          });
+            signal: abortController.signal,
+          }).finally(() => clearTimeout(timeoutId));
 
           if (!geminiRes.ok || !geminiRes.body) {
-            console.warn(`[Gemini SSE] HTTP ${geminiRes.status}. Falling back to deterministic stream.`);
-            await streamDeterministicSimulatedScenario(lastUserMsg, persona, sendEvent);
+            console.warn(`[Gemini SSE] HTTP ${geminiRes.status}. Falling back to dynamic autonomous engine.`);
+            await runDynamicFallback();
             controller.close();
             return;
           }
@@ -121,6 +153,10 @@ export async function POST(req: NextRequest) {
                         sendEvent("grid_mutation", toolResult.gridMutation);
                       }
 
+                      if (toolName === "update_user_persona" && toolResult.activePersona) {
+                        sendEvent("persona_update", { persona: toolResult.activePersona });
+                      }
+
                       if (toolResult.requiresConfirmation) {
                         sendEvent("action_card", toolResult);
                       }
@@ -133,7 +169,7 @@ export async function POST(req: NextRequest) {
             }
           }
 
-          // If Gemini called tools without emitting final text, synthesize conversational summary
+          // If Gemini called tools without emitting final text, synthesize summary
           if (!hasGeneratedText && liveExecutedTools.length > 0) {
             const summaryParts: string[] = [];
             for (const t of liveExecutedTools) {
@@ -152,8 +188,8 @@ export async function POST(req: NextRequest) {
           sendEvent("done", { status: "complete" });
           controller.close();
         } catch (err: unknown) {
-          console.error("[Stream API Error]", err);
-          await streamDeterministicSimulatedScenario(lastUserMsg, persona, sendEvent);
+          console.warn("[Stream API Fallback]", err);
+          await runDynamicFallback();
           controller.close();
         }
       },
@@ -173,133 +209,4 @@ export async function POST(req: NextRequest) {
       headers: { "Content-Type": "application/json" },
     });
   }
-}
-
-/**
- * Deterministic scenario streamer with simulated pacing for realistic UI feel
- */
-async function streamDeterministicSimulatedScenario(
-  prompt: string,
-  persona: PersonaType,
-  sendEvent: (event: string, data: unknown) => void
-) {
-  const p = prompt.toLowerCase();
-
-  // Helper for small pacing
-  const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-  if (p.includes("last 3 hours") || (p.includes("split") && (p.includes("alex") || p.includes("5 ways")))) {
-    sendEvent("tool_start", { name: "fetch_recent_transactions" });
-    await delay(120);
-    const txResult = await executeAgentTool("fetch_recent_transactions", { hoursBack: 3 });
-    sendEvent("tool_call", { name: "fetch_recent_transactions", args: { hoursBack: 3 }, result: txResult });
-
-    sendEvent("tool_start", { name: "calculate_deterministic_split" });
-    await delay(100);
-    const splitResult = await executeAgentTool("calculate_deterministic_split", {
-      totalAmount: 200.0,
-      participants: [
-        { name: "You (Host)", emailOrHandle: "host@example.com" },
-        { name: "Alex", emailOrHandle: "alex@example.com" },
-        { name: "Dave", emailOrHandle: "dave@example.com" },
-        { name: "Priya", emailOrHandle: "priya@example.com" },
-        { name: "Sam", emailOrHandle: "sam@example.com" },
-      ],
-      memo: "Bar ($65), Bowling ($85), Diner ($50)",
-    });
-    sendEvent("tool_call", { name: "calculate_deterministic_split", result: splitResult });
-
-    const invoiceResult = await executeAgentTool("dispatch_paypal_invoices", {
-      recipients: [
-        { email: "alex@example.com", name: "Alex", amount: 40.0, description: "Bar, bowling & diner split" },
-        { email: "dave@example.com", name: "Dave", amount: 40.0, description: "Bar, bowling & diner split" },
-        { email: "priya@example.com", name: "Priya", amount: 40.0, description: "Bar, bowling & diner split" },
-        { email: "sam@example.com", name: "Sam", amount: 40.0, description: "Bar, bowling & diner split" },
-      ],
-      isConfirmed: false,
-    });
-    sendEvent("action_card", invoiceResult);
-
-    const gridMutation: GridMutationState = {
-      groupBy: ["debtor_name"],
-      filter: { status: "pending" },
-      statusMessage: "Displaying pending split allocations across Alex, Dave, Priya, and Sam ($40.00 each).",
-    };
-    sendEvent("grid_mutation", gridMutation);
-
-    const fullReply = "Pulled your expenses from the last 3 hours (Bar: $65, Bowling: $85, Diner: $50 = $200 total). Each person owes $40.00. I've prepared 4 PayPal invoices for Alex, Dave, Priya, and Sam.";
-    for (const word of fullReply.split(" ")) {
-      sendEvent("text_delta", { text: word + " " });
-      await delay(25);
-    }
-  } else if (p.includes("mall") || (p.includes("zara") && p.includes("sarah"))) {
-    const invResult = await executeAgentTool("dispatch_paypal_invoices", {
-      recipients: [
-        { email: "sarah@example.com", name: "Sarah", amount: 79.0, description: "Zara hoodie ($65) + Starbucks drinks ($14)" },
-      ],
-      isConfirmed: false,
-    });
-    sendEvent("action_card", invResult);
-
-    const logResult = await executeAgentTool("log_category_expense", {
-      category: "Groceries",
-      amount: 82.5,
-      merchant: "Target",
-      description: "Groceries",
-    });
-    sendEvent("tool_call", { name: "log_category_expense", result: logResult });
-
-    const gridMutation: GridMutationState = {
-      filter: { category: "Groceries" },
-      renderChart: "budget_burn_bar",
-      statusMessage: "Groceries budget updated: $422.50 spent of $400.00 cap.",
-    };
-    sendEvent("grid_mutation", gridMutation);
-
-    const reply = "Prepared a $79.00 PayPal invoice for Sarah (Zara hoodie $65 + Starbucks $14). Logged $82.50 to your Groceries budget.\n\n⚠️ Heads up: That puts you at $422.50, which is $22.50 over your $400.00 monthly food ceiling!";
-    for (const word of reply.split(" ")) {
-      sendEvent("text_delta", { text: word + " " });
-      await delay(25);
-    }
-  } else if (p.includes("receipt") || p.includes("dinner bill") || p.includes("mark and leo") || p.includes("dispute")) {
-    const auditResult = await executeAgentTool("audit_receipt_against_transaction", {
-      receiptTotal: 100.0,
-      tax: 5.0,
-      tip: 10.0,
-      transactionId: "tx_dining_07",
-    });
-    sendEvent("tool_call", { name: "audit_receipt_against_transaction", result: auditResult });
-
-    sendEvent("grid_mutation", {
-      highlightRowId: "tx_dining_07",
-      statusMessage: "Discrepancy flagged: $115 receipt vs. $130 PayPal capture.",
-    });
-
-    const reply = "Hold on — the receipt items, tax, and tip total $115.00, but PayPal was charged $130.00 (looks like an unlisted $15.00 merchant service surcharge). Would you like me to initiate a PayPal dispute for the $15.00 difference, or split the full $130.00 three ways ($43.33 each) with Mark and Leo?";
-    for (const word of reply.split(" ")) {
-      sendEvent("text_delta", { text: word + " " });
-      await delay(25);
-    }
-  } else if (p.includes("unsettled") || p.includes("debts") || p.includes("weekend")) {
-    sendEvent("grid_mutation", {
-      groupBy: ["debtor_name"],
-      filter: { status: "unpaid", type: "split" },
-      renderChart: "debt_by_person_bar",
-      statusMessage: "Grouping unsettled weekend splits by debtor name.",
-    });
-
-    const reply = "I've reconfigured the dashboard for you. You currently have $145.00 in pending splits across 3 people — Dave owes the largest share at $65.00.";
-    for (const word of reply.split(" ")) {
-      sendEvent("text_delta", { text: word + " " });
-      await delay(25);
-    }
-  } else {
-    const reply = `PocketMate active in ${persona} mode. How can I assist with your expenses or PayPal transactions?`;
-    for (const word of reply.split(" ")) {
-      sendEvent("text_delta", { text: word + " " });
-      await delay(25);
-    }
-  }
-
-  sendEvent("done", { status: "complete" });
 }
