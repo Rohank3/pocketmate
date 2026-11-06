@@ -12,10 +12,7 @@ import {
   TrendingDown,
   ShieldCheck,
   Zap,
-  Users,
   CreditCard,
-  Building2,
-  Briefcase,
   Table2,
   BarChart3,
   CalendarDays,
@@ -268,6 +265,8 @@ export default function Home() {
                     : m
                 )
               );
+            } else if (event === "persona_update" && data.persona) {
+              setActivePersona(data.persona);
             }
           }
         }
@@ -397,11 +396,53 @@ export default function Home() {
     ]);
   };
 
-  const groceriesCategory = categories.find((c) => c.name.toLowerCase() === "groceries");
-  const groceriesCap = groceriesCategory?.monthlyCap ?? 400;
-  const groceriesSpent = 422.5; // running monthly groceries spend
-  const groceriesOver = groceriesSpent > groceriesCap;
-  const groceriesDiff = Math.abs(groceriesSpent - groceriesCap);
+  // 1. Dynamic Unsettled Debts Calculation
+  const unsettledTransactions = transactions.filter(
+    (t) => (t.status === "pending" || t.status === "disputed" || t.status === "unresolved") && t.debtor_name !== "Self"
+  );
+  const totalUnsettledAmount = unsettledTransactions.reduce((acc, t) => acc + t.amount, 0);
+
+  const debtorSums: Record<string, number> = {};
+  unsettledTransactions.forEach((t) => {
+    const name = t.debtor_name || "Unassigned";
+    debtorSums[name] = (debtorSums[name] || 0) + t.amount;
+  });
+
+  let largestDebtorName = "";
+  let largestDebtorAmount = 0;
+  for (const [name, amt] of Object.entries(debtorSums)) {
+    if (amt > largestDebtorAmount) {
+      largestDebtorAmount = amt;
+      largestDebtorName = name;
+    }
+  }
+
+  // 2. Dynamic Category Budget Ceiling Calculation
+  const targetCategory =
+    selectedCategory !== "All"
+      ? categories.find((c) => c.name.toLowerCase() === selectedCategory.toLowerCase()) || categories[0]
+      : categories.find((c) => c.name.toLowerCase() === "groceries") || categories[0];
+
+  const activeCategoryName = targetCategory?.name || "Groceries";
+  const activeCategoryCap = targetCategory?.monthlyCap || 400;
+  const activeCategorySpent = transactions
+    .filter((t) => t.category.toLowerCase() === activeCategoryName.toLowerCase())
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const isCategoryOverBudget = activeCategorySpent > activeCategoryCap;
+  const categoryDiff = Math.abs(activeCategorySpent - activeCategoryCap);
+  const categoryPercentUsed = activeCategoryCap > 0 ? Math.round((activeCategorySpent / activeCategoryCap) * 100) : 0;
+
+  // 3. Dynamic Reconciled Today / Ledger Integrity
+  const totalTransactionCount = transactions.length;
+  const untaggedTransactions = transactions.filter(
+    (t) => t.status === "unresolved" || t.debtor_name === "Unassigned" || t.category === "Uncategorized"
+  );
+
+  // 4. Dynamic Pending PayPal Invoices
+  const pendingInvoices = transactions.filter(
+    (t) => (t.status === "pending" || t.status === "unresolved") && t.debtor_name !== "Self"
+  );
 
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col p-3 md:p-6 lg:p-8">
@@ -426,19 +467,8 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Operating Mode Indicator */}
+        {/* Connection & Auth Indicator */}
         <div className="flex flex-wrap items-center gap-3">
-          {/* Persona Badge */}
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs">
-            <span className="text-zinc-400">Mode:</span>
-            <span className="font-semibold text-emerald-400 flex items-center gap-1">
-              {activePersona === "GENERAL" && <Users className="w-3.5 h-3.5" />}
-              {activePersona === "FREELANCER" && <Briefcase className="w-3.5 h-3.5" />}
-              {activePersona === "BUSINESS" && <Building2 className="w-3.5 h-3.5" />}
-              {activePersona}
-            </span>
-          </div>
-
           {/* Sandbox Status */}
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-300">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -471,14 +501,18 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Metrics Row */}
+      {/* Metrics Row (Dynamically Computed from Ledger State) */}
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mb-6">
         <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800/80 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-xs text-zinc-400">Unsettled Debts</p>
-            <p className="text-lg font-bold text-zinc-100 font-mono mt-0.5">$145.00</p>
+            <p className="text-lg font-bold text-zinc-100 font-mono mt-0.5">
+              ${totalUnsettledAmount.toFixed(2)}
+            </p>
             <p className="text-[11px] text-amber-400 mt-0.5 flex items-center gap-1">
-              Dave owes $65.00 (Largest share)
+              {largestDebtorName
+                ? `${largestDebtorName} owes $${largestDebtorAmount.toFixed(2)} (Largest share)`
+                : "All balances settled"}
             </p>
           </div>
           <div className="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
@@ -488,25 +522,23 @@ export default function Home() {
 
         <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800/80 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-xs text-zinc-400">Groceries Budget Cap</p>
+            <p className="text-xs text-zinc-400">{activeCategoryName} Budget Cap</p>
             <p className="text-lg font-bold text-zinc-100 font-mono mt-0.5">
-              ${groceriesSpent.toFixed(2)} / ${groceriesCap.toFixed(0)}
+              ${activeCategorySpent.toFixed(2)} / ${activeCategoryCap.toFixed(0)}
             </p>
             <p
               className={`text-[11px] mt-0.5 ${
-                groceriesOver ? "text-rose-400" : "text-emerald-400"
+                isCategoryOverBudget ? "text-rose-400" : "text-emerald-400"
               }`}
             >
-              {groceriesOver
-                ? `⚠️ $${groceriesDiff.toFixed(2)} over monthly ceiling (${Math.round(
-                    (groceriesSpent / groceriesCap) * 100
-                  )}%)`
-                : `✅ $${groceriesDiff.toFixed(2)} remaining under ceiling`}
+              {isCategoryOverBudget
+                ? `⚠️ $${categoryDiff.toFixed(2)} over monthly ceiling (${categoryPercentUsed}%)`
+                : `✅ $${categoryDiff.toFixed(2)} remaining under ceiling (${categoryPercentUsed}%)`}
             </p>
           </div>
           <div
             className={`w-10 h-10 rounded-lg border flex items-center justify-center ${
-              groceriesOver
+              isCategoryOverBudget
                 ? "bg-rose-500/10 border-rose-500/20 text-rose-400"
                 : "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
             }`}
@@ -518,8 +550,14 @@ export default function Home() {
         <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800/80 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-xs text-zinc-400">Reconciled Today</p>
-            <p className="text-lg font-bold text-zinc-100 font-mono mt-0.5">6 Transactions</p>
-            <p className="text-[11px] text-zinc-400 mt-0.5">1 Untagged ($34.20 Urban Blend)</p>
+            <p className="text-lg font-bold text-zinc-100 font-mono mt-0.5">
+              {totalTransactionCount} Transactions
+            </p>
+            <p className="text-[11px] text-zinc-400 mt-0.5">
+              {untaggedTransactions.length > 0
+                ? `${untaggedTransactions.length} Untagged ($${untaggedTransactions[0].amount.toFixed(2)} ${untaggedTransactions[0].merchant})`
+                : "All charges categorized & clean"}
+            </p>
           </div>
           <div className="w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
             <Zap className="w-5 h-5" />
@@ -529,8 +567,12 @@ export default function Home() {
         <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800/80 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-xs text-zinc-400">Pending PayPal Invoices</p>
-            <p className="text-lg font-bold text-zinc-100 font-mono mt-0.5">4 Invoices Ready</p>
-            <p className="text-[11px] text-emerald-400 mt-0.5">Penny-locked settlement</p>
+            <p className="text-lg font-bold text-zinc-100 font-mono mt-0.5">
+              {pendingInvoices.length} Invoices Ready
+            </p>
+            <p className="text-[11px] text-emerald-400 mt-0.5">
+              {pendingInvoices.length > 0 ? "Penny-locked settlement" : "All invoices settled"}
+            </p>
           </div>
           <div className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
             <CreditCard className="w-5 h-5" />
@@ -544,12 +586,10 @@ export default function Home() {
         <div className="lg:col-span-5 h-[620px] lg:h-auto">
           <ChatPanel
             messages={messages}
-            activePersona={activePersona}
             isLoading={isLoading}
             onSendMessage={handleSendMessage}
             onUploadReceipt={handleUploadReceipt}
             onConfirmAction={handleConfirmAction}
-            onSelectPersona={setActivePersona}
           />
         </div>
 
