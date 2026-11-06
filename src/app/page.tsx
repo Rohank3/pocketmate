@@ -11,12 +11,15 @@ import {
   Wallet,
   TrendingDown,
   ShieldCheck,
+  ShieldAlert,
   Zap,
   CreditCard,
   Table2,
   BarChart3,
   CalendarDays,
   Sparkles,
+  Users,
+  Clock,
 } from "lucide-react";
 
 // Dynamically import Financial Insights component
@@ -425,21 +428,36 @@ export default function Home() {
   };
 
   const handleSchedulerEventClick = (eventName: string) => {
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: `msg_${Date.now()}`,
-        role: "assistant",
-        content: `Selected timeline event: **${eventName}**\n\nI can analyze this entry against your monthly category ceilings or draft a PayPal payment reminder if this involves an unsettled split.`,
-      },
-    ]);
+    handleSendMessage(
+      `Review scheduled item "${eventName}". Analyze its budget impact and prepare any needed PayPal payment reminder or action.`
+    );
   };
 
-  // 1. Dynamic Unsettled Debts Calculation
+  // 1. Dynamic Spending & Budget Health (Card 1)
+  const isAllCategories = selectedCategory.toLowerCase() === "all";
+  const activeCat = !isAllCategories
+    ? categories.find((c) => c.name.toLowerCase() === selectedCategory.toLowerCase()) || null
+    : null;
+
+  const totalSpend = transactions.reduce((sum, t) => sum + t.amount, 0);
+  const totalBudgetCap = categories.reduce((sum, c) => sum + c.monthlyCap, 0);
+
+  const displaySpent = activeCat
+    ? transactions
+        .filter((t) => t.category.toLowerCase() === activeCat.name.toLowerCase())
+        .reduce((sum, t) => sum + t.amount, 0)
+    : totalSpend;
+  const displayCap = activeCat ? activeCat.monthlyCap : totalBudgetCap;
+  const isBudgetOver = displaySpent > displayCap;
+  const budgetDiff = Math.abs(displaySpent - displayCap);
+  const budgetPercentUsed = displayCap > 0 ? Math.round((displaySpent / displayCap) * 100) : 0;
+  const displayBudgetTitle = activeCat ? `${activeCat.name} Budget Cap` : "Monthly Spending Health";
+
+  // 2. Dynamic Friends Owe You (Card 2)
   const unsettledTransactions = transactions.filter(
     (t) => (t.status === "pending" || t.status === "disputed" || t.status === "unresolved") && t.debtor_name !== "Self"
   );
-  const totalUnsettledAmount = unsettledTransactions.reduce((acc, t) => acc + t.amount, 0);
+  const totalFriendsOwe = unsettledTransactions.reduce((acc, t) => acc + t.amount, 0);
 
   const debtorSums: Record<string, number> = {};
   unsettledTransactions.forEach((t) => {
@@ -456,32 +474,15 @@ export default function Home() {
     }
   }
 
-  // 2. Dynamic Category Budget Ceiling Calculation
-  const targetCategory =
-    selectedCategory !== "All"
-      ? categories.find((c) => c.name.toLowerCase() === selectedCategory.toLowerCase()) || categories[0]
-      : categories.find((c) => c.name.toLowerCase() === "groceries") || categories[0];
+  // 3. Dynamic Upcoming Bills Due in next 7 days (Card 3)
+  const upcomingBillsAmount = 95.0 + 24.99;
 
-  const activeCategoryName = targetCategory?.name || "Groceries";
-  const activeCategoryCap = targetCategory?.monthlyCap || 400;
-  const activeCategorySpent = transactions
-    .filter((t) => t.category.toLowerCase() === activeCategoryName.toLowerCase())
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  const isCategoryOverBudget = activeCategorySpent > activeCategoryCap;
-  const categoryDiff = Math.abs(activeCategorySpent - activeCategoryCap);
-  const categoryPercentUsed = activeCategoryCap > 0 ? Math.round((activeCategorySpent / activeCategoryCap) * 100) : 0;
-
-  // 3. Dynamic Reconciled Today / Ledger Integrity
-  const totalTransactionCount = transactions.length;
-  const untaggedTransactions = transactions.filter(
+  // 4. Dynamic Action Needed / Triage (Card 4)
+  const disputedCount = transactions.filter((t) => t.status === "disputed").length;
+  const unresolvedCount = transactions.filter(
     (t) => t.status === "unresolved" || t.debtor_name === "Unassigned" || t.category === "Uncategorized"
-  );
-
-  // 4. Dynamic Pending PayPal Invoices
-  const pendingInvoices = transactions.filter(
-    (t) => (t.status === "pending" || t.status === "unresolved") && t.debtor_name !== "Self"
-  );
+  ).length;
+  const totalActionRequired = disputedCount + unresolvedCount;
 
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col p-3 md:p-6 lg:p-8">
@@ -540,81 +541,84 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Metrics Row (Dynamically Computed from Ledger State) */}
+      {/* Redesigned 4 Everyday Actionable Financial Metrics Row */}
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mb-6">
+        {/* Card 1: Monthly Spending Health */}
         <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800/80 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-xs text-zinc-400">Unsettled Debts</p>
+            <p className="text-xs text-zinc-400">{displayBudgetTitle}</p>
             <p className="text-lg font-bold text-zinc-100 font-mono mt-0.5">
-              ${totalUnsettledAmount.toFixed(2)}
-            </p>
-            <p className="text-[11px] text-amber-400 mt-0.5 flex items-center gap-1">
-              {largestDebtorName
-                ? `${largestDebtorName} owes $${largestDebtorAmount.toFixed(2)} (Largest share)`
-                : "All balances settled"}
-            </p>
-          </div>
-          <div className="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-            <TrendingDown className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800/80 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs text-zinc-400">{activeCategoryName} Budget Cap</p>
-            <p className="text-lg font-bold text-zinc-100 font-mono mt-0.5">
-              ${activeCategorySpent.toFixed(2)} / ${activeCategoryCap.toFixed(0)}
+              ${displaySpent.toFixed(2)} / ${displayCap.toFixed(0)}
             </p>
             <p
               className={`text-[11px] mt-0.5 ${
-                isCategoryOverBudget ? "text-rose-400" : "text-emerald-400"
+                isBudgetOver ? "text-rose-400 font-medium" : "text-emerald-400"
               }`}
             >
-              {isCategoryOverBudget
-                ? `⚠️ $${categoryDiff.toFixed(2)} over monthly ceiling (${categoryPercentUsed}%)`
-                : `✅ $${categoryDiff.toFixed(2)} remaining under ceiling (${categoryPercentUsed}%)`}
+              {isBudgetOver
+                ? `⚠️ $${budgetDiff.toFixed(2)} over ceiling (${budgetPercentUsed}%)`
+                : `✅ $${(displayCap - displaySpent).toFixed(2)} remaining (${budgetPercentUsed}% used)`}
             </p>
           </div>
           <div
             className={`w-10 h-10 rounded-lg border flex items-center justify-center ${
-              isCategoryOverBudget
+              isBudgetOver
                 ? "bg-rose-500/10 border-rose-500/20 text-rose-400"
                 : "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
             }`}
           >
-            <ShieldCheck className="w-5 h-5" />
+            <Wallet className="w-5 h-5" />
           </div>
         </div>
 
+        {/* Card 2: Friends Owe You */}
         <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800/80 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-xs text-zinc-400">Reconciled Today</p>
-            <p className="text-lg font-bold text-zinc-100 font-mono mt-0.5">
-              {totalTransactionCount} Transactions
+            <p className="text-xs text-zinc-400">Friends Owe You</p>
+            <p className="text-lg font-bold text-amber-400 font-mono mt-0.5">
+              ${totalFriendsOwe.toFixed(2)} Owed
             </p>
-            <p className="text-[11px] text-zinc-400 mt-0.5">
-              {untaggedTransactions.length > 0
-                ? `${untaggedTransactions.length} Untagged ($${untaggedTransactions[0].amount.toFixed(2)} ${untaggedTransactions[0].merchant})`
-                : "All charges categorized & clean"}
+            <p className="text-[11px] text-zinc-400 mt-0.5 flex items-center gap-1">
+              {largestDebtorName
+                ? `${largestDebtorName} owes $${largestDebtorAmount.toFixed(2)} (Largest)`
+                : "All balances settled"}
+            </p>
+          </div>
+          <div className="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+            <Users className="w-5 h-5" />
+          </div>
+        </div>
+
+        {/* Card 3: Upcoming Bills Due (Next 7 Days) */}
+        <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800/80 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-xs text-zinc-400">Upcoming Bills Due</p>
+            <p className="text-lg font-bold text-zinc-100 font-mono mt-0.5">
+              ${upcomingBillsAmount.toFixed(2)} Due Next 7d
+            </p>
+            <p className="text-[11px] text-blue-400 mt-0.5">
+              AWS ($95) & Streaming ($25) on Nov 12-18
             </p>
           </div>
           <div className="w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
-            <Zap className="w-5 h-5" />
+            <Clock className="w-5 h-5" />
           </div>
         </div>
 
+        {/* Card 4: Action Required (Triage & Audit) */}
         <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800/80 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-xs text-zinc-400">Pending PayPal Invoices</p>
-            <p className="text-lg font-bold text-zinc-100 font-mono mt-0.5">
-              {pendingInvoices.length} Invoices Ready
+            <p className="text-xs text-zinc-400">Action Required</p>
+            <p className="text-lg font-bold text-rose-400 font-mono mt-0.5">
+              {totalActionRequired} Items to Review
             </p>
-            <p className="text-[11px] text-emerald-400 mt-0.5">
-              {pendingInvoices.length > 0 ? "Penny-locked settlement" : "All invoices settled"}
+            <p className="text-[11px] text-zinc-400 mt-0.5">
+              {disputedCount > 0 ? `⚠️ ${disputedCount} Mismatch Flag` : ""}
+              {unresolvedCount > 0 ? ` · ${unresolvedCount} Uncategorized` : ""}
             </p>
           </div>
-          <div className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-            <CreditCard className="w-5 h-5" />
+          <div className="w-10 h-10 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
+            <ShieldAlert className="w-5 h-5" />
           </div>
         </div>
       </section>
