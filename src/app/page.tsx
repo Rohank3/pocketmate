@@ -1,12 +1,16 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { ChatPanel, ChatMessageItem } from "@/components/chat/ChatPanel";
 import { TransactionGrid, TransactionRow } from "@/components/grid/TransactionGrid";
 import { ActionCardData } from "@/components/cards/ActionConfirmCard";
 import { GridMutationState } from "@/types/agent";
 import { CategoryControlBar, CategoryItem } from "@/components/categories/CategoryControlBar";
+import { PayPalLoginModal } from "@/components/auth/PayPalLoginModal";
+import { InvoiceActionModal } from "@/components/cards/InvoiceActionModal";
+import { SandboxStore } from "@/lib/sandbox/sandboxStore";
+import { UserAccount, InvoiceRecord } from "@/types/sandboxUser";
 import {
   Wallet,
   TrendingDown,
@@ -20,6 +24,9 @@ import {
   Sparkles,
   Users,
   Clock,
+  DollarSign,
+  AlertCircle,
+  ExternalLink,
 } from "lucide-react";
 
 // Dynamically import Financial Insights component
@@ -127,12 +134,129 @@ const INITIAL_TRANSACTIONS: TransactionRow[] = [
   },
 ];
 
+const DAVE_TRANSACTIONS: TransactionRow[] = [
+  {
+    id: "tx_dave_01",
+    date: "Today, 11:30 PM",
+    merchant: "Downtown Craft Bar & Grill Split",
+    category: "Dining",
+    debtor_name: "Alex Rivera",
+    amount: 65.0,
+    status: "pending",
+  },
+  {
+    id: "tx_dave_02",
+    date: "Yesterday, 05:00 PM",
+    merchant: "Metro Transit Authority",
+    category: "Travel",
+    debtor_name: "Self",
+    amount: 28.0,
+    status: "settled",
+  },
+  {
+    id: "tx_dave_03",
+    date: "Yesterday, 08:30 AM",
+    merchant: "Blue Bottle Coffee",
+    category: "Dining",
+    debtor_name: "Self",
+    amount: 14.5,
+    status: "settled",
+  },
+];
+
 export default function Home() {
   const [activePersona, setActivePersona] = useState<"GENERAL" | "FREELANCER" | "BUSINESS">("GENERAL");
   const [activeRightTab, setActiveRightTab] = useState<"transactions" | "insights" | "upcoming">("transactions");
   const [transactions, setTransactions] = useState<TransactionRow[]>(INITIAL_TRANSACTIONS);
   const [gridMutation, setGridMutation] = useState<GridMutationState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Multi-user sandbox authentication & cross-account sync state
+  const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [activeInvoiceForAction, setActiveInvoiceForAction] = useState<InvoiceRecord | null>(null);
+  const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
+
+  // Synchronize user and invoices on mount
+  useEffect(() => {
+    const user = SandboxStore.getCurrentUser();
+    setCurrentUser(user);
+    setInvoices(SandboxStore.getInvoices());
+  }, []);
+
+  // Update ledger view depending on active user perspective and settled invoices
+  useEffect(() => {
+    if (!currentUser) {
+      setTransactions(INITIAL_TRANSACTIONS);
+      return;
+    }
+
+    if (currentUser.id === "usr_dave_chen") {
+      const inv = SandboxStore.getInvoices().find((i) => i.id === "inv_bar_01");
+      const isPaid = inv?.status === "PAID";
+      setTransactions(
+        DAVE_TRANSACTIONS.map((t) =>
+          t.id === "tx_dave_01" ? { ...t, status: isPaid ? "settled" : "pending" } : t
+        )
+      );
+    } else {
+      const inv = SandboxStore.getInvoices().find((i) => i.id === "inv_bar_01");
+      const isPaid = inv?.status === "PAID";
+      setTransactions(
+        INITIAL_TRANSACTIONS.map((t) =>
+          t.id === "tx_bar_01"
+            ? {
+                ...t,
+                status: isPaid ? "settled" : "pending",
+                debtor_name: isPaid ? "Dave Chen (Paid)" : "Group Split (Alex, Dave...)",
+              }
+            : t
+        )
+      );
+    }
+  }, [currentUser, invoices]);
+
+  const handleUserLogin = (user: UserAccount) => {
+    setCurrentUser(user);
+    setInvoices(SandboxStore.getInvoices());
+
+    const userInvs = SandboxStore.getUserInvoices(user.email);
+    const unpaid = userInvs.incoming.filter((i) => i.status === "UNPAID");
+
+    let welcomeText = `👋 **Welcome, ${user.name}!** You are signed in with \`${user.email}\`.`;
+    if (unpaid.length > 0) {
+      welcomeText += `\n\n📌 **Action Required:** You have **${unpaid.length} incoming invoice** awaiting payment:\n`;
+      unpaid.forEach((inv) => {
+        welcomeText += `\n• **${inv.paypalInvoiceId}**: $${inv.amount.toFixed(2)} USD from ${inv.senderName} (${inv.description})`;
+      });
+      welcomeText += `\n\nClick **Review & Pay** above or ask me to review the breakdown.`;
+    } else {
+      welcomeText += `\n\nYour ledger is up to date and all split balances are settled. What would you like to review today?`;
+    }
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `asst_welcome_user_${Date.now()}`,
+        role: "assistant",
+        content: welcomeText,
+      },
+    ]);
+  };
+
+  const handleUserLogout = () => {
+    SandboxStore.setCurrentUser(null);
+    setCurrentUser(null);
+    setInvoices(SandboxStore.getInvoices());
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `asst_logout_${Date.now()}`,
+        role: "assistant",
+        content: "You have signed out. Log in with any PayPal Sandbox account to view personalized ledgers, manage categories, or settle shared invoices.",
+      },
+    ]);
+  };
 
   const [categories, setCategories] = useState<CategoryItem[]>([
     { id: "cat_groceries", name: "Groceries", monthlyCap: 400, color: "#10b981" },
@@ -201,18 +325,52 @@ export default function Home() {
     }
     setCategories((prev) => prev.filter((c) => c.id !== categoryId));
   };
-  const [authenticatedUser, setAuthenticatedUser] = useState<{ name: string; email: string } | null>(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get("connected") === "paypal") {
-        return {
-          name: params.get("userName") || "Sandbox User",
-          email: params.get("userEmail") || "",
-        };
-      }
+
+  const handlePayInvoice = (invoiceId: string) => {
+    const paid = SandboxStore.settleInvoice(invoiceId);
+    if (paid) {
+      setInvoices(SandboxStore.getInvoices());
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `asst_paid_${Date.now()}`,
+          role: "assistant",
+          content: `✅ **PayPal Sandbox Payment Confirmed!**\n\n• **Invoice:** ${paid.paypalInvoiceId}\n• **Amount:** $${paid.amount.toFixed(2)} USD\n• **Recipient:** ${paid.senderName} (${paid.senderEmail})\n• **Status:** Paid & Settled\n\nYour ledger has been updated and the sender has been notified.`,
+          toolBadges: ["tool: paypal_sandbox_capture", "status: SETTLED"],
+        },
+      ]);
     }
-    return null;
-  });
+  };
+
+  const handleDeclineInvoice = (invoiceId: string, reason: string) => {
+    const declined = SandboxStore.declineInvoice(invoiceId, reason);
+    if (declined) {
+      setInvoices(SandboxStore.getInvoices());
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `asst_dec_${Date.now()}`,
+          role: "assistant",
+          content: `❌ **Invoice Declined:** ${declined.paypalInvoiceId}\n\n• **Reason:** "${reason}"\n• **Action:** Obligation cancelled for your account. Sender (${declined.senderName}) has been notified.`,
+        },
+      ]);
+    }
+  };
+
+  const handleAdjustmentRequest = (invoiceId: string, amount: number, reason: string) => {
+    const adjusted = SandboxStore.requestAdjustment(invoiceId, amount, reason);
+    if (adjusted) {
+      setInvoices(SandboxStore.getInvoices());
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `asst_adj_${Date.now()}`,
+          role: "assistant",
+          content: `📝 **Adjustment Request Sent:** ${adjusted.paypalInvoiceId}\n\n• **Proposed Amount:** $${amount.toFixed(2)}\n• **Reason:** "${reason}"\n• **Status:** Awaiting review from ${adjusted.senderName}.`,
+        },
+      ]);
+    }
+  };
 
   const [messages, setMessages] = useState<ChatMessageItem[]>([
     {
@@ -403,6 +561,30 @@ export default function Home() {
 
       const data = await res.json();
 
+      // Register invoices in SandboxStore for cross-account synchronization
+      if (cardData.recipients && cardData.recipients.length > 0) {
+        cardData.recipients.forEach((r) => {
+          SandboxStore.createInvoice({
+            senderId: currentUser?.id || "usr_alex",
+            senderName: currentUser?.name || "Alex Rivera",
+            senderEmail: currentUser?.email || "alex@pocketmate.sandbox",
+            recipientId: r.email.includes("dave.chen")
+              ? "usr_dave_chen"
+              : r.email.includes("dave.miller")
+              ? "usr_dave_miller"
+              : r.email.includes("sarah")
+              ? "usr_sarah"
+              : `usr_${Date.now()}`,
+            recipientName: r.name || "Recipient",
+            recipientEmail: r.email,
+            amount: r.amount,
+            currency: "USD",
+            description: r.description || "Shared Expense Split",
+          });
+        });
+        setInvoices(SandboxStore.getInvoices());
+      }
+
       setMessages((prev) => [
         ...prev,
         {
@@ -453,7 +635,15 @@ export default function Home() {
   const budgetPercentUsed = displayCap > 0 ? Math.round((displaySpent / displayCap) * 100) : 0;
   const displayBudgetTitle = activeCat ? `${activeCat.name} Budget Cap` : "Monthly Spending Health";
 
-  // 2. Dynamic Friends Owe You (Card 2)
+  // 2. Dynamic Friends Owe You / You Owe Friends (Card 2)
+  const userInvoices = currentUser
+    ? SandboxStore.getUserInvoices(currentUser.email)
+    : { incoming: [], outgoing: [] };
+  const incomingUnpaidInvoices = userInvoices.incoming.filter((i) => i.status === "UNPAID");
+  const firstUnpaidInvoice = incomingUnpaidInvoices[0] || null;
+  const isIncomingDebtor = incomingUnpaidInvoices.length > 0;
+  const totalYouOwe = incomingUnpaidInvoices.reduce((acc, i) => acc + i.amount, 0);
+
   const unsettledTransactions = transactions.filter(
     (t) => (t.status === "pending" || t.status === "disputed" || t.status === "unresolved") && t.debtor_name !== "Self"
   );
@@ -482,7 +672,7 @@ export default function Home() {
   const unresolvedCount = transactions.filter(
     (t) => t.status === "unresolved" || t.debtor_name === "Unassigned" || t.category === "Uncategorized"
   ).length;
-  const totalActionRequired = disputedCount + unresolvedCount;
+  const totalActionRequired = disputedCount + unresolvedCount + (isIncomingDebtor ? 1 : 0);
 
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col p-3 md:p-6 lg:p-8">
@@ -516,30 +706,80 @@ export default function Home() {
           </div>
 
           {/* Log in with PayPal / Authenticated User */}
-          {authenticatedUser ? (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900 border border-blue-500/30 text-xs">
-              <span className="w-2 h-2 rounded-full bg-blue-400" />
-              <span className="text-zinc-200 font-medium">{authenticatedUser.name}</span>
-              <button
-                onClick={() => setAuthenticatedUser(null)}
-                className="text-[10px] text-zinc-500 hover:text-zinc-300 ml-1 underline cursor-pointer"
-              >
-                Sign out
-              </button>
+          {currentUser ? (
+            <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-zinc-900 border border-blue-500/30 text-xs shadow-sm">
+              <div className="w-6 h-6 rounded-full bg-blue-600/30 border border-blue-500/50 flex items-center justify-center font-bold text-[10px] text-blue-300">
+                {currentUser.avatar}
+              </div>
+              <div className="flex flex-col">
+                <span className="text-zinc-200 font-semibold leading-tight">{currentUser.name}</span>
+                <span className="text-[10px] text-zinc-400 font-mono leading-tight truncate max-w-[150px]">
+                  {currentUser.email}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 ml-2 border-l border-zinc-800 pl-2">
+                <button
+                  onClick={() => setIsLoginModalOpen(true)}
+                  className="text-[11px] text-blue-400 hover:text-blue-300 font-medium cursor-pointer transition-colors"
+                >
+                  Switch
+                </button>
+                <span className="text-zinc-600">·</span>
+                <button
+                  onClick={handleUserLogout}
+                  className="text-[11px] text-zinc-400 hover:text-rose-400 font-medium cursor-pointer transition-colors"
+                >
+                  Log Out
+                </button>
+              </div>
             </div>
           ) : (
-            <a
-              href="/api/auth/paypal"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0070ba] hover:bg-[#005ea6] active:bg-[#003087] text-white text-xs font-semibold shadow-md shadow-blue-500/20 transition-all cursor-pointer"
+            <button
+              onClick={() => setIsLoginModalOpen(true)}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#0070ba] hover:bg-[#005ea6] active:bg-[#003087] text-white text-xs font-semibold shadow-md shadow-blue-500/20 transition-all cursor-pointer"
             >
               <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
                 <path d="M20.067 8.478c.492.315.844.818.996 1.424.238.948.067 2.05-.48 3.108-1.042 2.015-2.918 3.32-5.148 3.585-.453.053-.91.08-1.367.08h-.468c-.468 0-.87.332-.942.793l-.845 5.353-.028.175c-.033.206-.21.354-.42.354H8.05c-.26 0-.45-.24-.41-.497l2.128-13.49c.04-.257.26-.45.52-.45h4.636c1.69 0 3.19.467 4.143 1.565z" />
               </svg>
               <span>Log in with PayPal</span>
-            </a>
+            </button>
           )}
         </div>
       </header>
+
+      {/* Incoming Invoice Alert Banner (Shown when active user has an unpaid invoice) */}
+      {firstUnpaidInvoice && (
+        <div className="mb-6 p-4 rounded-xl bg-blue-950/40 border border-blue-500/40 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-lg shadow-blue-950/50">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
+              <DollarSign className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-xs font-bold text-zinc-100">
+                  Incoming PayPal Sandbox Invoice: {firstUnpaidInvoice.paypalInvoiceId}
+                </h4>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium">
+                  Payment Due
+                </span>
+              </div>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                <span className="text-zinc-200 font-semibold">{firstUnpaidInvoice.senderName}</span> requested <span className="text-emerald-400 font-mono font-bold">${firstUnpaidInvoice.amount.toFixed(2)} USD</span> for &quot;{firstUnpaidInvoice.description}&quot;.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 self-end sm:self-auto shrink-0">
+            <button
+              onClick={() => setActiveInvoiceForAction(firstUnpaidInvoice)}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md shadow-blue-600/30 cursor-pointer transition-all"
+            >
+              <span>Review & Pay</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Redesigned 4 Everyday Actionable Financial Metrics Row */}
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mb-6">
@@ -571,20 +811,35 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Card 2: Friends Owe You */}
+        {/* Card 2: Friends Owe You or You Owe Friends */}
         <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800/80 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-xs text-zinc-400">Friends Owe You</p>
-            <p className="text-lg font-bold text-amber-400 font-mono mt-0.5">
-              ${totalFriendsOwe.toFixed(2)} Owed
+            <p className="text-xs text-zinc-400">
+              {isIncomingDebtor ? "You Owe Friends" : "Friends Owe You"}
+            </p>
+            <p
+              className={`text-lg font-bold font-mono mt-0.5 ${
+                isIncomingDebtor ? "text-rose-400" : "text-amber-400"
+              }`}
+            >
+              ${(isIncomingDebtor ? totalYouOwe : totalFriendsOwe).toFixed(2)}{" "}
+              {isIncomingDebtor ? "Due" : "Owed"}
             </p>
             <p className="text-[11px] text-zinc-400 mt-0.5 flex items-center gap-1">
-              {largestDebtorName
+              {isIncomingDebtor
+                ? `${firstUnpaidInvoice?.senderName}: $${firstUnpaidInvoice?.amount.toFixed(2)} (Tap Review)`
+                : largestDebtorName
                 ? `${largestDebtorName} owes $${largestDebtorAmount.toFixed(2)} (Largest)`
                 : "All balances settled"}
             </p>
           </div>
-          <div className="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+          <div
+            className={`w-10 h-10 rounded-lg border flex items-center justify-center ${
+              isIncomingDebtor
+                ? "bg-rose-500/10 border-rose-500/20 text-rose-400"
+                : "bg-amber-500/10 border-amber-500/20 text-amber-400"
+            }`}
+          >
             <Users className="w-5 h-5" />
           </div>
         </div>
@@ -733,6 +988,25 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {/* PayPal Sandbox Login & Session Switch Modal */}
+      <PayPalLoginModal
+        isOpen={isLoginModalOpen}
+        currentUser={currentUser}
+        onClose={() => setIsLoginModalOpen(false)}
+        onLogin={handleUserLogin}
+        onLogout={handleUserLogout}
+      />
+
+      {/* Recipient Invoice Action Modal (Pay via official PayPal sandbox link, Dispute or Propose Adjustment) */}
+      <InvoiceActionModal
+        invoice={activeInvoiceForAction}
+        isOpen={!!activeInvoiceForAction}
+        onClose={() => setActiveInvoiceForAction(null)}
+        onPay={handlePayInvoice}
+        onDecline={handleDeclineInvoice}
+        onRequestAdjustment={handleAdjustmentRequest}
+      />
     </main>
   );
 }
