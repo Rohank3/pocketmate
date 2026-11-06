@@ -78,30 +78,39 @@ export default function Home() {
 
   // Multi-user sandbox authentication & cross-account sync state
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
+  const [activeScope, setActiveScope] = useState<"personal" | "all">("personal");
+  const [totalPlatformCount, setTotalPlatformCount] = useState<number>(0);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [activeInvoiceForAction, setActiveInvoiceForAction] = useState<InvoiceRecord | null>(null);
-  const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
+  const [, setInvoices] = useState<InvoiceRecord[]>([]);
 
   // Dynamic Categories & Scheduled Events state
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [events, setEvents] = useState<ScheduledEvent[]>([]);
 
-  // Load live transactions from PayPal Sandbox
-  const loadTransactions = async () => {
+  // Load live transactions from PayPal Sandbox (role & user-aware)
+  const loadTransactions = useCallback(async (scopeOverride?: "personal" | "all") => {
     setIsLoadingTransactions(true);
+    const scopeToUse = scopeOverride || activeScope;
     try {
-      const res = await fetch("/api/paypal/transactions");
+      const res = await fetch(`/api/paypal/transactions?scope=${scopeToUse}`);
       const data = await res.json();
       if (data.transactions) {
         setTransactions(data.transactions);
+        if (typeof data.totalPlatformCount === "number") {
+          setTotalPlatformCount(data.totalPlatformCount);
+        }
+        if (data.activeScope) {
+          setActiveScope(data.activeScope);
+        }
       }
     } catch (err) {
       console.error(err);
     } finally {
       setIsLoadingTransactions(false);
     }
-  };
+  }, [activeScope]);
 
   // 1-Click seed realistic PayPal Sandbox transactions & invoices
   const handleSeedSandboxTransactions = async () => {
@@ -182,6 +191,12 @@ export default function Home() {
         const txData = await txRes.json();
         if (isSubscribed && txData.transactions) {
           setTransactions(txData.transactions);
+          if (typeof txData.totalPlatformCount === "number") {
+            setTotalPlatformCount(txData.totalPlatformCount);
+          }
+          if (txData.activeScope) {
+            setActiveScope(txData.activeScope);
+          }
         }
       } catch {
         // ignore
@@ -227,9 +242,10 @@ export default function Home() {
 
   const handleUserLogin = (user: UserAccount) => {
     setCurrentUser(user);
-    loadTransactions();
-    loadCategories();
-    loadEvents();
+    setActiveScope("personal");
+    void loadTransactions("personal");
+    void loadCategories();
+    void loadEvents();
 
     setMessages((prev) => [
       ...prev,
@@ -249,6 +265,8 @@ export default function Home() {
     }
     SandboxStore.setCurrentUser(null);
     setCurrentUser(null);
+    setActiveScope("all");
+    void loadTransactions("all");
     setMessages((prev) => [
       ...prev,
       {
@@ -671,24 +689,24 @@ export default function Home() {
   const displayBudgetTitle = activeCat ? `${activeCat.name} Budget Cap` : "Monthly Spending Health";
 
   // 2. Dynamic Friends Owe You / You Owe Friends (Card 2)
-  const userInvoices = currentUser
-    ? {
-        incoming: invoices.filter((i) => i.recipientEmail.toLowerCase() === currentUser.email.toLowerCase()),
-        outgoing: invoices.filter((i) => i.senderEmail.toLowerCase() === currentUser.email.toLowerCase()),
-      }
-    : { incoming: [], outgoing: [] };
-  const incomingUnpaidInvoices = userInvoices.incoming.filter((i) => i.status === "UNPAID");
-  const firstUnpaidInvoice = incomingUnpaidInvoices[0] || null;
-  const isIncomingDebtor = incomingUnpaidInvoices.length > 0;
-  const totalYouOwe = incomingUnpaidInvoices.reduce((acc, i) => acc + i.amount, 0);
-
-  const unsettledTransactions = transactions.filter(
+  const currentUserNameLower = (currentUser?.name || "").toLowerCase().trim();
+  const debtorPendingTxs = transactions.filter(
     (t) => (t.status === "pending" || t.status === "disputed" || t.status === "unresolved") && t.debtor_name !== "Self"
   );
-  const totalFriendsOwe = unsettledTransactions.reduce((acc, t) => acc + t.amount, 0);
+
+  const userOwedBills = currentUser
+    ? debtorPendingTxs.filter((t) => {
+        const d = (t.debtor_name || "").toLowerCase().trim();
+        return currentUserNameLower && d.length > 0 && (d.includes(currentUserNameLower) || currentUserNameLower.includes(d));
+      })
+    : [];
+
+  const isUserDebtor = userOwedBills.length > 0;
+  const userOwesTotal = userOwedBills.reduce((acc, t) => acc + t.amount, 0);
+  const totalFriendsOwe = debtorPendingTxs.reduce((acc, t) => acc + t.amount, 0);
 
   const debtorSums: Record<string, number> = {};
-  unsettledTransactions.forEach((t) => {
+  debtorPendingTxs.forEach((t) => {
     const name = t.debtor_name || "Unassigned";
     debtorSums[name] = (debtorSums[name] || 0) + t.amount;
   });
@@ -701,6 +719,17 @@ export default function Home() {
       largestDebtorName = name;
     }
   }
+
+  const isDebtorView = isUserDebtor && activeScope === "personal";
+  const isIncomingDebtor = isDebtorView;
+  const card2Title = isDebtorView ? "Pending Bills You Owe" : "Friends Owe You";
+  const card2DisplayAmount = isDebtorView ? userOwesTotal : totalFriendsOwe;
+  const card2Subtitle = isDebtorView
+    ? `${userOwedBills[0]?.merchant || "Merchant invoice"}: $${userOwedBills[0]?.amount.toFixed(2)} (${userOwedBills.length} pending bill${userOwedBills.length > 1 ? "s" : ""})`
+    : largestDebtorName
+    ? `${largestDebtorName} owes $${largestDebtorAmount.toFixed(2)} (Largest)`
+    : "All balances settled";
+  const firstUnpaidBill = isUserDebtor ? userOwedBills[0] : null;
 
   // 3. Dynamic Upcoming Bills Due in next 7 days (Card 3)
   const outgoingBills = events.filter((e) => e.type === "outgoing");
@@ -803,8 +832,8 @@ export default function Home() {
         </div>
       )}
 
-      {/* Incoming Invoice Alert Banner (Shown when active user has an unpaid invoice) */}
-      {firstUnpaidInvoice && (
+      {/* Incoming Invoice Alert Banner (Shown when active user has a pending bill) */}
+      {firstUnpaidBill && activeScope === "personal" && (
         <div className="mb-6 p-4 rounded-xl bg-blue-950/40 border border-blue-500/40 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-lg shadow-blue-950/50">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
@@ -813,24 +842,26 @@ export default function Home() {
             <div>
               <div className="flex items-center gap-2">
                 <h4 className="text-xs font-bold text-zinc-100">
-                  Incoming PayPal Sandbox Invoice: {firstUnpaidInvoice.paypalInvoiceId}
+                  Incoming PayPal Sandbox Invoice: {firstUnpaidBill.id}
                 </h4>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium">
                   Payment Due
                 </span>
               </div>
               <p className="text-xs text-zinc-400 mt-0.5">
-                <span className="text-zinc-200 font-semibold">{firstUnpaidInvoice.senderName}</span> requested <span className="text-emerald-400 font-mono font-bold">${firstUnpaidInvoice.amount.toFixed(2)} USD</span> for &quot;{firstUnpaidInvoice.description}&quot;.
+                <span className="text-zinc-200 font-semibold">{firstUnpaidBill.merchant}</span> &mdash; Pending allocation of <span className="text-emerald-400 font-mono font-bold">${firstUnpaidBill.amount.toFixed(2)} USD</span> for {firstUnpaidBill.debtor_name}.
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2.5 self-end sm:self-auto shrink-0">
             <button
-              onClick={() => setActiveInvoiceForAction(firstUnpaidInvoice)}
+              onClick={() => {
+                handleSendMessage(`Review incoming invoice ${firstUnpaidBill.id} for $${firstUnpaidBill.amount.toFixed(2)} from ${firstUnpaidBill.merchant}`);
+              }}
               className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md shadow-blue-600/30 cursor-pointer transition-all"
             >
-              <span>Review & Pay</span>
+              <span>Review in Chat</span>
               <ExternalLink className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -871,27 +902,23 @@ export default function Home() {
         <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800/80 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-xs text-zinc-400">
-              {isIncomingDebtor ? "You Owe Friends" : "Friends Owe You"}
+              {card2Title}
             </p>
             <p
               className={`text-lg font-bold font-mono mt-0.5 ${
-                isIncomingDebtor ? "text-rose-400" : "text-amber-400"
+                isDebtorView ? "text-rose-400" : "text-amber-400"
               }`}
             >
-              ${(isIncomingDebtor ? totalYouOwe : totalFriendsOwe).toFixed(2)}{" "}
-              {isIncomingDebtor ? "Due" : "Owed"}
+              ${card2DisplayAmount.toFixed(2)}{" "}
+              {isDebtorView ? "Due" : "Owed"}
             </p>
             <p className="text-[11px] text-zinc-400 mt-0.5 flex items-center gap-1">
-              {isIncomingDebtor
-                ? `${firstUnpaidInvoice?.senderName}: $${firstUnpaidInvoice?.amount.toFixed(2)} (Tap Review)`
-                : largestDebtorName
-                ? `${largestDebtorName} owes $${largestDebtorAmount.toFixed(2)} (Largest)`
-                : "All balances settled"}
+              {card2Subtitle}
             </p>
           </div>
           <div
             className={`w-10 h-10 rounded-lg border flex items-center justify-center ${
-              isIncomingDebtor
+              isDebtorView
                 ? "bg-rose-500/10 border-rose-500/20 text-rose-400"
                 : "bg-amber-500/10 border-amber-500/20 text-amber-400"
             }`}
@@ -1012,14 +1039,49 @@ export default function Home() {
                 <div className="flex flex-wrap items-center justify-between gap-2 px-1">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold text-zinc-300">Live PayPal Ledger</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono">
-                      {transactions.length} Sandbox Records
-                    </span>
+
+                    {/* Multi-User Scoped View Toggle */}
+                    {currentUser ? (
+                      <div className="flex items-center p-0.5 rounded-lg bg-zinc-900 border border-zinc-800 text-[11px]">
+                        <button
+                          onClick={() => {
+                            setActiveScope("personal");
+                            void loadTransactions("personal");
+                          }}
+                          className={`px-2.5 py-0.5 rounded-md font-medium transition-all cursor-pointer ${
+                            activeScope === "personal"
+                              ? "bg-blue-600 text-white shadow-sm"
+                              : "text-zinc-400 hover:text-zinc-200"
+                          }`}
+                          title={`Show only activity for ${currentUser.name}`}
+                        >
+                          My Invoices ({transactions.length})
+                        </button>
+                        <button
+                          onClick={() => {
+                            setActiveScope("all");
+                            void loadTransactions("all");
+                          }}
+                          className={`px-2.5 py-0.5 rounded-md font-medium transition-all cursor-pointer ${
+                            activeScope === "all"
+                              ? "bg-zinc-800 text-zinc-200 shadow-sm"
+                              : "text-zinc-400 hover:text-zinc-200"
+                          }`}
+                          title="Show all PayPal Sandbox records across platform"
+                        >
+                          All Sandbox ({totalPlatformCount || transactions.length})
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono">
+                        {transactions.length} Sandbox Records
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={loadTransactions}
+                      onClick={() => void loadTransactions(activeScope)}
                       disabled={isLoadingTransactions}
                       className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs border border-zinc-800 transition-colors cursor-pointer disabled:opacity-50"
                       title="Refresh transactions from PayPal Sandbox REST API"
@@ -1057,9 +1119,15 @@ export default function Home() {
                       <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 mb-3">
                         <CreditCard className="w-6 h-6" />
                       </div>
-                      <h3 className="text-sm font-bold text-zinc-100">No Sandbox Transactions Found</h3>
+                      <h3 className="text-sm font-bold text-zinc-100">
+                        {currentUser
+                          ? `No Scoped Activity for ${currentUser.name}`
+                          : "No Sandbox Transactions Found"}
+                      </h3>
                       <p className="text-xs text-zinc-400 max-w-sm mt-1 mb-4">
-                        Your PayPal Sandbox account currently has 0 recorded transactions. Click below to generate realistic invoices and transactions directly in PayPal Sandbox.
+                        {currentUser
+                          ? `You currently have 0 pending invoices or personal charges. Try clicking "All Sandbox" above, or ask PocketMate in chat: "Split $80 dinner with friends".`
+                          : "Your PayPal Sandbox account currently has 0 recorded transactions. Click below to generate realistic invoices and transactions directly in PayPal Sandbox."}
                       </p>
                       <button
                         onClick={handleSeedSandboxTransactions}
@@ -1067,7 +1135,7 @@ export default function Home() {
                         className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white text-xs font-semibold shadow-lg shadow-blue-500/20 transition-all cursor-pointer disabled:opacity-50"
                       >
                         <Sparkles className="w-4 h-4" />
-                        <span>{isSeedingTransactions ? "Generating Sandbox Data..." : "Seed Sandbox Transactions"}</span>
+                        <span>{isSeedingTransactions ? "Generating Sandbox Data..." : "Seed Sandbox Invoices"}</span>
                       </button>
                     </div>
                   ) : (
