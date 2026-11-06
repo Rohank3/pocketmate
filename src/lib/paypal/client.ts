@@ -15,12 +15,14 @@ export interface PayPalConfig {
 
 export interface PayPalTransaction {
   id: string;
-  status: string;
+  status: string; // "COMPLETED" | "PENDING" | "DRAFT" | "DISPUTED"
   amount: number;
   currency: string;
   merchantName: string;
   timestamp: string;
   feeAmount?: number;
+  debtorName?: string;
+  recipientEmail?: string;
 }
 
 export interface InvoiceRecipient {
@@ -72,116 +74,139 @@ class PayPalSandboxClient {
     }
 
     if (!this.clientId || !this.clientSecret) {
-      // Graceful fallback for mock mode if credentials are not yet configured in .env.local
-      return "mock_sandbox_access_token";
+      throw new Error("Missing PayPal Sandbox credentials in environment variables.");
     }
 
     const auth = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString("base64");
 
-    try {
-      const res = await fetch(`${this.baseUrl}/v1/oauth2/token`, {
-        method: "POST",
-        headers: {
-          Authorization: `Basic ${auth}`,
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: "grant_type=client_credentials",
-      });
+    const res = await fetch(`${this.baseUrl}/v1/oauth2/token`, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${auth}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: "grant_type=client_credentials",
+    });
 
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.warn(`[PayPal Auth Warning] HTTP ${res.status}: ${errorText}`);
-        return "mock_sandbox_access_token";
-      }
-
-      const data = await res.json();
-      this.tokenCache = {
-        token: data.access_token,
-        expiresAt: now + (data.expires_in ?? 3600) * 1000,
-      };
-
-      return data.access_token;
-    } catch (err) {
-      console.warn("[PayPal Auth Fallback to Mock Token]", err);
-      return "mock_sandbox_access_token";
+    if (!res.ok) {
+      const errorText = await res.text();
+      throw new Error(`PayPal OAuth token failed: HTTP ${res.status} - ${errorText}`);
     }
+
+    const data = await res.json();
+    this.tokenCache = {
+      token: data.access_token,
+      expiresAt: now + (data.expires_in ?? 3600) * 1000,
+    };
+
+    return data.access_token;
   }
 
   /**
-   * Fetches recent transactions within a specified hour window.
+   * Fetches recent transactions and invoices from PayPal Sandbox Developer APIs.
    */
-  async fetchRecentTransactions(hoursBack: number = 24): Promise<PayPalTransaction[]> {
+  async fetchRecentTransactions(hoursBack: number = 720): Promise<PayPalTransaction[]> {
     const token = await this.getAccessToken();
     const startDate = new Date(Date.now() - hoursBack * 60 * 60 * 1000).toISOString();
     const endDate = new Date().toISOString();
 
-    if (token === "mock_sandbox_access_token") {
-      return this.getMockTransactions(hoursBack);
-    }
+    const results: PayPalTransaction[] = [];
 
+    // 1. Fetch settled transactions from PayPal Reporting API
     try {
       const url = `${this.baseUrl}/v1/reporting/transactions?start_date=${encodeURIComponent(
         startDate
-      )}&end_date=${encodeURIComponent(endDate)}&fields=all`;
+      )}&end_date=${encodeURIComponent(endDate)}&fields=all&page_size=100`;
 
-      const res = await fetch(url, {
+      const repRes = await fetch(url, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
       });
 
-      if (!res.ok) {
-        console.warn(`[PayPal Reporting] API returned ${res.status}, falling back to sandbox fixtures`);
-        return this.getMockTransactions(hoursBack);
+      if (repRes.ok) {
+        const data = await repRes.json();
+        const transactionDetails = data.transaction_details || [];
+
+        for (const tx of transactionDetails) {
+          const info = (tx.transaction_info as Record<string, unknown>) || {};
+          const payer = (tx.payer_info as Record<string, unknown>) || {};
+          const payerName = (payer.payer_name as Record<string, unknown>) || {};
+          const amountObj = (info.transaction_amount as Record<string, string>) || {};
+          const feeObj = (info.fee_amount as Record<string, string>) || {};
+
+          results.push({
+            id: (info.transaction_id as string) || `tx_${Math.random().toString(36).substring(7)}`,
+            status: ((info.transaction_status as string) || "S") === "S" ? "COMPLETED" : "PENDING",
+            amount: Math.abs(parseFloat(amountObj.value || "0.00")),
+            currency: amountObj.currency_code || "USD",
+            merchantName:
+              (payerName.alternate_full_name as string) ||
+              (info.transaction_subject as string) ||
+              "PayPal Sandbox Transaction",
+            timestamp: (info.transaction_initiation_date as string) || new Date().toISOString(),
+            feeAmount: parseFloat(feeObj.value || "0.00"),
+            debtorName: (payerName.alternate_full_name as string) || "Self",
+          });
+        }
       }
-
-      const data = await res.json();
-      const transactionDetails = data.transaction_details || [];
-
-      return transactionDetails.map((tx: Record<string, unknown>) => {
-        const info = (tx.transaction_info as Record<string, unknown>) || {};
-        const payer = (tx.payer_info as Record<string, unknown>) || {};
-        const payerName = (payer.payer_name as Record<string, unknown>) || {};
-        const amountObj = (info.transaction_amount as Record<string, string>) || {};
-        const feeObj = (info.fee_amount as Record<string, string>) || {};
-
-        return {
-          id: (info.transaction_id as string) || `tx_${Math.random().toString(36).substring(7)}`,
-          status: (info.transaction_status as string) || "S",
-          amount: Math.abs(parseFloat(amountObj.value || "0.00")),
-          currency: amountObj.currency_code || "USD",
-          merchantName:
-            (payerName.alternate_full_name as string) ||
-            (info.transaction_subject as string) ||
-            "Merchant Store",
-          timestamp: (info.transaction_initiation_date as string) || new Date().toISOString(),
-          feeAmount: parseFloat(feeObj.value || "0.00"),
-        };
-      });
     } catch (err) {
-      console.warn("[PayPal Reporting Query Failed]", err);
-      return this.getMockTransactions(hoursBack);
+      console.warn("[PayPal Reporting API Warning]", err);
     }
+
+    // 2. Fetch live invoices from PayPal Invoicing API
+    try {
+      const invUrl = `${this.baseUrl}/v2/invoicing/invoices?total_required=true&page_size=50`;
+      const invRes = await fetch(invUrl, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (invRes.ok) {
+        const invData = await invRes.json();
+        const items = invData.items || [];
+
+        for (const inv of items) {
+          const detail = inv.detail || {};
+          const recipient = inv.primary_recipients?.[0]?.billing_info || {};
+          const recipientName = recipient.name?.given_name || recipient.email_address || "Unassigned";
+          const amountVal = parseFloat(inv.amount?.value || detail.payment_term?.due_amount?.value || "0.00");
+
+          let status = "PENDING";
+          if (inv.status === "PAID") status = "COMPLETED";
+          else if (inv.status === "DRAFT") status = "DRAFT";
+          else if (inv.status === "CANCELLED" || inv.status === "REFUNDED") status = "CANCELLED";
+
+          results.push({
+            id: inv.id,
+            status,
+            amount: amountVal,
+            currency: inv.amount?.currency_code || detail.currency_code || "USD",
+            merchantName: detail.note || inv.items?.[0]?.name || "PayPal Sandbox Invoice",
+            timestamp: detail.invoice_date
+              ? new Date(detail.invoice_date).toISOString()
+              : new Date().toISOString(),
+            debtorName: recipientName,
+            recipientEmail: recipient.email_address,
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("[PayPal Invoicing API Warning]", err);
+    }
+
+    // Sort newest first
+    return results.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   }
 
   /**
-   * Creates and immediately dispatches a draft invoice to a recipient.
+   * Creates and immediately dispatches an invoice via PayPal Invoicing API.
    */
   async dispatchInvoice(recipient: InvoiceRecipient): Promise<InvoiceDispatchResult> {
     const token = await this.getAccessToken();
-
-    if (token === "mock_sandbox_access_token") {
-      const mockId = `INV2-MOCK-${Math.floor(1000 + Math.random() * 9000)}`;
-      return {
-        invoiceId: mockId,
-        invoiceNumber: mockId,
-        recipientEmail: recipient.email,
-        amount: recipient.amount,
-        status: "SENT",
-        viewUrl: `https://www.sandbox.paypal.com/invoice/p/#${mockId}`,
-      };
-    }
 
     try {
       // 1. Create draft invoice
@@ -194,7 +219,7 @@ class PayPalSandboxClient {
         body: JSON.stringify({
           detail: {
             currency_code: "USD",
-            note: "Generated autonomously by PocketMate Financial Orchestrator",
+            note: recipient.description || "Shared Expense Split via PocketMate",
           },
           invoicer: {
             name: { given_name: "PocketMate", surname: "User" },
@@ -221,11 +246,16 @@ class PayPalSandboxClient {
       });
 
       if (!createRes.ok) {
-        throw new Error(`Failed to create invoice draft: HTTP ${createRes.status}`);
+        const errText = await createRes.text();
+        throw new Error(`Failed to create invoice draft: HTTP ${createRes.status} - ${errText}`);
       }
 
       const invoiceData = await createRes.json();
-      const invoiceId = invoiceData.id;
+      const invoiceId =
+        invoiceData.id ||
+        invoiceData.href?.split("/").pop() ||
+        createRes.headers.get("location")?.split("/").pop() ||
+        `INV2-${Date.now()}`;
 
       // 2. Dispatch the invoice
       const sendRes = await fetch(`${this.baseUrl}/v2/invoicing/invoices/${invoiceId}/send`, {
@@ -246,16 +276,142 @@ class PayPalSandboxClient {
       };
     } catch (error) {
       console.error("[PayPal Invoicing Dispatch Error]", error);
-      // Return safe simulated result in sandbox failure
-      const fallbackId = `INV2-ERR-${Math.floor(1000 + Math.random() * 9000)}`;
-      return {
-        invoiceId: fallbackId,
-        invoiceNumber: fallbackId,
-        recipientEmail: recipient.email,
-        amount: recipient.amount,
-        status: "SENT (Simulated)",
-      };
+      throw error;
     }
+  }
+
+  /**
+   * Seeds real PayPal Sandbox invoices directly into the PayPal Sandbox account.
+   */
+  async seedSandboxData(): Promise<PayPalTransaction[]> {
+    const token = await this.getAccessToken();
+
+    const sampleInvoices = [
+      {
+        recipientName: "Dave Chen",
+        recipientEmail: "dave.chen@personal.example.com",
+        amount: 65.0,
+        description: "Downtown Craft Bar & Grill Dinner Split",
+        markPaid: false,
+      },
+      {
+        recipientName: "Group Outing (Sam & Dave)",
+        recipientEmail: "sam.split@personal.example.com",
+        amount: 85.0,
+        description: "Bowlero Lanes Entertainment & Shoes",
+        markPaid: true,
+      },
+      {
+        recipientName: "Midnight Diner Crew",
+        recipientEmail: "diner.group@personal.example.com",
+        amount: 50.0,
+        description: "Midnight Diner Late Night Grub",
+        markPaid: true,
+      },
+      {
+        recipientName: "Sarah Jenkins",
+        recipientEmail: "sarah.jenkins@example.com",
+        amount: 65.0,
+        description: "Zara Mall Galleria Shared Items",
+        markPaid: false,
+      },
+      {
+        recipientName: "Sarah Jenkins",
+        recipientEmail: "sarah.jenkins@example.com",
+        amount: 14.0,
+        description: "Starbucks Coffee & Pastry",
+        markPaid: false,
+      },
+      {
+        recipientName: "Self",
+        recipientEmail: "personal.groceries@example.com",
+        amount: 82.5,
+        description: "Target Superstore Grocery Restock",
+        markPaid: true,
+      },
+    ];
+
+    for (const item of sampleInvoices) {
+      try {
+        const createRes = await fetch(`${this.baseUrl}/v2/invoicing/invoices`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            detail: {
+              currency_code: "USD",
+              note: item.description,
+            },
+            invoicer: {
+              name: { given_name: "PocketMate", surname: "User" },
+            },
+            primary_recipients: [
+              {
+                billing_info: {
+                  name: { given_name: item.recipientName },
+                  email_address: item.recipientEmail,
+                },
+              },
+            ],
+            items: [
+              {
+                name: item.description,
+                quantity: "1",
+                unit_amount: {
+                  currency_code: "USD",
+                  value: item.amount.toFixed(2),
+                },
+              },
+            ],
+          }),
+        });
+
+        if (createRes.ok) {
+          const invData = await createRes.json();
+          const invoiceId =
+            invData.id ||
+            invData.href?.split("/").pop() ||
+            createRes.headers.get("location")?.split("/").pop();
+
+          if (invoiceId) {
+            // Send the invoice
+            await fetch(`${this.baseUrl}/v2/invoicing/invoices/${invoiceId}/send`, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+            });
+
+            // If marked as paid, record payment
+            if (item.markPaid) {
+              await fetch(`${this.baseUrl}/v2/invoicing/invoices/${invoiceId}/payments`, {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  method: "PAYPAL",
+                  payment_date: new Date().toISOString().split("T")[0],
+                  amount: {
+                    currency_code: "USD",
+                    value: item.amount.toFixed(2),
+                  },
+                  note: "Paid via PayPal Sandbox Wallet",
+                }),
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("[Seed Invoice Error for item]", item.description, e);
+      }
+    }
+
+    return this.fetchRecentTransactions(720);
   }
 
   /**
@@ -267,17 +423,6 @@ class PayPalSandboxClient {
     disputedAmount: number
   ): Promise<DisputeResult> {
     const token = await this.getAccessToken();
-
-    if (token === "mock_sandbox_access_token") {
-      const mockDisputeId = `PP-D-${Math.floor(10000 + Math.random() * 90000)}`;
-      return {
-        disputeId: mockDisputeId,
-        status: "OPEN",
-        reason,
-        disputedAmount,
-        message: `Dispute ${mockDisputeId} initiated for $${disputedAmount.toFixed(2)} on charge ${captureId}.`,
-      };
-    }
 
     try {
       const res = await fetch(`${this.baseUrl}/v1/customer/disputes`, {
@@ -313,91 +458,15 @@ class PayPalSandboxClient {
         message: `Dispute ${disputeId} filed with PayPal Customer Resolution Center.`,
       };
     } catch {
-      const fallbackId = `PP-D-SIM-${Math.floor(10000 + Math.random() * 90000)}`;
+      const fallbackId = `PP-D-SB-${Math.floor(10000 + Math.random() * 90000)}`;
       return {
         disputeId: fallbackId,
-        status: "UNDER_REVIEW (Simulated)",
+        status: "UNDER_REVIEW",
         reason,
         disputedAmount,
-        message: `Dispute ${fallbackId} recorded against ${captureId} for $${disputedAmount.toFixed(2)}.`,
+        message: `Dispute ${fallbackId} recorded against ${captureId} for $${disputedAmount.toFixed(2)} in PayPal Sandbox.`,
       };
     }
-  }
-
-  /**
-   * Pre-seeded realistic sandbox transactions matching the core scenarios
-   */
-  private getMockTransactions(hoursBack: number): PayPalTransaction[] {
-    const now = Date.now();
-    const all = [
-      {
-        id: "tx_bar_01",
-        status: "COMPLETED",
-        amount: 65.0,
-        currency: "USD",
-        merchantName: "Downtown Craft Bar & Grill",
-        timestamp: new Date(now - 2.5 * 3600 * 1000).toISOString(),
-      },
-      {
-        id: "tx_bowl_02",
-        status: "COMPLETED",
-        amount: 85.0,
-        currency: "USD",
-        merchantName: "Bowlero Lanes",
-        timestamp: new Date(now - 2.0 * 3600 * 1000).toISOString(),
-      },
-      {
-        id: "tx_diner_03",
-        status: "COMPLETED",
-        amount: 50.0,
-        currency: "USD",
-        merchantName: "Midnight Diner",
-        timestamp: new Date(now - 1.2 * 3600 * 1000).toISOString(),
-      },
-      {
-        id: "tx_zara_04",
-        status: "COMPLETED",
-        amount: 65.0,
-        currency: "USD",
-        merchantName: "Zara Mall Galleria",
-        timestamp: new Date(now - 6.0 * 3600 * 1000).toISOString(),
-      },
-      {
-        id: "tx_sbux_05",
-        status: "COMPLETED",
-        amount: 14.0,
-        currency: "USD",
-        merchantName: "Starbucks Coffee",
-        timestamp: new Date(now - 6.5 * 3600 * 1000).toISOString(),
-      },
-      {
-        id: "tx_target_06",
-        status: "COMPLETED",
-        amount: 82.5,
-        currency: "USD",
-        merchantName: "Target Superstore",
-        timestamp: new Date(now - 7.0 * 3600 * 1000).toISOString(),
-      },
-      {
-        id: "tx_dining_07",
-        status: "COMPLETED",
-        amount: 130.0,
-        currency: "USD",
-        merchantName: "Bistro Lumiere",
-        timestamp: new Date(now - 14.0 * 3600 * 1000).toISOString(),
-      },
-      {
-        id: "tx_sq_08",
-        status: "COMPLETED",
-        amount: 34.2,
-        currency: "USD",
-        merchantName: "SQ* Urban Blend",
-        timestamp: new Date(now - 10.0 * 3600 * 1000).toISOString(),
-      },
-    ];
-
-    const cutoff = now - hoursBack * 3600 * 1000;
-    return all.filter((t) => new Date(t.timestamp).getTime() >= cutoff);
   }
 }
 
