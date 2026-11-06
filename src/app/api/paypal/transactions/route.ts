@@ -5,11 +5,57 @@ export async function GET(req: NextRequest) {
   try {
     const hoursBackParam = req.nextUrl.searchParams.get("hoursBack");
     const hoursBack = hoursBackParam ? parseFloat(hoursBackParam) : 720; // default 30 days
+    const scopeParam = req.nextUrl.searchParams.get("scope"); // "personal" | "all"
+
+    // Inspect logged-in user from session cookie
+    const userCookie = req.cookies.get("pocketmate_user")?.value;
+    let currentUser: { id?: string; email?: string; name?: string } | null = null;
+    if (userCookie) {
+      try {
+        currentUser = JSON.parse(userCookie);
+      } catch {
+        // ignore parse error
+      }
+    }
 
     const txs = await paypalClient.fetchRecentTransactions(hoursBack);
 
+    const userEmail = (currentUser?.email || "").toLowerCase().trim();
+    const userName = (currentUser?.name || "").toLowerCase().trim();
+
+    // Determine account role
+    const isBusiness =
+      userEmail.includes("business") ||
+      userEmail.includes("merchant") ||
+      userEmail.includes("retail") ||
+      userEmail.includes("studio") ||
+      userEmail.includes("ventures");
+
+    // Default to 'personal' if logged in as personal buyer, otherwise 'all'
+    const activeScope = scopeParam || (currentUser && !isBusiness ? "personal" : "all");
+
+    // Filter transactions based on scope
+    const scopedTxs =
+      activeScope === "personal" && currentUser
+        ? txs.filter((t) => {
+            const debtorLower = (t.debtorName || "").toLowerCase().trim();
+            const emailLower = (t.recipientEmail || "").toLowerCase().trim();
+
+            const nameMatch =
+              userName &&
+              debtorLower.length > 0 &&
+              (debtorLower.includes(userName) || userName.includes(debtorLower));
+            const emailMatch =
+              userEmail &&
+              emailLower.length > 0 &&
+              (emailLower.includes(userEmail) || userEmail.includes(emailLower));
+
+            return Boolean(nameMatch || emailMatch);
+          })
+        : txs;
+
     // Map to TransactionRow format expected by the frontend
-    const formatted = txs.map((t) => {
+    const formatted = scopedTxs.map((t) => {
       const dateObj = new Date(t.timestamp);
       const isToday = new Date().toDateString() === dateObj.toDateString();
       const timeStr = dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -49,6 +95,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       success: true,
       count: formatted.length,
+      totalPlatformCount: txs.length,
+      activeScope,
+      userRole: isBusiness ? "BUSINESS" : currentUser ? "PERSONAL" : "GUEST",
+      currentUser: currentUser ? { name: currentUser.name, email: currentUser.email } : null,
       transactions: formatted,
     });
   } catch (error: unknown) {
