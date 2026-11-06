@@ -1,0 +1,63 @@
+# ==============================================================================
+# Render Blueprint Specification for PocketMate
+# Documentation: https://render.com/docs/blueprint-spec
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # Web Service: Next.js Full-Stack Application
+  # ----------------------------------------------------------------------------
+  - type: web
+    name: pocketmate
+    runtime: node
+    plan: starter # Starter plan ($7/mo) paid via $50 credit; ensures 24/7 uptime with zero cold starts for judges
+    region: oregon
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false # Your Neon serverless PostgreSQL connection string
+      - key: GEMINI_API_KEY
+        sync: false # Google AI Studio API key
+      - key: GEMINI_API_KEY_SECONDARY
+        sync: false # Optional failover API key
+      - key: PAYPAL_CLIENT_ID
+        sync: false # PayPal Sandbox Client ID
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false # PayPal Sandbox Client Secret
+      - key: PAYPAL_ENVIRONMENT
+        value: sandbox
+      - key: NEXTAUTH_SECRET
+        generateValue: true # Render automatically generates a cryptographically secure secret
+      - key: CRON_SECRET
+        generateValue: true # Render automatically generates a secret token for the daily audit
+      - key: NEXT_PUBLIC_AG_STUDIO_LICENSE_KEY
+        sync: false
+      - key: NEXT_PUBLIC_BRYNTUM_LICENSE_KEY
+        sync: false
+
+  # ----------------------------------------------------------------------------
+  # Cron Job: Autonomous End-of-Day Financial Sweep & Triage
+  # Pings /api/cron/sweep daily at midnight UTC to audit untagged transactions
+  # ----------------------------------------------------------------------------
+  - type: cron
+    name: pocketmate-daily-sweep
+    runtime: node
+    plan: starter
+    region: oregon
+    schedule: "0 0 * * *" # Daily midnight UTC
+    buildCommand: npm install
+    startCommand: "node -e \"const https = require('https'); const host = process.env.RENDER_EXTERNAL_HOSTNAME || 'pocketmate.onrender.com'; const secret = process.env.CRON_SECRET || ''; https.get(`https://${host}/api/cron/sweep?secret=${secret}`, res => { console.log('Audit Sweep status:', res.statusCode); process.exit(res.statusCode === 200 ? 0 : 1); });\""
+    envVars:
+      - key: CRON_SECRET
+        fromService:
+          type: web
+          name: pocketmate
+          envVarKey: CRON_SECRET
+      - key: RENDER_EXTERNAL_HOSTNAME
+        fromService:
+          type: web
+          name: pocketmate
+          property: host

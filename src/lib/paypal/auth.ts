@@ -21,7 +21,7 @@ export function getPayPalOAuthUrl(redirectUri?: string): string {
       ? "https://www.paypal.com"
       : "https://www.sandbox.paypal.com";
 
-  const appUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+  const appUrl = process.env.RENDER_EXTERNAL_URL || process.env.NEXTAUTH_URL || "http://localhost:3000";
   const targetRedirect = redirectUri || `${appUrl}/api/auth/callback/paypal`;
 
   const scopes = encodeURIComponent("openid profile email");
@@ -41,7 +41,7 @@ export async function exchangePayPalCodeForTokens(
       ? "https://api-m.paypal.com"
       : "https://api-m.sandbox.paypal.com";
 
-  const appUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+  const appUrl = process.env.RENDER_EXTERNAL_URL || process.env.NEXTAUTH_URL || "http://localhost:3000";
   const targetRedirect = redirectUri || `${appUrl}/api/auth/callback/paypal`;
 
   const auth = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");

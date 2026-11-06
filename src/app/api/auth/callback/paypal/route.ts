@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 export async function GET(req: NextRequest) {
   try {
     const code = req.nextUrl.searchParams.get("code");
-    const appUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+    const appUrl = process.env.RENDER_EXTERNAL_URL || process.env.NEXTAUTH_URL || "http://localhost:3000";
 
     if (!code) {
       return NextResponse.redirect(`${appUrl}/?auth_error=missing_code`);
@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
       }
     }
     console.error("[PayPal Auth Callback Error]", error);
-    const appUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+    const appUrl = process.env.RENDER_EXTERNAL_URL || process.env.NEXTAUTH_URL || "http://localhost:3000";
     return NextResponse.redirect(`${appUrl}/?auth_error=exchange_failed`);
   }
 }
