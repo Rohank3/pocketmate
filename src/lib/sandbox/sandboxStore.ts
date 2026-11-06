@@ -46,7 +46,6 @@ const PRESET_CONTACTS: Record<string, ContactRecord[]> = {
       id: "cnt_dave_chen",
       name: "Dave Chen",
       email: "dave.chen@personal.example.com",
-      category: "Dining",
       lastSplitAt: "2026-11-06",
       splitCount: 4,
     },
@@ -54,7 +53,6 @@ const PRESET_CONTACTS: Record<string, ContactRecord[]> = {
       id: "cnt_dave_miller",
       name: "Dave Miller",
       email: "dave.miller@acmecorp.com",
-      category: "Work",
       lastSplitAt: "2026-10-15",
       splitCount: 2,
     },
@@ -62,7 +60,6 @@ const PRESET_CONTACTS: Record<string, ContactRecord[]> = {
       id: "cnt_sarah",
       name: "Sarah Jenkins",
       email: "sarah.jenkins@example.com",
-      category: "Shopping",
       lastSplitAt: "2026-11-06",
       splitCount: 3,
     },
@@ -70,7 +67,6 @@ const PRESET_CONTACTS: Record<string, ContactRecord[]> = {
       id: "cnt_mark",
       name: "Mark Miller",
       email: "mark.miller@example.com",
-      category: "Dining",
       lastSplitAt: "2026-11-05",
       splitCount: 1,
     },
@@ -80,7 +76,6 @@ const PRESET_CONTACTS: Record<string, ContactRecord[]> = {
       id: "cnt_alex",
       name: "Alex Rivera",
       email: "alex@pocketmate.sandbox",
-      category: "Dining",
       lastSplitAt: "2026-11-06",
       splitCount: 4,
     },
@@ -248,23 +243,31 @@ export class SandboxStore {
   }
 
   /**
-   * Realistic PayPal Contact Disambiguation Engine:
+   * Realistic PayPal Contact Resolution Engine:
    * Looks up ONLY against user's past transaction/contact history.
-   * If multiple contacts match (e.g. 2 Daves), checks category history
-   * to recommend without hallucination, while providing alternatives.
+   * If multiple contacts match (e.g. 2 Daves), selects by recency and clearly informs user.
    */
   static resolveContactByName(
     userId: string,
-    query: string,
-    categoryHint?: string
+    query: string
   ): {
     match: ContactRecord | null;
-    status: "EXACT" | "CATEGORY_MATCH" | "AMBIGUOUS" | "UNKNOWN";
+    status: "EXACT" | "RECENCY_MATCH" | "UNKNOWN";
     candidates: ContactRecord[];
     reason?: string;
   } {
     const contacts = this.getContactsForUser(userId);
     const q = query.trim().toLowerCase();
+
+    // Check for exact full name match first
+    const exactFull = contacts.find((c) => c.name.toLowerCase() === q);
+    if (exactFull) {
+      return {
+        match: exactFull,
+        status: "EXACT",
+        candidates: [exactFull],
+      };
+    }
 
     const candidates = contacts.filter(
       (c) =>
@@ -290,28 +293,16 @@ export class SandboxStore {
       };
     }
 
-    // Multiple candidates sharing first name (e.g. Dave Chen vs Dave Miller)
-    if (categoryHint) {
-      const catMatch = candidates.find(
-        (c) => c.category.toLowerCase() === categoryHint.toLowerCase()
-      );
-      if (catMatch) {
-        return {
-          match: catMatch,
-          status: "CATEGORY_MATCH",
-          candidates,
-          reason: `Recommended based on your past ${categoryHint} splits with ${catMatch.name}.`,
-        };
-      }
-    }
-
-    // Sort by recency if no category hint matches
+    // Sort by recency of interaction
     const sorted = [...candidates].sort((a, b) => b.lastSplitAt.localeCompare(a.lastSplitAt));
+    const mostRecent = sorted[0];
+    const otherCandidate = sorted[1];
+
     return {
-      match: sorted[0],
-      status: "AMBIGUOUS",
+      match: mostRecent,
+      status: "RECENCY_MATCH",
       candidates: sorted,
-      reason: `Matched ${sorted[0].name} based on most recent split on ${sorted[0].lastSplitAt}.`,
+      reason: `Selected ${mostRecent.name} (${mostRecent.email}) based on your most recent transaction. To invoice ${otherCandidate.name} instead, specify "${otherCandidate.name}".`,
     };
   }
 

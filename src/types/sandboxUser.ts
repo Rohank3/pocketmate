@@ -10,7 +10,6 @@ export interface ContactRecord {
   id: string;
   name: string;
   email: string;
-  category: "Dining" | "Work" | "General" | "Shopping" | "Entertainment";
   lastSplitAt: string;
   splitCount: number;
 }
