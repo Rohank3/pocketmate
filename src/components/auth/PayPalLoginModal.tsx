@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState } from "react";
-import { X, ArrowRight, User, ShieldCheck, Mail, LogOut, ExternalLink, HelpCircle, AlertTriangle } from "lucide-react";
+import { X, ArrowRight, User, ShieldCheck, Mail, LogOut, ExternalLink, HelpCircle, AlertTriangle, Users } from "lucide-react";
 import { UserAccount } from "@/types/sandboxUser";
+import { ALL_SANDBOX_ACCOUNTS, SandboxAccount } from "@/lib/sandbox/sandboxAccounts";
 
 interface PayPalLoginModalProps {
   isOpen: boolean;
@@ -135,39 +136,69 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
 
           {/* Quick 1-Click Sandbox Test Accounts */}
           <div className="flex flex-col gap-2">
-            <span className="text-xs font-semibold text-zinc-200">
-              Quick 1-Click Sandbox Roles:
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5 text-blue-400" />
+                Your 18 Provisioned Sandbox Accounts:
+              </span>
+              <span className="text-[10px] text-zinc-400 font-mono">pwd: PocketMate2026!</span>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => handleManualSandboxLogin("sb-buyer@personal.example.com", "Sandbox Buyer (Personal)")}
+                onClick={() => handleManualSandboxLogin("dave.chen.pm@personal.example.com", "Dave Chen")}
                 className="p-3 rounded-xl bg-zinc-950/80 border border-zinc-800 hover:border-blue-500/50 hover:bg-blue-950/20 text-left transition-all cursor-pointer group"
               >
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-bold text-blue-400">Personal Buyer</span>
+                  <span className="text-xs font-bold text-blue-400">Dave Chen</span>
                   <span className="text-[10px] px-1.5 py-0.2 rounded bg-blue-500/10 text-blue-300 border border-blue-500/20 font-mono">
-                    Friend / Payer
+                    Personal Buyer
                   </span>
                 </div>
-                <p className="text-[11px] text-zinc-400 font-mono truncate">sb-buyer@personal.example.com</p>
-                <p className="text-[10px] text-zinc-500 mt-1">Has incoming split bills to review & pay</p>
+                <p className="text-[11px] text-zinc-400 font-mono truncate">dave.chen.pm@personal.example.com</p>
+                <p className="text-[10px] text-zinc-500 mt-1">Pending split bills to review & settle</p>
               </button>
 
               <button
                 type="button"
-                onClick={() => handleManualSandboxLogin("sb-merchant@business.example.com", "Sandbox Merchant (Host)")}
+                onClick={() => handleManualSandboxLogin("alex.morgan.studio@business.example.com", "Alex Morgan")}
                 className="p-3 rounded-xl bg-zinc-950/80 border border-zinc-800 hover:border-emerald-500/50 hover:bg-emerald-950/20 text-left transition-all cursor-pointer group"
               >
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-bold text-emerald-400">Business Merchant</span>
+                  <span className="text-xs font-bold text-emerald-400">Alex Morgan</span>
                   <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-mono">
-                    Host / Invoicer
+                    Business Merchant
                   </span>
                 </div>
-                <p className="text-[11px] text-zinc-400 font-mono truncate">sb-merchant@business.example.com</p>
+                <p className="text-[11px] text-zinc-400 font-mono truncate">alex.morgan.studio@business.example.com</p>
                 <p className="text-[10px] text-zinc-500 mt-1">Dispatches invoices & tracks receivables</p>
               </button>
+            </div>
+
+            {/* Quick selector for all 18 accounts */}
+            <div className="mt-1">
+              <label className="text-[11px] text-zinc-400 block mb-1">
+                Select Any Other Provisioned Test Account:
+              </label>
+              <select
+                aria-label="Select Any Other Provisioned Test Account"
+                onChange={(e) => {
+                  const selected = ALL_SANDBOX_ACCOUNTS.find((a) => a.email === e.target.value);
+                  if (selected) {
+                    void handleManualSandboxLogin(selected.email, selected.name);
+                  }
+                }}
+                defaultValue=""
+                className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-200 focus:outline-hidden focus:border-blue-500 transition-colors font-mono cursor-pointer"
+              >
+                <option value="" disabled>-- Choose from all 18 Sandbox Users --</option>
+                {ALL_SANDBOX_ACCOUNTS.map((acc: SandboxAccount) => (
+                  <option key={acc.email} value={acc.email}>
+                    {acc.name} ({acc.type}) - {acc.email} [${acc.initialBalance}]
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 

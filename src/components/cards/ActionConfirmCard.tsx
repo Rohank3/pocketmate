@@ -4,9 +4,12 @@ import React, { useState } from "react";
 import { Send, CheckCircle, XCircle, Loader2 } from "lucide-react";
 
 export interface ActionCardData {
-  action: "DISPATCH_INVOICES" | string;
+  action: "DISPATCH_INVOICES" | "DISPATCH_PAYOUT" | string;
   totalRecipients: number;
   totalAmount: number;
+  recipientEmail?: string;
+  amount?: number;
+  note?: string;
   recipients: Array<{
     email: string;
     name?: string;
@@ -29,6 +32,8 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
   const [loading, setLoading] = useState(false);
   const [completed, setCompleted] = useState(false);
 
+  const isPayout = cardData.action === "DISPATCH_PAYOUT";
+
   const handleConfirm = async () => {
     setLoading(true);
     try {
@@ -43,12 +48,26 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
 
   if (completed) {
     return (
-      <div className="my-3 p-4 bg-emerald-950/30 border border-emerald-500/40 rounded-xl text-emerald-200 flex items-center gap-3">
-        <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
+      <div
+        className={`my-3 p-4 rounded-xl border flex items-center gap-3 ${
+          isPayout
+            ? "bg-blue-950/30 border-blue-500/40 text-blue-200"
+            : "bg-emerald-950/30 border-emerald-500/40 text-emerald-200"
+        }`}
+      >
+        <CheckCircle className={`w-5 h-5 shrink-0 ${isPayout ? "text-blue-400" : "text-emerald-400"}`} />
         <div className="text-sm">
-          <p className="font-semibold text-emerald-300">PayPal Invoices Dispatched</p>
-          <p className="text-xs text-emerald-400/80">
-            {cardData.totalRecipients} invoices totaling ${cardData.totalAmount.toFixed(2)} sent via PayPal Sandbox.
+          <p className={`font-semibold ${isPayout ? "text-blue-300" : "text-emerald-300"}`}>
+            {isPayout ? "PayPal Funds Transferred" : "PayPal Invoices Dispatched"}
+          </p>
+          <p className={`text-xs ${isPayout ? "text-blue-400/80" : "text-emerald-400/80"}`}>
+            {isPayout
+              ? `$${cardData.totalAmount.toFixed(2)} transferred to ${
+                  cardData.recipientEmail || cardData.recipients?.[0]?.email
+                } via PayPal Payouts API.`
+              : `${cardData.totalRecipients} invoices totaling $${cardData.totalAmount.toFixed(
+                  2
+                )} sent via PayPal Sandbox.`}
           </p>
         </div>
       </div>
@@ -59,12 +78,22 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
     <div className="my-3 p-4 bg-zinc-900 border border-zinc-700/80 rounded-xl shadow-xl transition-all">
       <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <div
+            className={`w-2 h-2 rounded-full animate-pulse ${
+              isPayout ? "bg-blue-400" : "bg-emerald-400"
+            }`}
+          />
           <h4 className="text-xs font-semibold text-zinc-100 uppercase tracking-wider">
-            Ready for Dispatch (PayPal Invoicing v2)
+            {isPayout
+              ? "Ready for Transfer (PayPal Payouts API)"
+              : "Ready for Dispatch (PayPal Invoicing v2)"}
           </h4>
         </div>
-        <span className="text-xs font-mono font-bold text-emerald-400">
+        <span
+          className={`text-xs font-mono font-bold ${
+            isPayout ? "text-blue-400" : "text-emerald-400"
+          }`}
+        >
           ${cardData.totalAmount.toFixed(2)} Total
         </span>
       </div>
@@ -92,7 +121,7 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
         <button
           onClick={onCancel}
           disabled={loading}
-          className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 active:bg-zinc-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+          className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 active:bg-zinc-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
         >
           <XCircle className="w-3.5 h-3.5" />
           Cancel
@@ -101,17 +130,21 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
         <button
           onClick={handleConfirm}
           disabled={loading}
-          className="px-4 py-1.5 text-xs font-medium text-zinc-950 bg-emerald-400 hover:bg-emerald-300 active:bg-emerald-500 rounded-lg transition-colors shadow-lg shadow-emerald-500/20 disabled:opacity-50 flex items-center gap-1.5"
+          className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-colors shadow-lg disabled:opacity-50 flex items-center gap-1.5 cursor-pointer ${
+            isPayout
+              ? "text-white bg-blue-600 hover:bg-blue-500 active:bg-blue-700 shadow-blue-500/20"
+              : "text-zinc-950 bg-emerald-400 hover:bg-emerald-300 active:bg-emerald-500 shadow-emerald-500/20"
+          }`}
         >
           {loading ? (
             <>
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              Dispatching...
+              {isPayout ? "Transferring..." : "Dispatching..."}
             </>
           ) : (
             <>
               <Send className="w-3.5 h-3.5" />
-              Confirm & Send Invoices
+              {isPayout ? "Confirm & Transfer Funds" : "Confirm & Send Invoices"}
             </>
           )}
         </button>
