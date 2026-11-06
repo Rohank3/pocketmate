@@ -319,11 +319,6 @@ export async function handleDynamicAutonomousResponse(
     // Extract participant names: e.g. "with Alex, Dave, Priya, and Sam"
     const withMatch = prompt.match(/(?:with|across|between)\s+([^.]+)/i);
     const disambiguationNotes: string[] = [];
-    const categoryHint = p.includes("dining") || p.includes("bar") || p.includes("dinner") || p.includes("lunch")
-      ? "Dining"
-      : p.includes("work") || p.includes("office") || p.includes("saas") || p.includes("client")
-      ? "Work"
-      : undefined;
 
     if (withMatch) {
       const rawNames = withMatch[1]
@@ -336,7 +331,7 @@ export async function handleDynamicAutonomousResponse(
         const clean = name.replace(/[.,]/g, "").trim();
         if (clean) {
           // Resolve contact against user's past transaction history & contacts
-          const res = SandboxStore.resolveContactByName("usr_alex", clean, categoryHint);
+          const res = SandboxStore.resolveContactByName("usr_alex", clean);
           if (res.match) {
             participantsList.push({
               name: res.match.name,
@@ -366,7 +361,7 @@ export async function handleDynamicAutonomousResponse(
       const defaultNames = ["Dave Chen", "Sarah Jenkins", "Alex Rivera", "Sam"];
       const nextName = defaultNames[idx - 1] || `Participant ${idx}`;
       if (!participantsList.some((p) => p.name === nextName)) {
-        const res = SandboxStore.resolveContactByName("usr_alex", nextName, categoryHint);
+        const res = SandboxStore.resolveContactByName("usr_alex", nextName);
         participantsList.push({
           name: res.match?.name || nextName,
           emailOrHandle: res.match?.email || `${nextName.toLowerCase().replace(/[^a-z0-9]/g, "")}@sandbox.paypal.com`,
