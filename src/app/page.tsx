@@ -745,7 +745,9 @@ export default function Home() {
           {/* Sandbox Status */}
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-300">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-mono">Sandbox Connected</span>
+            <span className="font-mono">
+              {currentUser ? "Sandbox Connected" : "Master Sandbox (Guest Mode)"}
+            </span>
           </div>
 
           {/* Log in with PayPal / Authenticated User */}
@@ -782,6 +784,24 @@ export default function Home() {
           )}
         </div>
       </header>
+
+      {/* Guest Mode Indicator Banner (Shown when user is not signed in) */}
+      {!currentUser && (
+        <div className="mb-6 p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
+            <p className="text-zinc-300">
+              <span className="font-semibold text-zinc-100">Viewing Master Developer Sandbox Ledger:</span> Currently displaying transactions belonging to the master sandbox merchant account. Sign in to switch to your individual Sandbox Buyer or Merchant profile.
+            </p>
+          </div>
+          <button
+            onClick={() => setIsLoginModalOpen(true)}
+            className="px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 font-semibold border border-blue-500/30 self-start sm:self-auto cursor-pointer transition-colors shrink-0"
+          >
+            Sign In with Sandbox User
+          </button>
+        </div>
+      )}
 
       {/* Incoming Invoice Alert Banner (Shown when active user has an unpaid invoice) */}
       {firstUnpaidInvoice && (
