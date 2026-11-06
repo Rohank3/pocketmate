@@ -9,6 +9,8 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@bryntum/scheduler-enterprise": "8.0.0",
+    "@bryntum/scheduler-react-enterprise": "8.0.0",
     "@google/genai": "^3.0.0",
     "@prisma/client": "^6.19.3",
     "ag-grid-community": "^36.3.0",
