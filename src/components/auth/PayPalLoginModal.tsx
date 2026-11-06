@@ -182,18 +182,8 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
                         {preset.avatar}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-xs font-semibold text-zinc-200 truncate flex items-center gap-1.5">
+                        <p className="text-xs font-semibold text-zinc-200 truncate">
                           {preset.name}
-                          {preset.id === "usr_dave_chen" && (
-                            <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-1 rounded">
-                              Dining Friend
-                            </span>
-                          )}
-                          {preset.id === "usr_dave_miller" && (
-                            <span className="text-[10px] text-blue-400 bg-blue-500/10 px-1 rounded">
-                              Work / Office
-                            </span>
-                          )}
                         </p>
                         <p className="text-[11px] text-zinc-500 font-mono truncate">
                           {preset.email}
