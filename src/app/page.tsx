@@ -19,7 +19,7 @@ import {
   Sparkles,
 } from "lucide-react";
 
-// Dynamically import AG Studio embedded analytics component
+// Dynamically import Financial Insights component
 const FinancialStudio = dynamic(
   () => import("@/components/studio/FinancialStudio"),
   {
@@ -27,23 +27,23 @@ const FinancialStudio = dynamic(
     loading: () => (
       <div className="h-full w-full min-h-[550px] bg-zinc-950 rounded-xl border border-zinc-800 flex flex-col items-center justify-center p-8 text-center animate-pulse">
         <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mb-3" />
-        <p className="text-sm font-semibold text-zinc-300">Loading AG Studio Pro Analytics...</p>
-        <p className="text-xs text-zinc-500 mt-1">Initializing self-serve embedded dashboard engine</p>
+        <p className="text-sm font-semibold text-zinc-300">Loading Spending Insights...</p>
+        <p className="text-xs text-zinc-500 mt-1">Calculating budget caps and spending distribution</p>
       </div>
     ),
   }
 );
 
-// Dynamically import BryntumScheduler client-only component
+// Dynamically import Payment Calendar component
 const BudgetScheduler = dynamic(
   () => import("@/components/scheduler/BudgetScheduler"),
   {
     ssr: false,
     loading: () => (
       <div className="h-full w-full min-h-[550px] bg-zinc-950 rounded-xl border border-zinc-800 flex flex-col items-center justify-center p-8 text-center animate-pulse">
-        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mb-3" />
-        <p className="text-sm font-semibold text-zinc-300">Loading Bryntum Scheduler Enterprise...</p>
-        <p className="text-xs text-zinc-500 mt-1">Initializing timeline engine & license validation</p>
+        <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mb-3" />
+        <p className="text-sm font-semibold text-zinc-300">Loading Payment Calendar...</p>
+        <p className="text-xs text-zinc-500 mt-1">Retrieving scheduled bills, receivables & milestones</p>
       </div>
     ),
   }
@@ -126,7 +126,7 @@ const INITIAL_TRANSACTIONS: TransactionRow[] = [
 
 export default function Home() {
   const [activePersona, setActivePersona] = useState<"GENERAL" | "FREELANCER" | "BUSINESS">("GENERAL");
-  const [activeRightTab, setActiveRightTab] = useState<"grid" | "studio" | "scheduler">("grid");
+  const [activeRightTab, setActiveRightTab] = useState<"transactions" | "insights" | "upcoming">("transactions");
   const [transactions, setTransactions] = useState<TransactionRow[]>(INITIAL_TRANSACTIONS);
   const [gridMutation, setGridMutation] = useState<GridMutationState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -145,19 +145,58 @@ export default function Home() {
     setSelectedCategory(newCat.name);
   };
 
-  const handleEditCategory = (categoryId: string, updatedCap: number, updatedName?: string) => {
+  const handleEditCategory = (
+    categoryId: string,
+    updatedCap: number,
+    updatedName?: string,
+    updatedColor?: string
+  ) => {
     setCategories((prev) =>
-      prev.map((c) =>
-        c.id === categoryId
-          ? { ...c, monthlyCap: updatedCap, ...(updatedName ? { name: updatedName } : {}) }
-          : c
-      )
+      prev.map((c) => {
+        if (c.id === categoryId) {
+          const oldName = c.name;
+          const newName = updatedName && updatedName.trim() ? updatedName.trim() : c.name;
+
+          if (updatedName && newName.toLowerCase() !== oldName.toLowerCase()) {
+            setTransactions((txs) =>
+              txs.map((tx) =>
+                tx.category.toLowerCase() === oldName.toLowerCase()
+                  ? { ...tx, category: newName }
+                  : tx
+              )
+            );
+            if (selectedCategory.toLowerCase() === oldName.toLowerCase()) {
+              setSelectedCategory(newName);
+            }
+          }
+
+          return {
+            ...c,
+            monthlyCap: updatedCap,
+            name: newName,
+            color: updatedColor || c.color,
+          };
+        }
+        return c;
+      })
     );
   };
 
   const handleDeleteCategory = (categoryId: string) => {
+    const target = categories.find((c) => c.id === categoryId);
+    if (target) {
+      setTransactions((prev) =>
+        prev.map((t) =>
+          t.category.toLowerCase() === target.name.toLowerCase()
+            ? { ...t, category: "Uncategorized" }
+            : t
+        )
+      );
+      if (selectedCategory.toLowerCase() === target.name.toLowerCase()) {
+        setSelectedCategory("All");
+      }
+    }
     setCategories((prev) => prev.filter((c) => c.id !== categoryId));
-    setSelectedCategory("All");
   };
   const [authenticatedUser, setAuthenticatedUser] = useState<{ name: string; email: string } | null>(() => {
     if (typeof window !== "undefined") {
@@ -593,64 +632,53 @@ export default function Home() {
           />
         </div>
 
-        {/* Right Column: AG Grid Reactive Ledger + Bryntum Timeline (7 Cols) */}
+        {/* Right Column: Transactions Ledger, Visual Insights & Upcoming Due Calendar (7 Cols) */}
         <div className="lg:col-span-7 flex flex-col h-[650px] lg:h-auto gap-3">
-          {/* Universal Category Command & Roundabout Carousel Bar */}
-          <CategoryControlBar
-            categories={categories}
-            selectedCategory={selectedCategory}
-            transactions={transactions}
-            onSelectCategory={setSelectedCategory}
-            onAddCategory={handleAddCategory}
-            onEditCategory={handleEditCategory}
-            onDeleteCategory={handleDeleteCategory}
-          />
-
           {/* View Tab Switcher */}
           <div className="flex items-center justify-between bg-zinc-900/90 border border-zinc-800 p-1.5 rounded-xl">
             <div className="flex flex-wrap items-center gap-1.5">
               <button
-                onClick={() => setActiveRightTab("grid")}
+                onClick={() => setActiveRightTab("transactions")}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  activeRightTab === "grid"
+                  activeRightTab === "transactions"
                     ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
                     : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
                 }`}
               >
                 <Table2 className="w-3.5 h-3.5" />
-                <span>AG Grid</span>
+                <span>Transactions</span>
                 <span className="text-[10px] px-1.5 py-0.2 rounded bg-blue-950/60 text-blue-200 border border-blue-800/40">
-                  Live
+                  Live Ledger
                 </span>
               </button>
 
               <button
-                onClick={() => setActiveRightTab("studio")}
+                onClick={() => setActiveRightTab("insights")}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  activeRightTab === "studio"
+                  activeRightTab === "insights"
                     ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
                     : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
                 }`}
               >
                 <BarChart3 className="w-3.5 h-3.5" />
-                <span>AG Studio</span>
+                <span>Insights</span>
                 <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-950/60 text-emerald-200 border border-emerald-800/40">
-                  Analytics
+                  Visual Analytics
                 </span>
               </button>
 
               <button
-                onClick={() => setActiveRightTab("scheduler")}
+                onClick={() => setActiveRightTab("upcoming")}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  activeRightTab === "scheduler"
+                  activeRightTab === "upcoming"
                     ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
                     : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
                 }`}
               >
                 <CalendarDays className="w-3.5 h-3.5" />
-                <span>Bryntum Timeline</span>
+                <span>Upcoming & Due</span>
                 <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-950/60 text-purple-200 border border-purple-800/40">
-                  Scheduler
+                  Payment Calendar
                 </span>
               </button>
             </div>
@@ -662,18 +690,36 @@ export default function Home() {
           </div>
 
           {/* Active View Container */}
-          <div className="flex-1 min-h-[560px]">
-            {activeRightTab === "grid" && (
-              <TransactionGrid
-                rowData={transactions}
-                gridMutation={gridMutation}
-                selectedCategory={selectedCategory}
+          <div className="flex-1 min-h-[560px] flex flex-col">
+            {activeRightTab === "transactions" && (
+              <div className="flex flex-col gap-3 h-full">
+                {/* Category Control Bar scoped directly to Transactions Ledger */}
+                <CategoryControlBar
+                  categories={categories}
+                  selectedCategory={selectedCategory}
+                  transactions={transactions}
+                  onSelectCategory={setSelectedCategory}
+                  onAddCategory={handleAddCategory}
+                  onEditCategory={handleEditCategory}
+                  onDeleteCategory={handleDeleteCategory}
+                />
+                <div className="flex-1 min-h-[480px]">
+                  <TransactionGrid
+                    rowData={transactions}
+                    gridMutation={gridMutation}
+                    selectedCategory={selectedCategory}
+                  />
+                </div>
+              </div>
+            )}
+            {activeRightTab === "insights" && (
+              <FinancialStudio
+                categories={categories}
+                transactions={transactions}
+                onActionClick={handleSendMessage}
               />
             )}
-            {activeRightTab === "studio" && (
-              <FinancialStudio />
-            )}
-            {activeRightTab === "scheduler" && (
+            {activeRightTab === "upcoming" && (
               <BudgetScheduler
                 categories={categories}
                 selectedCategory={selectedCategory}
