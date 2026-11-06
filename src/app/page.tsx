@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { ChatPanel, ChatMessageItem } from "@/components/chat/ChatPanel";
 import { TransactionGrid, TransactionRow } from "@/components/grid/TransactionGrid";
@@ -11,22 +11,20 @@ import { PayPalLoginModal } from "@/components/auth/PayPalLoginModal";
 import { InvoiceActionModal } from "@/components/cards/InvoiceActionModal";
 import { SandboxStore } from "@/lib/sandbox/sandboxStore";
 import { UserAccount, InvoiceRecord } from "@/types/sandboxUser";
+import { ScheduledEvent } from "@/components/scheduler/BudgetScheduler";
 import {
   Wallet,
-  TrendingDown,
-  ShieldCheck,
-  ShieldAlert,
-  Zap,
   CreditCard,
-  Table2,
-  BarChart3,
   CalendarDays,
   Sparkles,
   Users,
   Clock,
   DollarSign,
-  AlertCircle,
   ExternalLink,
+  RefreshCw,
+  ShieldAlert,
+  Table2,
+  BarChart3,
 } from "lucide-react";
 
 // Dynamically import Financial Insights component
@@ -59,117 +57,24 @@ const BudgetScheduler = dynamic(
   }
 );
 
-const INITIAL_TRANSACTIONS: TransactionRow[] = [
-  {
-    id: "tx_bar_01",
-    date: "Today, 11:30 PM",
-    merchant: "Downtown Craft Bar & Grill",
-    category: "Dining",
-    debtor_name: "Group Split (Alex, Dave...)",
-    amount: 65.0,
-    status: "settled",
-  },
-  {
-    id: "tx_bowl_02",
-    date: "Today, 10:15 PM",
-    merchant: "Bowlero Lanes",
-    category: "Entertainment",
-    debtor_name: "Group Split (Alex, Dave...)",
-    amount: 85.0,
-    status: "settled",
-  },
-  {
-    id: "tx_diner_03",
-    date: "Today, 09:00 PM",
-    merchant: "Midnight Diner",
-    category: "Dining",
-    debtor_name: "Group Split (Alex, Dave...)",
-    amount: 50.0,
-    status: "settled",
-  },
-  {
-    id: "tx_zara_04",
-    date: "Today, 04:30 PM",
-    merchant: "Zara Mall Galleria",
-    category: "Shopping",
-    debtor_name: "Sarah Jenkins",
-    amount: 65.0,
-    status: "pending",
-  },
-  {
-    id: "tx_sbux_05",
-    date: "Today, 04:00 PM",
-    merchant: "Starbucks Coffee",
-    category: "Dining",
-    debtor_name: "Sarah Jenkins",
-    amount: 14.0,
-    status: "pending",
-  },
-  {
-    id: "tx_target_06",
-    date: "Today, 03:15 PM",
-    merchant: "Target Superstore",
-    category: "Groceries",
-    debtor_name: "Self",
-    amount: 82.5,
-    status: "settled",
-  },
-  {
-    id: "tx_dining_07",
-    date: "Yesterday, 08:30 PM",
-    merchant: "Bistro Lumiere",
-    category: "Dining",
-    debtor_name: "Mark & Leo Split",
-    amount: 130.0,
-    status: "disputed",
-  },
-  {
-    id: "tx_sq_08",
-    date: "Yesterday, 04:15 PM",
-    merchant: "SQ* Urban Blend",
-    category: "Dining",
-    debtor_name: "Unassigned",
-    amount: 34.2,
-    status: "unresolved",
-  },
-];
-
-const DAVE_TRANSACTIONS: TransactionRow[] = [
-  {
-    id: "tx_dave_01",
-    date: "Today, 11:30 PM",
-    merchant: "Downtown Craft Bar & Grill Split",
-    category: "Dining",
-    debtor_name: "Alex Rivera",
-    amount: 65.0,
-    status: "pending",
-  },
-  {
-    id: "tx_dave_02",
-    date: "Yesterday, 05:00 PM",
-    merchant: "Metro Transit Authority",
-    category: "Travel",
-    debtor_name: "Self",
-    amount: 28.0,
-    status: "settled",
-  },
-  {
-    id: "tx_dave_03",
-    date: "Yesterday, 08:30 AM",
-    merchant: "Blue Bottle Coffee",
-    category: "Dining",
-    debtor_name: "Self",
-    amount: 14.5,
-    status: "settled",
-  },
-];
-
 export default function Home() {
   const [activePersona, setActivePersona] = useState<"GENERAL" | "FREELANCER" | "BUSINESS">("GENERAL");
   const [activeRightTab, setActiveRightTab] = useState<"transactions" | "insights" | "upcoming">("transactions");
-  const [transactions, setTransactions] = useState<TransactionRow[]>(INITIAL_TRANSACTIONS);
+  const [transactions, setTransactions] = useState<TransactionRow[]>([]);
+  const [isLoadingTransactions, setIsLoadingTransactions] = useState(true);
+  const [isSeedingTransactions, setIsSeedingTransactions] = useState(false);
   const [gridMutation, setGridMutation] = useState<GridMutationState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Autonomous Chat Messages State
+  const [messages, setMessages] = useState<ChatMessageItem[]>([
+    {
+      id: "msg_welcome",
+      role: "assistant",
+      content:
+        "Hello! I am PocketMate, your Autonomous Financial Orchestrator. Speak to me casually — I will pull your PayPal transactions, compute penny-locked splits, monitor category budget caps, and drive your AG Grid ledger in real time without manual spreadsheet upkeep.",
+    },
+  ]);
 
   // Multi-user sandbox authentication & cross-account sync state
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
@@ -177,107 +82,221 @@ export default function Home() {
   const [activeInvoiceForAction, setActiveInvoiceForAction] = useState<InvoiceRecord | null>(null);
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
 
-  // Synchronize user and invoices on mount
-  useEffect(() => {
-    const user = SandboxStore.getCurrentUser();
-    setCurrentUser(user);
-    setInvoices(SandboxStore.getInvoices());
+  // Dynamic Categories & Scheduled Events state
+  const [categories, setCategories] = useState<CategoryItem[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>("All");
+  const [events, setEvents] = useState<ScheduledEvent[]>([]);
+
+  // Load live transactions from PayPal Sandbox
+  const loadTransactions = async () => {
+    setIsLoadingTransactions(true);
+    try {
+      const res = await fetch("/api/paypal/transactions");
+      const data = await res.json();
+      if (data.transactions) {
+        setTransactions(data.transactions);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoadingTransactions(false);
+    }
+  };
+
+  // 1-Click seed realistic PayPal Sandbox transactions & invoices
+  const handleSeedSandboxTransactions = async () => {
+    setIsSeedingTransactions(true);
+    try {
+      const res = await fetch("/api/paypal/seed", { method: "POST" });
+      const data = await res.json();
+      if (data.transactions) {
+        setTransactions(data.transactions);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `asst_seed_${Date.now()}`,
+            role: "assistant",
+            content:
+              "⚡ **PayPal Sandbox Data Generated!**\n\nCreated live sandbox invoices and transactions (Craft Bar & Grill, Bowlero Lanes, Midnight Diner, Zara, Starbucks, Target). Your AG Grid ledger is now synchronized with live PayPal Sandbox records.",
+            toolBadges: ["tool: paypal_sandbox_seed", "status: LIVE_SANDBOX"],
+          },
+        ]);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSeedingTransactions(false);
+    }
+  };
+
+  // Load categories from database
+  const loadCategories = useCallback(async () => {
+    try {
+      const catRes = await fetch("/api/categories");
+      const catData = await catRes.json();
+      if (catData.categories) {
+        setCategories(
+          catData.categories.map((c: { id: string; name: string; monthlyCap: number; color?: string }) => ({
+            id: c.id,
+            name: c.name,
+            monthlyCap: c.monthlyCap,
+            color: c.color || "#3b82f6",
+          }))
+        );
+      }
+    } catch {
+      // ignore
+    }
   }, []);
 
-  // Update ledger view depending on active user perspective and settled invoices
-  useEffect(() => {
-    if (!currentUser) {
-      setTransactions(INITIAL_TRANSACTIONS);
-      return;
+  // Load scheduled bills & events from database
+  const loadEvents = useCallback(async () => {
+    try {
+      const evRes = await fetch("/api/events");
+      const evData = await evRes.json();
+      if (evData.events) {
+        setEvents(evData.events);
+      }
+    } catch {
+      // ignore
     }
+  }, []);
 
-    if (currentUser.id === "usr_dave_chen") {
-      const inv = SandboxStore.getInvoices().find((i) => i.id === "inv_bar_01");
-      const isPaid = inv?.status === "PAID";
-      setTransactions(
-        DAVE_TRANSACTIONS.map((t) =>
-          t.id === "tx_dave_01" ? { ...t, status: isPaid ? "settled" : "pending" } : t
-        )
-      );
-    } else {
-      const inv = SandboxStore.getInvoices().find((i) => i.id === "inv_bar_01");
-      const isPaid = inv?.status === "PAID";
-      setTransactions(
-        INITIAL_TRANSACTIONS.map((t) =>
-          t.id === "tx_bar_01"
-            ? {
-                ...t,
-                status: isPaid ? "settled" : "pending",
-                debtor_name: isPaid ? "Dave Chen (Paid)" : "Group Split (Alex, Dave...)",
-              }
-            : t
-        )
-      );
-    }
-  }, [currentUser, invoices]);
+  // Initial load effect
+  useEffect(() => {
+    let isSubscribed = true;
+
+    const init = async () => {
+      try {
+        const userRes = await fetch("/api/auth/me");
+        const userData = await userRes.json();
+        if (isSubscribed && userData.user) {
+          setCurrentUser(userData.user);
+        }
+      } catch {
+        // ignore
+      }
+
+      try {
+        const txRes = await fetch("/api/paypal/transactions");
+        const txData = await txRes.json();
+        if (isSubscribed && txData.transactions) {
+          setTransactions(txData.transactions);
+        }
+      } catch {
+        // ignore
+      } finally {
+        if (isSubscribed) setIsLoadingTransactions(false);
+      }
+
+      await loadCategories();
+      await loadEvents();
+
+      if (isSubscribed) {
+        setInvoices(SandboxStore.getInvoices());
+      }
+
+      // Check if redirected from PayPal OAuth callback
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("connected") === "paypal") {
+          const userName = params.get("userName") || "PayPal User";
+          const userEmail = params.get("userEmail") || "Sandbox Account";
+          if (isSubscribed) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: `asst_connected_${Date.now()}`,
+                role: "assistant",
+                content: `🎉 **Successfully Connected to PayPal Sandbox!**\n\n• **Account:** ${userName} (\`${userEmail}\`)\n• **Environment:** Sandbox (Zero real currency risk)\n• **Ledger:** Synchronized with PayPal Developer REST API.`,
+                toolBadges: ["oauth: openid_connect", "status: AUTHENTICATED"],
+              },
+            ]);
+          }
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      }
+    };
+
+    void init();
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [loadCategories, loadEvents]);
 
   const handleUserLogin = (user: UserAccount) => {
     setCurrentUser(user);
-    setInvoices(SandboxStore.getInvoices());
-
-    const userInvs = SandboxStore.getUserInvoices(user.email);
-    const unpaid = userInvs.incoming.filter((i) => i.status === "UNPAID");
-
-    let welcomeText = `👋 **Welcome, ${user.name}!** You are signed in with \`${user.email}\`.`;
-    if (unpaid.length > 0) {
-      welcomeText += `\n\n📌 **Action Required:** You have **${unpaid.length} incoming invoice** awaiting payment:\n`;
-      unpaid.forEach((inv) => {
-        welcomeText += `\n• **${inv.paypalInvoiceId}**: $${inv.amount.toFixed(2)} USD from ${inv.senderName} (${inv.description})`;
-      });
-      welcomeText += `\n\nClick **Review & Pay** above or ask me to review the breakdown.`;
-    } else {
-      welcomeText += `\n\nYour ledger is up to date and all split balances are settled. What would you like to review today?`;
-    }
+    loadTransactions();
+    loadCategories();
+    loadEvents();
 
     setMessages((prev) => [
       ...prev,
       {
         id: `asst_welcome_user_${Date.now()}`,
         role: "assistant",
-        content: welcomeText,
+        content: `👋 **Welcome, ${user.name}!** Signed in with PayPal Sandbox (\`${user.email}\`). Your live ledger, categories, and calendar are active.`,
       },
     ]);
   };
 
-  const handleUserLogout = () => {
+  const handleUserLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // ignore
+    }
     SandboxStore.setCurrentUser(null);
     setCurrentUser(null);
-    setInvoices(SandboxStore.getInvoices());
     setMessages((prev) => [
       ...prev,
       {
         id: `asst_logout_${Date.now()}`,
         role: "assistant",
-        content: "You have signed out. Log in with any PayPal Sandbox account to view personalized ledgers, manage categories, or settle shared invoices.",
+        content:
+          "You have signed out of PayPal Sandbox. Click **Log in with PayPal** to reconnect with any Sandbox buyer or merchant account.",
       },
     ]);
   };
 
-  const [categories, setCategories] = useState<CategoryItem[]>([
-    { id: "cat_groceries", name: "Groceries", monthlyCap: 400, color: "#10b981" },
-    { id: "cat_dining", name: "Dining", monthlyCap: 250, color: "#3b82f6" },
-    { id: "cat_entertainment", name: "Entertainment", monthlyCap: 150, color: "#8b5cf6" },
-    { id: "cat_shopping", name: "Shopping", monthlyCap: 200, color: "#ec4899" },
-  ]);
-  const [selectedCategory, setSelectedCategory] = useState<string>("All");
-
-  const handleAddCategory = (newCat: Omit<CategoryItem, "id">) => {
+  const handleAddCategory = async (newCat: Omit<CategoryItem, "id">) => {
+    try {
+      const res = await fetch("/api/categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newCat),
+      });
+      const data = await res.json();
+      if (data.category) {
+        setCategories((prev) => [...prev, data.category]);
+        setSelectedCategory(data.category.name);
+        return;
+      }
+    } catch {
+      // fallback
+    }
     const id = `cat_${Date.now()}`;
     setCategories((prev) => [...prev, { ...newCat, id }]);
     setSelectedCategory(newCat.name);
   };
 
-  const handleEditCategory = (
+  const handleEditCategory = async (
     categoryId: string,
     updatedCap: number,
     updatedName?: string,
     updatedColor?: string
   ) => {
+    try {
+      await fetch("/api/categories", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: categoryId, monthlyCap: updatedCap, name: updatedName, color: updatedColor }),
+      });
+    } catch {
+      // fallback
+    }
+
     setCategories((prev) =>
       prev.map((c) => {
         if (c.id === categoryId) {
@@ -287,9 +306,7 @@ export default function Home() {
           if (updatedName && newName.toLowerCase() !== oldName.toLowerCase()) {
             setTransactions((txs) =>
               txs.map((tx) =>
-                tx.category.toLowerCase() === oldName.toLowerCase()
-                  ? { ...tx, category: newName }
-                  : tx
+                tx.category.toLowerCase() === oldName.toLowerCase() ? { ...tx, category: newName } : tx
               )
             );
             if (selectedCategory.toLowerCase() === oldName.toLowerCase()) {
@@ -309,14 +326,18 @@ export default function Home() {
     );
   };
 
-  const handleDeleteCategory = (categoryId: string) => {
+  const handleDeleteCategory = async (categoryId: string) => {
+    try {
+      await fetch(`/api/categories?id=${categoryId}`, { method: "DELETE" });
+    } catch {
+      // fallback
+    }
+
     const target = categories.find((c) => c.id === categoryId);
     if (target) {
       setTransactions((prev) =>
         prev.map((t) =>
-          t.category.toLowerCase() === target.name.toLowerCase()
-            ? { ...t, category: "Uncategorized" }
-            : t
+          t.category.toLowerCase() === target.name.toLowerCase() ? { ...t, category: "Uncategorized" } : t
         )
       );
       if (selectedCategory.toLowerCase() === target.name.toLowerCase()) {
@@ -324,6 +345,24 @@ export default function Home() {
       }
     }
     setCategories((prev) => prev.filter((c) => c.id !== categoryId));
+  };
+
+  const handleAddScheduledEvent = async (event: Omit<ScheduledEvent, "id">) => {
+    try {
+      const res = await fetch("/api/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(event),
+      });
+      const data = await res.json();
+      if (data.event) {
+        setEvents((prev) => [...prev, data.event]);
+        return;
+      }
+    } catch {
+      // fallback
+    }
+    setEvents((prev) => [...prev, { ...event, id: `evt_${Date.now()}` }]);
   };
 
   const handlePayInvoice = (invoiceId: string) => {
@@ -371,15 +410,6 @@ export default function Home() {
       ]);
     }
   };
-
-  const [messages, setMessages] = useState<ChatMessageItem[]>([
-    {
-      id: "msg_welcome",
-      role: "assistant",
-      content:
-        "Hello! I am PocketMate, your Autonomous Financial Orchestrator. Speak to me casually — I will pull your PayPal transactions, compute penny-locked splits, monitor category budget caps, and drive your AG Grid ledger in real time without manual spreadsheet upkeep.",
-    },
-  ]);
 
   const handleSendMessage = async (text: string) => {
     const userMsg: ChatMessageItem = {
@@ -498,7 +528,12 @@ export default function Home() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("transactionId", "tx_dining_07");
+      const targetTx =
+        transactions.find((t) => t.status === "pending" || t.status === "unresolved" || t.status === "disputed") ||
+        transactions[0];
+      if (targetTx?.id) {
+        formData.append("transactionId", targetTx.id);
+      }
 
       const res = await fetch("/api/receipt/audit", {
         method: "POST",
@@ -510,7 +545,7 @@ export default function Home() {
 
       if (audit.discrepancyDetected) {
         setGridMutation({
-          highlightRowId: "tx_dining_07",
+          highlightRowId: targetTx?.id || auditData.transaction?.id,
           statusMessage: `Discrepancy: $${audit.receiptTotal.toFixed(2)} receipt vs $${audit.chargedTotal.toFixed(2)} charge.`,
         });
 
@@ -637,7 +672,10 @@ export default function Home() {
 
   // 2. Dynamic Friends Owe You / You Owe Friends (Card 2)
   const userInvoices = currentUser
-    ? SandboxStore.getUserInvoices(currentUser.email)
+    ? {
+        incoming: invoices.filter((i) => i.recipientEmail.toLowerCase() === currentUser.email.toLowerCase()),
+        outgoing: invoices.filter((i) => i.senderEmail.toLowerCase() === currentUser.email.toLowerCase()),
+      }
     : { incoming: [], outgoing: [] };
   const incomingUnpaidInvoices = userInvoices.incoming.filter((i) => i.status === "UNPAID");
   const firstUnpaidInvoice = incomingUnpaidInvoices[0] || null;
@@ -665,7 +703,12 @@ export default function Home() {
   }
 
   // 3. Dynamic Upcoming Bills Due in next 7 days (Card 3)
-  const upcomingBillsAmount = 95.0 + 24.99;
+  const outgoingBills = events.filter((e) => e.type === "outgoing");
+  const upcomingBillsAmount = outgoingBills.reduce((sum, e) => sum + e.amount, 0);
+  const firstUpcomingBill = outgoingBills[0];
+  const billsSubtitle = firstUpcomingBill
+    ? `${firstUpcomingBill.counterparty || firstUpcomingBill.title.split("(")[0].trim()} ($${firstUpcomingBill.amount.toFixed(0)}) on ${firstUpcomingBill.date}`
+    : "No scheduled bills due";
 
   // 4. Dynamic Action Needed / Triage (Card 4)
   const disputedCount = transactions.filter((t) => t.status === "disputed").length;
@@ -842,10 +885,10 @@ export default function Home() {
           <div>
             <p className="text-xs text-zinc-400">Upcoming Bills Due</p>
             <p className="text-lg font-bold text-zinc-100 font-mono mt-0.5">
-              ${upcomingBillsAmount.toFixed(2)} Due Next 7d
+              ${upcomingBillsAmount.toFixed(2)} Due
             </p>
-            <p className="text-[11px] text-blue-400 mt-0.5">
-              AWS ($95) & Streaming ($25) on Nov 12-18
+            <p className="text-[11px] text-blue-400 mt-0.5 truncate max-w-[220px]">
+              {billsSubtitle}
             </p>
           </div>
           <div className="w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
@@ -945,6 +988,38 @@ export default function Home() {
           <div className="flex-1 min-h-[560px] flex flex-col">
             {activeRightTab === "transactions" && (
               <div className="flex flex-col gap-3 h-full">
+                {/* Actions Bar for Live PayPal Sandbox */}
+                <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-zinc-300">Live PayPal Ledger</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono">
+                      {transactions.length} Sandbox Records
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={loadTransactions}
+                      disabled={isLoadingTransactions}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs border border-zinc-800 transition-colors cursor-pointer disabled:opacity-50"
+                      title="Refresh transactions from PayPal Sandbox REST API"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isLoadingTransactions ? "animate-spin text-blue-400" : ""}`} />
+                      <span>Refresh</span>
+                    </button>
+
+                    <button
+                      onClick={handleSeedSandboxTransactions}
+                      disabled={isSeedingTransactions}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 text-xs font-semibold border border-emerald-500/30 transition-all cursor-pointer disabled:opacity-50"
+                      title="Seed realistic test transactions and invoices into PayPal Sandbox"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>{isSeedingTransactions ? "Seeding..." : "Seed Sandbox Invoices"}</span>
+                    </button>
+                  </div>
+                </div>
+
                 {/* Category Control Bar scoped directly to Transactions Ledger */}
                 <CategoryControlBar
                   categories={categories}
@@ -955,12 +1030,33 @@ export default function Home() {
                   onEditCategory={handleEditCategory}
                   onDeleteCategory={handleDeleteCategory}
                 />
+
                 <div className="flex-1 min-h-[480px]">
-                  <TransactionGrid
-                    rowData={transactions}
-                    gridMutation={gridMutation}
-                    selectedCategory={selectedCategory}
-                  />
+                  {transactions.length === 0 && !isLoadingTransactions ? (
+                    <div className="h-full min-h-[440px] rounded-xl border border-dashed border-zinc-800 bg-zinc-950/60 flex flex-col items-center justify-center p-8 text-center">
+                      <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 mb-3">
+                        <CreditCard className="w-6 h-6" />
+                      </div>
+                      <h3 className="text-sm font-bold text-zinc-100">No Sandbox Transactions Found</h3>
+                      <p className="text-xs text-zinc-400 max-w-sm mt-1 mb-4">
+                        Your PayPal Sandbox account currently has 0 recorded transactions. Click below to generate realistic invoices and transactions directly in PayPal Sandbox.
+                      </p>
+                      <button
+                        onClick={handleSeedSandboxTransactions}
+                        disabled={isSeedingTransactions}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white text-xs font-semibold shadow-lg shadow-blue-500/20 transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        <Sparkles className="w-4 h-4" />
+                        <span>{isSeedingTransactions ? "Generating Sandbox Data..." : "Seed Sandbox Transactions"}</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <TransactionGrid
+                      rowData={transactions}
+                      gridMutation={gridMutation}
+                      selectedCategory={selectedCategory}
+                    />
+                  )}
                 </div>
               </div>
             )}
@@ -975,6 +1071,8 @@ export default function Home() {
               <BudgetScheduler
                 categories={categories}
                 selectedCategory={selectedCategory}
+                events={events}
+                onAddEvent={handleAddScheduledEvent}
                 onEventClick={handleSchedulerEventClick}
               />
             )}

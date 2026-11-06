@@ -1,21 +1,15 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Calendar as CalendarIcon,
-  ListFilter,
   Plus,
   DollarSign,
   Clock,
   ArrowDownLeft,
   ArrowUpRight,
   Sparkles,
-  ChevronLeft,
-  ChevronRight,
   X,
-  CheckCircle2,
-  AlertCircle,
-  Tag,
 } from "lucide-react";
 import type { CategoryItem } from "@/components/categories/CategoryControlBar";
 
@@ -34,105 +28,35 @@ export interface ScheduledEvent {
 export interface BudgetSchedulerProps {
   categories?: CategoryItem[];
   selectedCategory?: string;
+  events?: ScheduledEvent[];
   onEventClick?: (eventName: string) => void;
+  onAddEvent?: (event: Omit<ScheduledEvent, "id">) => void;
 }
-
-const INITIAL_EVENTS: ScheduledEvent[] = [
-  {
-    id: "evt_1",
-    title: "PayPal Invoice: Dave Chen",
-    amount: 65.0,
-    date: "2026-11-08",
-    dayOfMonth: 8,
-    type: "incoming",
-    category: "Dining",
-    counterparty: "Dave Chen",
-    status: "pending",
-  },
-  {
-    id: "evt_2",
-    title: "Settlement Due: Alex Miller",
-    amount: 42.5,
-    date: "2026-11-10",
-    dayOfMonth: 10,
-    type: "incoming",
-    category: "Dining",
-    counterparty: "Alex Miller",
-    status: "pending",
-  },
-  {
-    id: "evt_3",
-    title: "Cloud Infrastructure (AWS & DO)",
-    amount: 95.0,
-    date: "2026-11-12",
-    dayOfMonth: 12,
-    type: "outgoing",
-    category: "Utilities",
-    counterparty: "AWS",
-    status: "scheduled",
-  },
-  {
-    id: "evt_4",
-    title: "Sarah Jenkins: Zara Split Due",
-    amount: 79.0,
-    date: "2026-11-13",
-    dayOfMonth: 13,
-    type: "incoming",
-    category: "Shopping",
-    counterparty: "Sarah Jenkins",
-    status: "pending",
-  },
-  {
-    id: "evt_5",
-    title: "Mid-Month Budget Checkpoint",
-    amount: 0,
-    date: "2026-11-15",
-    dayOfMonth: 15,
-    type: "milestone",
-    category: "General",
-    status: "scheduled",
-  },
-  {
-    id: "evt_6",
-    title: "Entertainment Subscriptions (Netflix, Spotify)",
-    amount: 24.99,
-    date: "2026-11-18",
-    dayOfMonth: 18,
-    type: "outgoing",
-    category: "Entertainment",
-    counterparty: "Streaming Services",
-    status: "scheduled",
-  },
-  {
-    id: "evt_7",
-    title: "SaaS Dev Tools (GitHub & OpenAI)",
-    amount: 45.0,
-    date: "2026-11-20",
-    dayOfMonth: 20,
-    type: "outgoing",
-    category: "Utilities",
-    counterparty: "GitHub",
-    status: "scheduled",
-  },
-  {
-    id: "evt_8",
-    title: "End-of-Month Triage & Sweep",
-    amount: 0,
-    date: "2026-11-28",
-    dayOfMonth: 28,
-    type: "milestone",
-    category: "General",
-    status: "scheduled",
-  },
-];
 
 export default function BudgetScheduler({
   categories = [],
   selectedCategory = "all",
+  events: propEvents,
   onEventClick,
+  onAddEvent,
 }: BudgetSchedulerProps) {
   const [viewMode, setViewMode] = useState<"calendar" | "agenda">("calendar");
-  const [events, setEvents] = useState<ScheduledEvent[]>(INITIAL_EVENTS);
+  const [internalEvents, setInternalEvents] = useState<ScheduledEvent[]>([]);
+  const events = propEvents !== undefined ? propEvents : internalEvents;
+  const setEvents = (updater: React.SetStateAction<ScheduledEvent[]>) => {
+    setInternalEvents(updater);
+  };
+
+  useEffect(() => {
+    if (propEvents === undefined) {
+      fetch("/api/events")
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.events) setInternalEvents(data.events);
+        })
+        .catch(() => {});
+    }
+  }, [propEvents]);
   const [filterType, setFilterType] = useState<"all" | "incoming" | "outgoing">("all");
 
   // Modal for "+ Add Scheduled Bill / Reminder"
@@ -167,8 +91,6 @@ export default function BudgetScheduler({
       .filter((e) => e.type === "incoming")
       .reduce((sum, e) => sum + e.amount, 0);
   }, [events]);
-
-  const netCashflow = upcomingReceivables - upcomingBills;
 
   // Calendar generation for November 2026 (starts on Sunday Nov 1, 30 days)
   const calendarDays = useMemo(() => {
@@ -208,6 +130,7 @@ export default function BudgetScheduler({
     };
 
     setEvents((prev) => [...prev, created]);
+    onAddEvent?.(created);
     setIsAddModalOpen(false);
     setNewTitle("");
     setNewAmount("50");

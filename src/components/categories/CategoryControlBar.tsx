@@ -4,7 +4,6 @@ import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   ChevronLeft,
   ChevronRight,
-  Plus,
   Settings2,
   DollarSign,
   AlertTriangle,

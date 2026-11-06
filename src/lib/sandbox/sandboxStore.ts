@@ -2,121 +2,6 @@
 
 import { UserAccount, ContactRecord, InvoiceRecord } from "@/types/sandboxUser";
 
-export const PRESET_USERS: UserAccount[] = [
-  {
-    id: "usr_alex",
-    name: "Alex Rivera",
-    email: "alex@pocketmate.sandbox",
-    avatar: "AR",
-    persona: "GENERAL",
-  },
-  {
-    id: "usr_dave_chen",
-    name: "Dave Chen",
-    email: "dave.chen@personal.example.com",
-    avatar: "DC",
-    persona: "GENERAL",
-  },
-  {
-    id: "usr_dave_miller",
-    name: "Dave Miller",
-    email: "dave.miller@acmecorp.com",
-    avatar: "DM",
-    persona: "BUSINESS",
-  },
-  {
-    id: "usr_sarah",
-    name: "Sarah Jenkins",
-    email: "sarah.jenkins@example.com",
-    avatar: "SJ",
-    persona: "GENERAL",
-  },
-  {
-    id: "usr_mark",
-    name: "Mark Miller",
-    email: "mark.miller@example.com",
-    avatar: "MM",
-    persona: "GENERAL",
-  },
-];
-
-const PRESET_CONTACTS: Record<string, ContactRecord[]> = {
-  usr_alex: [
-    {
-      id: "cnt_dave_chen",
-      name: "Dave Chen",
-      email: "dave.chen@personal.example.com",
-      lastSplitAt: "2026-11-06",
-      splitCount: 4,
-    },
-    {
-      id: "cnt_dave_miller",
-      name: "Dave Miller",
-      email: "dave.miller@acmecorp.com",
-      lastSplitAt: "2026-10-15",
-      splitCount: 2,
-    },
-    {
-      id: "cnt_sarah",
-      name: "Sarah Jenkins",
-      email: "sarah.jenkins@example.com",
-      lastSplitAt: "2026-11-06",
-      splitCount: 3,
-    },
-    {
-      id: "cnt_mark",
-      name: "Mark Miller",
-      email: "mark.miller@example.com",
-      lastSplitAt: "2026-11-05",
-      splitCount: 1,
-    },
-  ],
-  usr_dave_chen: [
-    {
-      id: "cnt_alex",
-      name: "Alex Rivera",
-      email: "alex@pocketmate.sandbox",
-      lastSplitAt: "2026-11-06",
-      splitCount: 4,
-    },
-  ],
-};
-
-const INITIAL_INVOICES: InvoiceRecord[] = [
-  {
-    id: "inv_bar_01",
-    paypalInvoiceId: "INV2-BAR-65",
-    paypalInvoiceUrl: "https://www.sandbox.paypal.com/invoice/p/#INV2-BAR-65",
-    senderId: "usr_alex",
-    senderName: "Alex Rivera",
-    senderEmail: "alex@pocketmate.sandbox",
-    recipientId: "usr_dave_chen",
-    recipientName: "Dave Chen",
-    recipientEmail: "dave.chen@personal.example.com",
-    amount: 65.0,
-    currency: "USD",
-    description: "Downtown Craft Bar & Grill Split",
-    status: "UNPAID",
-    createdAt: "2026-11-06T23:30:00Z",
-  },
-  {
-    id: "inv_zara_02",
-    paypalInvoiceId: "INV2-ZARA-79",
-    paypalInvoiceUrl: "https://www.sandbox.paypal.com/invoice/p/#INV2-ZARA-79",
-    senderId: "usr_alex",
-    senderName: "Alex Rivera",
-    senderEmail: "alex@pocketmate.sandbox",
-    recipientId: "usr_sarah",
-    recipientName: "Sarah Jenkins",
-    recipientEmail: "sarah.jenkins@example.com",
-    amount: 79.0,
-    currency: "USD",
-    description: "Zara Mall Galleria ($65) & Starbucks Coffee ($14)",
-    status: "UNPAID",
-    createdAt: "2026-11-06T16:30:00Z",
-  },
-];
-
 const STORAGE_KEYS = {
   CURRENT_USER: "pocketmate_current_user_v2",
   USERS: "pocketmate_users_v2",
@@ -130,31 +15,24 @@ export class SandboxStore {
   }
 
   static getUsers(): UserAccount[] {
-    if (!this.isBrowser()) return PRESET_USERS;
+    if (!this.isBrowser()) return [];
     const stored = localStorage.getItem(STORAGE_KEYS.USERS);
-    if (!stored) {
-      localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(PRESET_USERS));
-      return PRESET_USERS;
-    }
+    if (!stored) return [];
     try {
       return JSON.parse(stored);
     } catch {
-      return PRESET_USERS;
+      return [];
     }
   }
 
-  static getCurrentUser(): UserAccount {
-    if (!this.isBrowser()) return PRESET_USERS[0];
+  static getCurrentUser(): UserAccount | null {
+    if (!this.isBrowser()) return null;
     const stored = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
-    if (!stored) {
-      const defaultUser = PRESET_USERS[0];
-      localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(defaultUser));
-      return defaultUser;
-    }
+    if (!stored) return null;
     try {
       return JSON.parse(stored);
     } catch {
-      return PRESET_USERS[0];
+      return null;
     }
   }
 
@@ -203,17 +81,14 @@ export class SandboxStore {
   }
 
   static getContactsForUser(userId: string): ContactRecord[] {
-    if (!this.isBrowser()) return PRESET_CONTACTS[userId] || [];
+    if (!this.isBrowser()) return [];
     const stored = localStorage.getItem(STORAGE_KEYS.CONTACTS);
-    if (!stored) {
-      localStorage.setItem(STORAGE_KEYS.CONTACTS, JSON.stringify(PRESET_CONTACTS));
-      return PRESET_CONTACTS[userId] || [];
-    }
+    if (!stored) return [];
     try {
       const all = JSON.parse(stored);
-      return all[userId] || PRESET_CONTACTS[userId] || [];
+      return all[userId] || [];
     } catch {
-      return PRESET_CONTACTS[userId] || [];
+      return [];
     }
   }
 
@@ -232,20 +107,19 @@ export class SandboxStore {
   }
 
   private static getAllContactsMap(): Record<string, ContactRecord[]> {
-    if (!this.isBrowser()) return PRESET_CONTACTS;
+    if (!this.isBrowser()) return {};
     const stored = localStorage.getItem(STORAGE_KEYS.CONTACTS);
-    if (!stored) return PRESET_CONTACTS;
+    if (!stored) return {};
     try {
       return JSON.parse(stored);
     } catch {
-      return PRESET_CONTACTS;
+      return {};
     }
   }
 
   /**
    * Realistic PayPal Contact Resolution Engine:
-   * Looks up ONLY against user's past transaction/contact history.
-   * If multiple contacts match (e.g. 2 Daves), selects by recency and clearly informs user.
+   * Looks up against user's past transaction/contact history.
    */
   static resolveContactByName(
     userId: string,
@@ -307,16 +181,13 @@ export class SandboxStore {
   }
 
   static getInvoices(): InvoiceRecord[] {
-    if (!this.isBrowser()) return INITIAL_INVOICES;
+    if (!this.isBrowser()) return [];
     const stored = localStorage.getItem(STORAGE_KEYS.INVOICES);
-    if (!stored) {
-      localStorage.setItem(STORAGE_KEYS.INVOICES, JSON.stringify(INITIAL_INVOICES));
-      return INITIAL_INVOICES;
-    }
+    if (!stored) return [];
     try {
       return JSON.parse(stored);
     } catch {
-      return INITIAL_INVOICES;
+      return [];
     }
   }
 

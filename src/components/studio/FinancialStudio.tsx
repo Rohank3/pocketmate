@@ -9,9 +9,6 @@ import {
   BarChart2,
   Users,
   ArrowUpRight,
-  Sparkles,
-  DollarSign,
-  ShieldAlert,
 } from "lucide-react";
 import type { CategoryItem } from "@/components/categories/CategoryControlBar";
 import type { TransactionRow } from "@/components/grid/TransactionGrid";
@@ -132,26 +129,28 @@ export default function FinancialStudio({
   // SVG Donut calculation
   const donutSlices = useMemo(() => {
     const total = categoryAnalytics.totalSpent || 1;
-    let accumulatedAngle = 0;
+    let currentAngle = 0;
+    const slices = [];
 
-    return categoryAnalytics.items
-      .filter((item) => item.spent > 0)
-      .map((item) => {
-        const fraction = item.spent / total;
-        const startAngle = accumulatedAngle;
-        const angle = fraction * 360;
-        accumulatedAngle += angle;
+    for (const item of categoryAnalytics.items) {
+      if (item.spent <= 0) continue;
+      const fraction = item.spent / total;
+      const startAngle = currentAngle;
+      const angle = fraction * 360;
+      currentAngle += angle;
 
-        return {
-          id: item.id,
-          name: item.name,
-          color: item.color,
-          spent: item.spent,
-          percentage: Math.round(fraction * 100),
-          startAngle,
-          angle,
-        };
+      slices.push({
+        id: item.id,
+        name: item.name,
+        color: item.color,
+        spent: item.spent,
+        percentage: Math.round(fraction * 100),
+        startAngle,
+        angle,
       });
+    }
+
+    return slices;
   }, [categoryAnalytics]);
 
   return (

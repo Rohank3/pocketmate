@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
     const contentType = req.headers.get("content-type") || "";
     let base64Image = "";
     let mimeType = "image/jpeg";
-    let transactionId = "tx_dining_07";
+    let transactionId = "";
 
     if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
@@ -32,13 +32,24 @@ export async function POST(req: NextRequest) {
     // Parse receipt with Gemini 2.5 Pro Vision
     const parsedReceipt = await parseReceiptWithGeminiVision(base64Image, mimeType);
 
-    // Cross-check against PayPal charge (Bistro Lumiere fixture or live capture)
-    const recentTxs = await paypalClient.fetchRecentTransactions(48);
-    const matchedTx = recentTxs.find((t) => t.id === transactionId) || {
-      id: transactionId,
-      amount: 130.0,
-      merchantName: parsedReceipt.merchantName,
-    };
+    // Cross-check against live PayPal transactions
+    const recentTxs = await paypalClient.fetchRecentTransactions(168);
+    const parsedMerchantLower = (parsedReceipt.merchantName || "").toLowerCase();
+
+    const matchedTx =
+      (transactionId ? recentTxs.find((t) => t.id === transactionId) : null) ||
+      recentTxs.find(
+        (t) =>
+          parsedMerchantLower &&
+          (t.merchantName.toLowerCase().includes(parsedMerchantLower) ||
+            parsedMerchantLower.includes(t.merchantName.toLowerCase()))
+      ) ||
+      recentTxs.find((t) => Math.abs(t.amount - parsedReceipt.total) <= 30) ||
+      recentTxs[0] || {
+        id: transactionId || `tx_${Date.now()}`,
+        amount: parsedReceipt.total,
+        merchantName: parsedReceipt.merchantName,
+      };
 
     const receiptTotalWithTaxTip = parsedReceipt.total;
     const chargedTotal = matchedTx.amount;

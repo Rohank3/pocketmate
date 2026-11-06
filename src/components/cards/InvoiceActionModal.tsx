@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { X, ExternalLink, ShieldAlert, CheckCircle2, DollarSign, MessageSquare } from "lucide-react";
+import { X, ExternalLink, DollarSign } from "lucide-react";
 import { InvoiceRecord } from "@/types/sandboxUser";
 
 interface InvoiceActionModalProps {
