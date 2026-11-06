@@ -1,9 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import { X, Check, ArrowRight, User, ShieldCheck, Mail, LogOut } from "lucide-react";
+import { X, ArrowRight, User, ShieldCheck, Mail, LogOut, ExternalLink } from "lucide-react";
 import { UserAccount } from "@/types/sandboxUser";
-import { PRESET_USERS, SandboxStore } from "@/lib/sandbox/sandboxStore";
 
 interface PayPalLoginModalProps {
   isOpen: boolean;
@@ -23,31 +22,57 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
   const [emailInput, setEmailInput] = useState("");
   const [nameInput, setNameInput] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleManualLogin = (e: React.FormEvent) => {
+  const handleManualSandboxLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!emailInput.trim() || !emailInput.includes("@")) {
-      setErrorMsg("Please enter a valid PayPal email address.");
+      setErrorMsg("Please enter a valid PayPal sandbox email address.");
       return;
     }
-    const user = SandboxStore.loginWithEmail(emailInput.trim(), nameInput.trim() || undefined);
-    onLogin(user);
-    setEmailInput("");
-    setNameInput("");
-    setErrorMsg("");
-    onClose();
+
+    setIsSubmitting(true);
+    try {
+      // Create user session and link with database
+      const cleanEmail = emailInput.trim().toLowerCase();
+      const cleanName = nameInput.trim() || cleanEmail.split("@")[0].replace(/[._]/g, " ");
+
+      await fetch("/api/auth/callback/paypal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: cleanEmail, name: cleanName }),
+      }).catch(() => null);
+
+      const user: UserAccount = {
+        id: `usr_${Date.now()}`,
+        name: cleanName,
+        email: cleanEmail,
+        avatar: cleanName
+          .split(" ")
+          .map((n) => n[0])
+          .join("")
+          .toUpperCase()
+          .slice(0, 2),
+        persona: "GENERAL",
+      };
+
+      onLogin(user);
+      onClose();
+    } catch {
+      setErrorMsg("Failed to initialize sandbox user session.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleQuickLogin = (preset: UserAccount) => {
-    SandboxStore.setCurrentUser(preset);
-    onLogin(preset);
-    onClose();
-  };
-
-  const handleLogoutAction = () => {
-    SandboxStore.setCurrentUser(null);
+  const handleLogoutAction = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // proceed regardless
+    }
     onLogout();
     onClose();
   };
@@ -71,12 +96,13 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
                 </span>
               </h2>
               <p className="text-[11px] text-zinc-400">
-                Sign in to view your ledger, personal budget, and split invoices
+                Sign in with your PayPal Sandbox account to view your live ledger and budget
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
+            aria-label="Close dialog"
             className="text-zinc-400 hover:text-zinc-100 p-1.5 rounded-lg hover:bg-zinc-800 cursor-pointer transition-colors"
           >
             <X className="w-4 h-4" />
@@ -86,9 +112,9 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
         <div className="p-5 flex flex-col gap-4">
           {/* Current Active Account Status */}
           {currentUser && (
-            <div className="p-3 rounded-xl bg-zinc-950 border border-blue-500/30 flex items-center justify-between">
+            <div className="p-3.5 rounded-xl bg-zinc-950 border border-blue-500/30 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-full bg-blue-600/30 border border-blue-500/50 flex items-center justify-center font-bold text-xs text-blue-300">
+                <div className="w-9 h-9 rounded-full bg-blue-600/30 border border-blue-500/50 flex items-center justify-center font-bold text-xs text-blue-300">
                   {currentUser.avatar}
                 </div>
                 <div>
@@ -100,7 +126,7 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
               <button
                 type="button"
                 onClick={handleLogoutAction}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-rose-500/20 text-zinc-400 hover:text-rose-400 text-xs font-medium border border-zinc-800 transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-rose-500/20 text-zinc-400 hover:text-rose-400 text-xs font-medium border border-zinc-800 transition-colors cursor-pointer"
               >
                 <LogOut className="w-3.5 h-3.5" />
                 <span>Log Out</span>
@@ -108,24 +134,49 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
             </div>
           )}
 
-          {/* Manual Email Log In Form */}
-          <form onSubmit={handleManualLogin} className="flex flex-col gap-3">
+          {/* Primary Action: Official PayPal Sandbox OAuth Flow */}
+          <div className="flex flex-col gap-2">
+            <a
+              href="/api/auth/paypal"
+              className="flex items-center justify-center gap-2.5 w-full py-3 rounded-xl bg-[#0070ba] hover:bg-[#005ea6] active:bg-[#003087] text-white text-xs font-bold shadow-lg shadow-blue-500/20 transition-all cursor-pointer"
+            >
+              <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24">
+                <path d="M20.067 8.478c.492.315.844.818.996 1.424.238.948.067 2.05-.48 3.108-1.042 2.015-2.918 3.32-5.148 3.585-.453.053-.91.08-1.367.08h-.468c-.468 0-.87.332-.942.793l-.845 5.353-.028.175c-.033.206-.21.354-.42.354H8.05c-.26 0-.45-.24-.41-.497l2.128-13.49c.04-.257.26-.45.52-.45h4.636c1.69 0 3.19.467 4.143 1.565z" />
+              </svg>
+              <span>Connect via PayPal Sandbox OAuth</span>
+              <ExternalLink className="w-3.5 h-3.5 opacity-80" />
+            </a>
+            <p className="text-[11px] text-zinc-500 text-center">
+              Redirects to official <span className="text-zinc-400 font-mono">sandbox.paypal.com</span> login page
+            </p>
+          </div>
+
+          <div className="relative flex py-1 items-center">
+            <div className="grow border-t border-zinc-800"></div>
+            <span className="shrink mx-3 text-[10px] uppercase tracking-wider text-zinc-500 font-medium">
+              Or Sign In With Sandbox Test Account
+            </span>
+            <div className="grow border-t border-zinc-800"></div>
+          </div>
+
+          {/* Quick Sandbox Email Entry */}
+          <form onSubmit={handleManualSandboxLogin} className="flex flex-col gap-3">
             <div>
               <label className="text-xs font-medium text-zinc-300 block mb-1">
-                PayPal Sandbox Email
+                PayPal Sandbox Account Email
               </label>
               <div className="relative">
                 <Mail className="w-4 h-4 absolute left-3 top-2.5 text-zinc-500" />
                 <input
                   type="email"
-                  placeholder="e.g. dave.chen@personal.example.com"
+                  placeholder="e.g. sb-user@business.example.com"
                   value={emailInput}
                   onChange={(e) => {
                     setEmailInput(e.target.value);
                     if (errorMsg) setErrorMsg("");
                   }}
                   required
-                  className="w-full pl-9 pr-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 placeholder:text-zinc-600 focus:outline-hidden focus:border-blue-500"
+                  className="w-full pl-9 pr-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 placeholder:text-zinc-600 focus:outline-hidden focus:border-blue-500 transition-colors"
                 />
               </div>
               {errorMsg && <p className="text-[11px] text-rose-400 mt-1">{errorMsg}</p>}
@@ -133,82 +184,35 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
 
             <div>
               <label className="text-xs font-medium text-zinc-300 block mb-1">
-                Display Name (Optional)
+                Account Holder Name (Optional)
               </label>
               <div className="relative">
                 <User className="w-4 h-4 absolute left-3 top-2.5 text-zinc-500" />
                 <input
                   type="text"
-                  placeholder="e.g. Dave Chen"
+                  placeholder="e.g. Sandbox Test User"
                   value={nameInput}
                   onChange={(e) => setNameInput(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 placeholder:text-zinc-600 focus:outline-hidden focus:border-blue-500"
+                  className="w-full pl-9 pr-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 placeholder:text-zinc-600 focus:outline-hidden focus:border-blue-500 transition-colors"
                 />
               </div>
             </div>
 
             <button
               type="submit"
-              className="mt-1 flex items-center justify-center gap-2 w-full py-2 rounded-lg bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white text-xs font-semibold shadow-md shadow-blue-600/20 transition-all cursor-pointer"
+              disabled={isSubmitting}
+              className="mt-1 flex items-center justify-center gap-2 w-full py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-200 text-xs font-semibold border border-zinc-700 transition-all cursor-pointer disabled:opacity-50"
             >
-              <span>Log In with Email</span>
+              <span>Sign In with Sandbox Email</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </form>
-
-          {/* Quick Select Sandbox Users for Testing Convenience */}
-          <div className="border-t border-zinc-800 pt-3">
-            <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider mb-2">
-              Or Choose Pre-Configured Test User
-            </p>
-
-            <div className="flex flex-col gap-1.5 max-h-[190px] overflow-y-auto pr-1">
-              {PRESET_USERS.map((preset) => {
-                const isActive = currentUser?.email.toLowerCase() === preset.email.toLowerCase();
-
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => handleQuickLogin(preset)}
-                    className={`flex items-center justify-between p-2 rounded-xl text-left border transition-all cursor-pointer ${
-                      isActive
-                        ? "bg-blue-600/10 border-blue-500/50"
-                        : "bg-zinc-950/80 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[11px] font-bold text-zinc-300 shrink-0">
-                        {preset.avatar}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-zinc-200 truncate">
-                          {preset.name}
-                        </p>
-                        <p className="text-[11px] text-zinc-500 font-mono truncate">
-                          {preset.email}
-                        </p>
-                      </div>
-                    </div>
-
-                    {isActive ? (
-                      <Check className="w-4 h-4 text-blue-400 shrink-0" />
-                    ) : (
-                      <span className="text-[11px] text-zinc-500 group-hover:text-zinc-300">
-                        Select
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
         </div>
 
         <div className="px-5 py-2.5 bg-zinc-950 border-t border-zinc-800 flex items-center justify-between text-[11px] text-zinc-500">
           <span className="flex items-center gap-1">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            Sandbox Environment
+            PayPal Developer Sandbox
           </span>
           <span>Zero Real Currency Risk</span>
         </div>
