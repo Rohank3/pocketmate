@@ -1,0 +1,126 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PersonaType {
+  GENERAL
+  FREELANCER
+  BUSINESS
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  CANCELLED
+  FAILED
+}
+
+enum SplitStatus {
+  PENDING_CONFIRMATION
+  SENT
+  SETTLED
+  CANCELLED
+}
+
+model User {
+  id               String           @id @default(cuid())
+  email            String           @unique
+  name             String?
+  avatarUrl        String?
+  persona          PersonaType      @default(GENERAL)
+  confidenceThreshold Float          @default(0.80)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  budgetCategories BudgetCategory[]
+  splitRecords     SplitRecord[]
+  chatMessages     ChatMessage[]
+  contacts         Contact[]
+}
+
+model BudgetCategory {
+  id           String        @id @default(cuid())
+  userId       String
+  name         String
+  monthlyCap   Float
+  currentSpent Float         @default(0.0)
+  color        String?       @default("#3b82f6")
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entries      BudgetEntry[]
+
+  @@unique([userId, name])
+}
+
+model BudgetEntry {
+  id           String         @id @default(cuid())
+  categoryId   String
+  amount       Float
+  description  String
+  merchant     String?
+  sourceTxId   String?
+  createdAt    DateTime       @default(now())
+
+  category     BudgetCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+}
+
+model SplitRecord {
+  id           String        @id @default(cuid())
+  userId       String
+  totalAmount  Float
+  status       SplitStatus   @default(PENDING_CONFIRMATION)
+  description  String
+  itemsJson    Json?         // breakdown details
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items        SplitItem[]
+}
+
+model SplitItem {
+  id               String        @id @default(cuid())
+  splitRecordId    String
+  participantName  String
+  participantEmail String
+  amount           Float
+  paypalInvoiceId  String?
+  status           InvoiceStatus @default(DRAFT)
+  createdAt        DateTime      @default(now())
+
+  splitRecord      SplitRecord   @relation(fields: [splitRecordId], references: [id], onDelete: Cascade)
+}
+
+model ChatMessage {
+  id            String       @id @default(cuid())
+  userId        String
+  role          String       // "user" | "assistant" | "system"
+  content       String       @db.Text
+  toolCallsJson Json?
+  persona       PersonaType  @default(GENERAL)
+  createdAt     DateTime     @default(now())
+
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Contact {
+  id           String    @id @default(cuid())
+  userId       String
+  name         String
+  email        String
+  paypalHandle String?
+  lastSplitAt  DateTime?
+  createdAt    DateTime  @default(now())
+
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, email])
+}
