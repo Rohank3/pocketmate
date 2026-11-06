@@ -39,12 +39,14 @@ export interface TransactionRow {
 interface TransactionGridProps {
   rowData: TransactionRow[];
   gridMutation?: GridMutationState | null;
+  selectedCategory?: string;
   onSelectRow?: (row: TransactionRow) => void;
 }
 
 export const TransactionGrid: React.FC<TransactionGridProps> = ({
   rowData,
   gridMutation,
+  selectedCategory,
 }) => {
   const columnDefs = useMemo<ColDef<TransactionRow>[]>(() => [
     {
@@ -157,11 +159,21 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
     sortable: true,
   }), []);
 
-  // Filter or highlight based on agent's mutate_ag_grid instructions
+  // Filter by selected category (from CategoryControlBar) and/or agent grid mutation
   const filteredData = useMemo(() => {
-    if (!gridMutation?.filter) return rowData;
+    let data = rowData;
 
-    return rowData.filter((row) => {
+    if (selectedCategory && selectedCategory.toLowerCase() !== "all") {
+      const target = selectedCategory.toLowerCase();
+      data = data.filter((row) => {
+        const cat = row.category.toLowerCase();
+        return cat === target || cat.includes(target) || target.includes(cat);
+      });
+    }
+
+    if (!gridMutation?.filter) return data;
+
+    return data.filter((row) => {
       for (const [key, val] of Object.entries(gridMutation.filter!)) {
         if (key === "status" && val === "unpaid") {
           if (row.status !== "pending" && row.status !== "unresolved") return false;
@@ -173,15 +185,23 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
       }
       return true;
     });
-  }, [rowData, gridMutation]);
+  }, [rowData, gridMutation, selectedCategory]);
 
   return (
     <div className="flex flex-col h-full bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-2xl">
       {/* Top Banner / Reactive Agent Feedback */}
-      <div className="px-4 py-3 bg-zinc-900/90 border-b border-zinc-800 flex items-center justify-between">
+      <div className="px-4 py-2.5 bg-zinc-900/90 border-b border-zinc-800 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <DollarSign className="w-4 h-4 text-emerald-400" />
           <h2 className="text-sm font-semibold text-zinc-100">Live Financial Ledger (PayPal & AG Grid)</h2>
+          <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700/60">
+            {filteredData.length} of {rowData.length} records
+          </span>
+          {selectedCategory && selectedCategory.toLowerCase() !== "all" && (
+            <span className="text-[11px] px-2 py-0.5 rounded bg-blue-950/70 text-blue-300 border border-blue-800/60 font-medium">
+              Category: {selectedCategory}
+            </span>
+          )}
         </div>
 
         {gridMutation?.statusMessage && (
