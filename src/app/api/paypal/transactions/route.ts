@@ -18,10 +18,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const txs = await paypalClient.fetchRecentTransactions(hoursBack);
-
     const userEmail = (currentUser?.email || "").toLowerCase().trim();
-    const userName = (currentUser?.name || "").toLowerCase().trim();
 
     // Determine account role
     const isBusiness =
@@ -34,25 +31,22 @@ export async function GET(req: NextRequest) {
     // Default to 'personal' if logged in as personal buyer, otherwise 'all'
     const activeScope = scopeParam || (currentUser && !isBusiness ? "personal" : "all");
 
-    // Filter transactions based on scope
-    const scopedTxs =
-      activeScope === "personal" && currentUser
-        ? txs.filter((t) => {
-            const debtorLower = (t.debtorName || "").toLowerCase().trim();
-            const emailLower = (t.recipientEmail || "").toLowerCase().trim();
+    // Query PayPal live APIs - if personal scope, query strictly for this user
+    const queryEmail = activeScope === "personal" && userEmail ? userEmail : undefined;
+    const txs = await paypalClient.fetchRecentTransactions(hoursBack, queryEmail);
 
-            const nameMatch =
-              userName &&
-              debtorLower.length > 0 &&
-              (debtorLower.includes(userName) || userName.includes(debtorLower));
-            const emailMatch =
-              userEmail &&
-              emailLower.length > 0 &&
-              (emailLower.includes(userEmail) || userEmail.includes(emailLower));
+    // Also get total platform count if in personal mode
+    let totalPlatformCount = txs.length;
+    if (activeScope === "personal") {
+      try {
+        const allTxs = await paypalClient.fetchRecentTransactions(hoursBack);
+        totalPlatformCount = allTxs.length;
+      } catch {
+        // fallback
+      }
+    }
 
-            return Boolean(nameMatch || emailMatch);
-          })
-        : txs;
+    const scopedTxs = txs;
 
     // Map to TransactionRow format expected by the frontend
     const formatted = scopedTxs.map((t) => {
@@ -95,7 +89,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       success: true,
       count: formatted.length,
-      totalPlatformCount: txs.length,
+      totalPlatformCount,
       activeScope,
       userRole: isBusiness ? "BUSINESS" : currentUser ? "PERSONAL" : "GUEST",
       currentUser: currentUser ? { name: currentUser.name, email: currentUser.email } : null,

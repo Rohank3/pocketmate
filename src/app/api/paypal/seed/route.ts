@@ -1,9 +1,21 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { paypalClient } from "@/lib/paypal/client";
 
-export async function POST() {
+export async function POST(req: NextRequest) {
   try {
-    const rawTxs = await paypalClient.seedSandboxData();
+    const userCookie = req.cookies.get("pocketmate_user")?.value;
+    let currentUser: { id?: string; email?: string; name?: string } | null = null;
+    if (userCookie) {
+      try {
+        currentUser = JSON.parse(userCookie);
+      } catch {
+        // ignore
+      }
+    }
+
+    const rawTxs = await paypalClient.seedSandboxData(
+      currentUser ? { name: currentUser.name, email: currentUser.email } : undefined
+    );
 
     // Map to TransactionRow format expected by the frontend
     const formatted = rawTxs.map((t) => {
