@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Bot, User, Sparkles, Receipt, ArrowRight, Paperclip } from "lucide-react";
+import { Bot, User, Sparkles, ArrowRight, Paperclip } from "lucide-react";
 import { ActionConfirmCard, ActionCardData } from "../cards/ActionConfirmCard";
 
 export interface ChatMessageItem {
@@ -14,22 +14,18 @@ export interface ChatMessageItem {
 
 interface ChatPanelProps {
   messages: ChatMessageItem[];
-  activePersona: "GENERAL" | "FREELANCER" | "BUSINESS";
   isLoading: boolean;
   onSendMessage: (text: string) => void;
   onUploadReceipt: (file: File) => void;
   onConfirmAction: (cardData: ActionCardData) => Promise<void>;
-  onSelectPersona: (persona: "GENERAL" | "FREELANCER" | "BUSINESS") => void;
 }
 
 export const ChatPanel: React.FC<ChatPanelProps> = ({
   messages,
-  activePersona,
   isLoading,
   onSendMessage,
   onUploadReceipt,
   onConfirmAction,
-  onSelectPersona,
 }) => {
   const [inputText, setInputText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -58,29 +54,6 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     }
   };
 
-  const sampleScenarios = [
-    {
-      label: "Split last 3h (5 ways)",
-      prompt: "Hey, take all the expenses made in the last 3 hours and split them evenly 5 ways with Alex, Dave, Priya, and Sam.",
-    },
-    {
-      label: "Mall spend + Budget check",
-      prompt: "I just paid for everything at the mall. Looking at today's charges, the Zara hoodie ($65) and Starbucks drinks ($14) were for Sarah. Log the remaining Target groceries under my monthly food budget.",
-    },
-    {
-      label: "Audit Dinner Receipt",
-      prompt: "Check this dinner bill ($115 with tax/tip) against my Bistro Lumiere charge and split it with Mark and Leo if it's fine.",
-    },
-    {
-      label: "Unsettled Debts (AG Grid)",
-      prompt: "Show me all unsettled group debts from this weekend, group them by person.",
-    },
-    {
-      label: "EOD Ambiguity Sweep",
-      prompt: "Run the end-of-day transaction audit triage sweep.",
-    },
-  ];
-
   return (
     <div className="flex flex-col h-full bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden shadow-2xl">
       {/* Hidden file picker for real receipt audits */}
@@ -92,7 +65,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         className="hidden"
       />
 
-      {/* Header with Persona Switcher */}
+      {/* Header with Autonomous Agent Status */}
       <div className="px-4 py-3 bg-zinc-900/90 border-b border-zinc-800 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
@@ -106,39 +79,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           </div>
         </div>
 
-        {/* Persona Selector */}
-        <div className="flex items-center gap-1 p-1 bg-zinc-800/80 rounded-lg border border-zinc-700/60">
-          {(["GENERAL", "FREELANCER", "BUSINESS"] as const).map((p) => (
-            <button
-              key={p}
-              onClick={() => onSelectPersona(p)}
-              className={`px-2 py-0.5 text-[11px] font-medium rounded-md transition-all ${
-                activePersona === p
-                  ? "bg-emerald-500 text-zinc-950 shadow-sm font-semibold"
-                  : "text-zinc-400 hover:text-zinc-200"
-              }`}
-            >
-              {p}
-            </button>
-          ))}
+        {/* Dynamic Internal AI Status Badge */}
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[11px] font-medium text-emerald-400">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          <span>Active Agent</span>
         </div>
-      </div>
-
-      {/* Quick Scenario Pills */}
-      <div className="px-3 py-2 bg-zinc-900/40 border-b border-zinc-800/60 overflow-x-auto flex items-center gap-1.5 scrollbar-none">
-        <span className="text-[11px] font-medium text-zinc-400 shrink-0 flex items-center gap-1">
-          <Sparkles className="w-3 h-3 text-emerald-400" /> Scenarios:
-        </span>
-        {sampleScenarios.map((s, idx) => (
-          <button
-            key={idx}
-            onClick={() => onSendMessage(s.prompt)}
-            disabled={isLoading}
-            className="px-2.5 py-1 text-[11px] bg-zinc-800/70 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-300 hover:text-zinc-100 rounded-md border border-zinc-700/50 whitespace-nowrap transition-colors disabled:opacity-40"
-          >
-            {s.label}
-          </button>
-        ))}
       </div>
 
       {/* Messages Feed */}
@@ -222,40 +167,26 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             type="text"
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            placeholder="Type a request (e.g. 'split last 3h bar & diner charges 5 ways')..."
-            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-4 pr-28 py-3 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 transition-all"
+            placeholder="Type a financial request (e.g. 'split dinner $120 with Dave and Sam', 'did I overspend on dining?')..."
+            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-4 pr-24 py-3 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 transition-all"
           />
 
           <div className="absolute right-2 flex items-center gap-1.5">
-            {/* Upload Real Receipt Image Button */}
+            {/* Upload Receipt / Document Image */}
             <button
               type="button"
-              title="Upload receipt image for Gemini Vision audit"
+              title="Upload receipt or bill image for Gemini Vision audit"
               onClick={() => fileInputRef.current?.click()}
-              className="p-1.5 text-zinc-400 hover:text-emerald-400 hover:bg-zinc-800 rounded-lg transition-colors"
+              className="p-1.5 text-zinc-400 hover:text-emerald-400 hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
             >
               <Paperclip className="w-4 h-4" />
-            </button>
-
-            {/* Quick Demo Receipt Trigger */}
-            <button
-              type="button"
-              title="Drop sample receipt"
-              onClick={() =>
-                onSendMessage(
-                  "Check this dinner bill ($115 total) against my PayPal charge and split it with Mark and Leo."
-                )
-              }
-              className="p-1.5 text-zinc-400 hover:text-emerald-400 hover:bg-zinc-800 rounded-lg transition-colors"
-            >
-              <Receipt className="w-4 h-4" />
             </button>
 
             {/* Send Button */}
             <button
               type="submit"
               disabled={!inputText.trim() || isLoading}
-              className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 disabled:opacity-40 text-zinc-950 font-medium rounded-lg transition-colors flex items-center gap-1 text-xs shadow-md shadow-emerald-500/20"
+              className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 disabled:opacity-40 text-zinc-950 font-medium rounded-lg transition-colors flex items-center gap-1 text-xs shadow-md shadow-emerald-500/20 cursor-pointer"
             >
               <span>Send</span>
               <ArrowRight className="w-3.5 h-3.5" />
