@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -11,6 +11,10 @@ import {
   CheckCircle2,
   X,
   Tag,
+  MoreVertical,
+  Edit2,
+  Trash2,
+  Palette,
 } from "lucide-react";
 import { TransactionRow } from "@/components/grid/TransactionGrid";
 
@@ -28,11 +32,16 @@ interface CategoryControlBarProps {
   transactions: TransactionRow[];
   onSelectCategory: (categoryName: string) => void;
   onAddCategory: (category: Omit<CategoryItem, "id">) => void;
-  onEditCategory: (categoryId: string, updatedCap: number, updatedName?: string) => void;
-  onDeleteCategory?: (categoryId: string) => void;
+  onEditCategory: (
+    categoryId: string,
+    updatedCap: number,
+    updatedName?: string,
+    updatedColor?: string
+  ) => void;
+  onDeleteCategory: (categoryId: string) => void;
 }
 
-const PRESET_COLORS = [
+export const PRESET_COLORS = [
   "#10b981", // Emerald
   "#3b82f6", // Blue
   "#8b5cf6", // Purple
@@ -41,6 +50,8 @@ const PRESET_COLORS = [
   "#06b6d4", // Cyan
   "#f43f5e", // Rose
   "#6366f1", // Indigo
+  "#14b8a6", // Teal
+  "#eab308", // Yellow
 ];
 
 export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
@@ -53,17 +64,39 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
   onDeleteCategory,
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalTab, setModalTab] = useState<"add" | "edit">("add");
+  const [modalTab, setModalTab] = useState<"add" | "manage">("manage");
 
   // Form states for adding category
   const [newName, setNewName] = useState("");
   const [newCap, setNewCap] = useState("300");
   const [newColor, setNewColor] = useState(PRESET_COLORS[0]);
 
-  // Editable caps copy
-  const [capsDraft, setCapsDraft] = useState<Record<string, number>>(() =>
-    categories.reduce((acc, cat) => ({ ...acc, [cat.id]: cat.monthlyCap }), {})
-  );
+  // Editing state inside Manage tab
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [editNameDraft, setEditNameDraft] = useState("");
+  const [editCapDraft, setEditCapDraft] = useState("");
+  const [editColorDraft, setEditColorDraft] = useState("");
+
+  // Pill context menu dropdown state
+  const [activeMenuCatId, setActiveMenuCatId] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  // Quick single category edit modal state (when opened directly from pill context menu)
+  const [quickEditCategory, setQuickEditCategory] = useState<CategoryItem | null>(null);
+
+  // Delete confirmation modal state
+  const [categoryPendingDelete, setCategoryPendingDelete] = useState<CategoryItem | null>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setActiveMenuCatId(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Compute spent amount per category dynamically from transactions
   const categoryStats = useMemo(() => {
@@ -80,7 +113,6 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
       totalSpent += tx.amount;
       totalCount += 1;
 
-      // Match exact category name or partial (e.g. Dining vs Dining & Social)
       const matched = categories.find(
         (c) =>
           c.name.toLowerCase() === catKey ||
@@ -112,7 +144,6 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
     return idx === -1 ? 0 : idx;
   }, [options, selectedCategory]);
 
-  // Roundabout carousel: loops from N back to 1, and 1 back to N
   const handlePrevRoundabout = () => {
     const prevIdx = (currentIndex - 1 + totalOptions) % totalOptions;
     onSelectCategory(options[prevIdx]);
@@ -123,7 +154,6 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
     onSelectCategory(options[nextIdx]);
   };
 
-  // Get active item details
   const activeCategoryObj = useMemo(() => {
     if (selectedCategory.toLowerCase() === "all") return null;
     return categories.find((c) => c.name.toLowerCase() === selectedCategory.toLowerCase()) || null;
@@ -164,49 +194,75 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
     onSelectCategory(newName.trim());
   };
 
-  const handleSaveCaps = () => {
-    for (const [id, cap] of Object.entries(capsDraft)) {
-      onEditCategory(id, cap);
+  const handleStartInlineEdit = (cat: CategoryItem) => {
+    setEditingCategoryId(cat.id);
+    setEditNameDraft(cat.name);
+    setEditCapDraft(cat.monthlyCap.toString());
+    setEditColorDraft(cat.color);
+  };
+
+  const handleSaveInlineEdit = (catId: string) => {
+    const cap = parseFloat(editCapDraft) || 100;
+    const name = editNameDraft.trim() || undefined;
+    onEditCategory(catId, cap, name, editColorDraft);
+    setEditingCategoryId(null);
+  };
+
+  const handleConfirmDelete = () => {
+    if (categoryPendingDelete) {
+      onDeleteCategory(categoryPendingDelete.id);
+      setCategoryPendingDelete(null);
+      setActiveMenuCatId(null);
     }
-    setIsModalOpen(false);
+  };
+
+  const handleQuickEditSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickEditCategory) return;
+    const cap = parseFloat(editCapDraft) || quickEditCategory.monthlyCap;
+    const name = editNameDraft.trim() || quickEditCategory.name;
+    onEditCategory(quickEditCategory.id, cap, name, editColorDraft);
+    setQuickEditCategory(null);
+    if (selectedCategory.toLowerCase() === quickEditCategory.name.toLowerCase()) {
+      onSelectCategory(name);
+    }
   };
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 shadow-lg flex flex-col gap-2.5">
-      {/* Top Bar: Roundabout Carousel + Actions */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        {/* Roundabout Category Navigator (Image 2 style with infinite wrap-around) */}
-        <div className="flex items-center gap-2.5 bg-zinc-950 px-3 py-1.5 rounded-lg border border-zinc-800">
+    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 shadow-md flex flex-col gap-2.5">
+      {/* Top Bar: Roundabout Carousel + Budget Cap Meter + Action Buttons */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5">
+        {/* Roundabout Category Navigator */}
+        <div className="flex items-center gap-2 bg-zinc-950 px-2.5 py-1.5 rounded-lg border border-zinc-800">
           <span
-            className="w-3.5 h-3.5 rounded-sm shrink-0"
+            className="w-3 h-3 rounded-sm shrink-0"
             style={{
               backgroundColor: activeCategoryObj ? activeCategoryObj.color : "#3b82f6",
             }}
           />
 
-          <span className="text-xs font-semibold text-zinc-100 min-w-[70px]">
+          <span className="text-xs font-semibold text-zinc-100 min-w-[75px]">
             {selectedCategory.toLowerCase() === "all" ? "All Categories" : selectedCategory}
           </span>
 
-          {/* Looping Roundabout Controls */}
-          <div className="flex items-center gap-1.5 ml-2 border-l border-zinc-800 pl-2">
+          <div className="flex items-center gap-1 ml-1.5 border-l border-zinc-800 pl-1.5">
             <button
               onClick={handlePrevRoundabout}
               className="p-1 rounded hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 cursor-pointer transition-colors"
-              title="Previous category (loops around)"
+              title="Previous category"
               aria-label="Previous category"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
             </button>
 
-            <span className="font-mono text-xs text-zinc-300 px-1 font-medium select-none">
+            <span className="font-mono text-[11px] text-zinc-300 px-1 font-medium select-none">
               {currentIndex + 1} / {totalOptions}
             </span>
 
             <button
               onClick={handleNextRoundabout}
               className="p-1 rounded hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 cursor-pointer transition-colors"
-              title="Next category (loops around)"
+              title="Next category"
               aria-label="Next category"
             >
               <ChevronRight className="w-3.5 h-3.5" />
@@ -215,7 +271,7 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
         </div>
 
         {/* Live Budget Cap Indicator */}
-        <div className="hidden sm:flex items-center gap-3 text-xs">
+        <div className="hidden sm:flex items-center gap-2.5 text-xs">
           <div className="flex items-center gap-1.5 font-mono">
             <span className="text-zinc-400">Spent:</span>
             <span className="font-semibold text-zinc-100">${activeStats.spent.toFixed(2)}</span>
@@ -246,14 +302,14 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
           )}
         </div>
 
-        {/* Manage Categories Button */}
+        {/* Category Actions */}
         <div className="flex items-center gap-1.5 ml-auto">
           <button
             onClick={() => {
               setModalTab("add");
               setIsModalOpen(true);
             }}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold cursor-pointer shadow-sm transition-all"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white text-xs font-semibold cursor-pointer shadow-sm transition-all focus-visible:outline-2 focus-visible:outline-blue-400"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Add Category</span>
@@ -261,23 +317,21 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
 
           <button
             onClick={() => {
-              setCapsDraft(
-                categories.reduce((acc, cat) => ({ ...acc, [cat.id]: cat.monthlyCap }), {})
-              );
-              setModalTab("edit");
+              setModalTab("manage");
+              setEditingCategoryId(null);
               setIsModalOpen(true);
             }}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium cursor-pointer transition-all"
-            title="Adjust budget caps"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-750 text-zinc-300 hover:text-zinc-100 text-xs font-medium cursor-pointer transition-all border border-zinc-700/60 focus-visible:outline-2 focus-visible:outline-zinc-400"
+            title="Manage, rename, and set budget caps"
           >
-            <Settings2 className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">Edit Caps</span>
+            <Settings2 className="w-3.5 h-3.5 text-zinc-400" />
+            <span>Manage Categories</span>
           </button>
         </div>
       </div>
 
-      {/* Category Pills (Direct 1-Click Interactive Filtering) */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-0.5 scrollbar-thin">
+      {/* Category Pills with 3-Dot Context Action Menu */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-0.5 scrollbar-thin relative">
         {options.map((optName) => {
           const isSelected = selectedCategory.toLowerCase() === optName.toLowerCase();
           const isAll = optName.toLowerCase() === "all";
@@ -288,35 +342,98 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
           const catOverCap = catObj ? stat.spent > catObj.monthlyCap : false;
 
           return (
-            <button
-              key={optName}
-              onClick={() => onSelectCategory(optName)}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer border ${
-                isSelected
-                  ? "bg-blue-600 text-white border-blue-400 shadow-md shadow-blue-500/20"
-                  : "bg-zinc-950/80 text-zinc-300 border-zinc-800 hover:border-zinc-700 hover:text-zinc-100"
-              }`}
-            >
-              {!isAll && (
-                <span
-                  className="w-2 h-2 rounded-full"
-                  style={{ backgroundColor: catObj?.color || "#3b82f6" }}
-                />
-              )}
-              <span>{optName}</span>
-              <span
-                className={`text-[10px] font-mono px-1 rounded ${
+            <div key={optName} className="relative group/pill flex items-center shrink-0">
+              <button
+                onClick={() => onSelectCategory(optName)}
+                className={`flex items-center gap-1.5 pl-2.5 pr-2 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer border ${
                   isSelected
-                    ? "bg-blue-800 text-blue-100"
-                    : catOverCap
-                    ? "bg-rose-950/80 text-rose-300 border border-rose-800/40"
-                    : "bg-zinc-800 text-zinc-400"
+                    ? "bg-blue-600 text-white border-blue-400 shadow-md shadow-blue-500/20"
+                    : "bg-zinc-950/90 text-zinc-300 border-zinc-800 hover:border-zinc-700 hover:text-zinc-100"
                 }`}
               >
-                ${stat.spent.toFixed(0)}
-                {catOverCap && " ⚠️"}
-              </span>
-            </button>
+                {!isAll && (
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ backgroundColor: catObj?.color || "#3b82f6" }}
+                  />
+                )}
+                <span>{optName}</span>
+                <span
+                  className={`text-[10px] font-mono px-1 rounded ${
+                    isSelected
+                      ? "bg-blue-800 text-blue-100"
+                      : catOverCap
+                      ? "bg-rose-950/80 text-rose-300 border border-rose-800/40"
+                      : "bg-zinc-800 text-zinc-400"
+                  }`}
+                >
+                  ${stat.spent.toFixed(0)}
+                  {catOverCap && " ⚠️"}
+                </span>
+
+                {/* 3-dots trigger inside custom category pills */}
+                {!isAll && catObj && (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveMenuCatId(activeMenuCatId === catObj.id ? null : catObj.id);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.stopPropagation();
+                        setActiveMenuCatId(activeMenuCatId === catObj.id ? null : catObj.id);
+                      }
+                    }}
+                    className={`ml-0.5 p-0.5 rounded hover:bg-black/30 transition-opacity cursor-pointer ${
+                      isSelected ? "text-blue-200 hover:text-white" : "text-zinc-400 hover:text-zinc-200"
+                    } ${activeMenuCatId === catObj.id ? "opacity-100" : "opacity-60 group-hover/pill:opacity-100"}`}
+                    title={`Options for ${catObj.name}`}
+                    aria-label={`Options for ${catObj.name}`}
+                  >
+                    <MoreVertical className="w-3 h-3" />
+                  </span>
+                )}
+              </button>
+
+              {/* Context Dropdown Menu */}
+              {!isAll && catObj && activeMenuCatId === catObj.id && (
+                <div
+                  ref={menuRef}
+                  className="absolute left-0 top-full mt-1.5 z-40 w-44 rounded-xl bg-zinc-900 border border-zinc-700 shadow-xl py-1 text-xs text-zinc-200 animate-in fade-in zoom-in-95 duration-100"
+                >
+                  <div className="px-3 py-1 text-[10px] font-semibold text-zinc-400 border-b border-zinc-800 uppercase tracking-wider">
+                    {catObj.name}
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setQuickEditCategory(catObj);
+                      setEditNameDraft(catObj.name);
+                      setEditCapDraft(catObj.monthlyCap.toString());
+                      setEditColorDraft(catObj.color);
+                      setActiveMenuCatId(null);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-800 text-left text-zinc-200 cursor-pointer"
+                  >
+                    <Edit2 className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Rename & Edit Cap</span>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCategoryPendingDelete(catObj);
+                      setActiveMenuCatId(null);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-rose-500/10 text-left text-rose-400 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Delete Category</span>
+                  </button>
+                </div>
+              )}
+            </div>
           );
         })}
       </div>
@@ -331,12 +448,12 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
         />
       </div>
 
-      {/* Add / Edit Category Modal */}
+      {/* Comprehensive Manage Categories & Add Category Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
             {/* Modal Header */}
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-800 bg-zinc-900/80">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-800 bg-zinc-900/90">
               <div className="flex items-center gap-2">
                 <Tag className="w-4 h-4 text-blue-400" />
                 <h3 className="text-sm font-semibold text-zinc-100">Category & Budget Cap Manager</h3>
@@ -352,6 +469,16 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
             {/* Modal Tab Switcher */}
             <div className="flex border-b border-zinc-800 bg-zinc-950 px-5 pt-2">
               <button
+                onClick={() => setModalTab("manage")}
+                className={`px-3 py-1.5 text-xs font-semibold border-b-2 cursor-pointer transition-all ${
+                  modalTab === "manage"
+                    ? "border-blue-500 text-blue-400"
+                    : "border-transparent text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                Manage & Rename Categories ({categories.length})
+              </button>
+              <button
                 onClick={() => setModalTab("add")}
                 className={`px-3 py-1.5 text-xs font-semibold border-b-2 cursor-pointer transition-all ${
                   modalTab === "add"
@@ -359,23 +486,154 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
                     : "border-transparent text-zinc-400 hover:text-zinc-200"
                 }`}
               >
-                Add New Category
-              </button>
-              <button
-                onClick={() => setModalTab("edit")}
-                className={`px-3 py-1.5 text-xs font-semibold border-b-2 cursor-pointer transition-all ${
-                  modalTab === "edit"
-                    ? "border-blue-500 text-blue-400"
-                    : "border-transparent text-zinc-400 hover:text-zinc-200"
-                }`}
-              >
-                Edit Monthly Budget Caps
+                + Add New Category
               </button>
             </div>
 
             {/* Modal Body */}
             <div className="p-5">
-              {modalTab === "add" ? (
+              {modalTab === "manage" ? (
+                <div className="flex flex-col gap-3">
+                  <p className="text-xs text-zinc-400">
+                    Rename categories, adjust monthly spending ceilings, customize colors, or delete unneeded categories. Existing transactions will remain safely preserved.
+                  </p>
+
+                  <div className="flex flex-col gap-2.5 max-h-[320px] overflow-y-auto pr-1">
+                    {categories.map((cat) => {
+                      const stat = categoryStats.byCategory[cat.name.toLowerCase()] || { spent: 0, count: 0 };
+                      const isEditing = editingCategoryId === cat.id;
+                      const isOver = stat.spent > cat.monthlyCap;
+
+                      if (isEditing) {
+                        return (
+                          <div
+                            key={cat.id}
+                            className="p-3 rounded-xl bg-zinc-950 border border-blue-500/50 flex flex-col gap-2.5"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-semibold text-blue-400">Edit Category</span>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveInlineEdit(cat.id)}
+                                  className="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold cursor-pointer"
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingCategoryId(null)}
+                                  className="px-2 py-1 rounded bg-zinc-800 text-zinc-300 hover:text-white text-xs cursor-pointer"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[11px] text-zinc-400 block mb-1">Name</label>
+                                <input
+                                  type="text"
+                                  value={editNameDraft}
+                                  onChange={(e) => setEditNameDraft(e.target.value)}
+                                  className="w-full px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700 text-xs text-zinc-100 focus:outline-hidden focus:border-blue-500"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[11px] text-zinc-400 block mb-1">Monthly Cap ($)</label>
+                                <input
+                                  type="number"
+                                  min="10"
+                                  step="10"
+                                  value={editCapDraft}
+                                  onChange={(e) => setEditCapDraft(e.target.value)}
+                                  className="w-full px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700 text-xs text-zinc-100 font-mono focus:outline-hidden focus:border-blue-500"
+                                />
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="text-[11px] text-zinc-400 block mb-1">Badge Color</label>
+                              <div className="flex items-center gap-1.5">
+                                {PRESET_COLORS.map((c) => (
+                                  <button
+                                    key={c}
+                                    type="button"
+                                    onClick={() => setEditColorDraft(c)}
+                                    className={`w-5 h-5 rounded-full cursor-pointer transition-transform ${
+                                      editColorDraft === c ? "scale-125 ring-2 ring-white" : "hover:scale-110"
+                                    }`}
+                                    style={{ backgroundColor: c }}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div
+                          key={cat.id}
+                          className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-950 border border-zinc-800 hover:border-zinc-700/80 transition-colors"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <span
+                              className="w-3.5 h-3.5 rounded-full shrink-0"
+                              style={{ backgroundColor: cat.color }}
+                            />
+                            <div>
+                              <p className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
+                                {cat.name}
+                                {isOver && (
+                                  <span className="text-[10px] text-rose-400 bg-rose-500/10 border border-rose-500/20 px-1 rounded">
+                                    Over Cap
+                                  </span>
+                                )}
+                              </p>
+                              <p className="text-[11px] text-zinc-500 font-mono">
+                                Spent: ${stat.spent.toFixed(2)} / ${cat.monthlyCap.toFixed(0)} ({stat.count} tx)
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleStartInlineEdit(cat)}
+                              className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                              title={`Rename or edit ${cat.name}`}
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setCategoryPendingDelete(cat)}
+                              className="p-1.5 rounded-lg bg-zinc-900 hover:bg-rose-500/20 text-zinc-400 hover:text-rose-400 transition-colors cursor-pointer"
+                              title={`Delete ${cat.name}`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-zinc-800 text-xs text-zinc-400">
+                    <span>{categories.length} active categories</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsModalOpen(false)}
+                      className="px-4 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium cursor-pointer"
+                    >
+                      Done
+                    </button>
+                  </div>
+                </div>
+              ) : (
                 <form onSubmit={handleCreateCategory} className="flex flex-col gap-3.5">
                   <div>
                     <label className="text-xs font-medium text-zinc-300 block mb-1">
@@ -414,7 +672,7 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
                     <label className="text-xs font-medium text-zinc-300 block mb-1.5">
                       Badge Color
                     </label>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       {PRESET_COLORS.map((c) => (
                         <button
                           key={c}
@@ -445,88 +703,134 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
                     </button>
                   </div>
                 </form>
-              ) : (
-                <div className="flex flex-col gap-3">
-                  <p className="text-xs text-zinc-400 mb-1">
-                    Adjust your monthly spending ceilings. Changing these values immediately updates all charts, ledgers, and breach alerts.
-                  </p>
-
-                  <div className="flex flex-col gap-2 max-h-[260px] overflow-y-auto pr-1">
-                    {categories.map((cat) => {
-                      const stat = categoryStats.byCategory[cat.name.toLowerCase()] || { spent: 0, count: 0 };
-                      const draftVal = capsDraft[cat.id] ?? cat.monthlyCap;
-                      const isDraftOver = stat.spent > draftVal;
-
-                      return (
-                        <div
-                          key={cat.id}
-                          className="flex items-center justify-between p-2.5 rounded-lg bg-zinc-950 border border-zinc-800/80"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span
-                              className="w-3 h-3 rounded-full shrink-0"
-                              style={{ backgroundColor: cat.color }}
-                            />
-                            <div>
-                              <p className="text-xs font-semibold text-zinc-200">{cat.name}</p>
-                              <p className="text-[11px] text-zinc-500">
-                                Spent: ${stat.spent.toFixed(2)} ({stat.count} tx)
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <div className="relative w-24">
-                              <span className="absolute left-2 top-1.5 text-xs text-zinc-500 font-mono">$</span>
-                              <input
-                                type="number"
-                                min="0"
-                                step="25"
-                                value={draftVal}
-                                onChange={(e) => {
-                                  const val = parseFloat(e.target.value) || 0;
-                                  setCapsDraft((prev) => ({ ...prev, [cat.id]: val }));
-                                }}
-                                className={`w-full pl-5 pr-2 py-1 rounded bg-zinc-900 border text-xs text-right font-mono text-zinc-100 ${
-                                  isDraftOver ? "border-rose-500/60" : "border-zinc-700"
-                                }`}
-                              />
-                            </div>
-
-                            {cat.isCustom && onDeleteCategory && (
-                              <button
-                                type="button"
-                                onClick={() => onDeleteCategory(cat.id)}
-                                className="text-zinc-500 hover:text-rose-400 p-1 cursor-pointer"
-                                title="Delete custom category"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-zinc-800">
-                    <button
-                      type="button"
-                      onClick={() => setIsModalOpen(false)}
-                      className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-zinc-400 hover:bg-zinc-800 cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleSaveCaps}
-                      className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold cursor-pointer shadow-md"
-                    >
-                      Apply Updated Caps
-                    </button>
-                  </div>
-                </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Edit Single Category Modal (triggered from pill context menu) */}
+      {quickEditCategory && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-800 bg-zinc-900/90">
+              <div className="flex items-center gap-2">
+                <Edit2 className="w-4 h-4 text-blue-400" />
+                <h3 className="text-sm font-semibold text-zinc-100">Edit {quickEditCategory.name}</h3>
+              </div>
+              <button
+                onClick={() => setQuickEditCategory(null)}
+                className="text-zinc-400 hover:text-zinc-200 p-1 rounded-lg hover:bg-zinc-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleQuickEditSave} className="p-5 flex flex-col gap-3.5">
+              <div>
+                <label className="text-xs font-medium text-zinc-300 block mb-1">Category Name</label>
+                <input
+                  type="text"
+                  value={editNameDraft}
+                  onChange={(e) => setEditNameDraft(e.target.value)}
+                  required
+                  className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 focus:outline-hidden focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-zinc-300 block mb-1">Monthly Budget Cap ($)</label>
+                <div className="relative">
+                  <DollarSign className="w-4 h-4 absolute left-2.5 top-2.5 text-zinc-500" />
+                  <input
+                    type="number"
+                    min="10"
+                    step="10"
+                    value={editCapDraft}
+                    onChange={(e) => setEditCapDraft(e.target.value)}
+                    required
+                    className="w-full pl-8 pr-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 font-mono focus:outline-hidden focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-zinc-300 block mb-1.5 flex items-center gap-1.5">
+                  <Palette className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>Category Color</span>
+                </label>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {PRESET_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setEditColorDraft(c)}
+                      className={`w-6 h-6 rounded-full cursor-pointer transition-transform ${
+                        editColorDraft === c ? "scale-125 ring-2 ring-white" : "hover:scale-110"
+                      }`}
+                      style={{ backgroundColor: c }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 mt-2 pt-3 border-t border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setQuickEditCategory(null)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-400 hover:bg-zinc-800 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold cursor-pointer shadow-md"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Safeguard Modal */}
+      {categoryPendingDelete && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-zinc-100">
+                  Delete &ldquo;{categoryPendingDelete.name}&rdquo;?
+                </h3>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Are you sure you want to remove this category?
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-400 mb-4">
+              Transactions currently marked as <span className="text-zinc-200 font-semibold">{categoryPendingDelete.name}</span> will be safely reassigned to <span className="text-blue-400 font-medium">Uncategorized</span> so no financial history is lost.
+            </div>
+
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setCategoryPendingDelete(null)}
+                className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-zinc-400 hover:bg-zinc-800 cursor-pointer"
+              >
+                Keep Category
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold cursor-pointer shadow-md shadow-rose-600/20"
+              >
+                Yes, Delete Category
+              </button>
             </div>
           </div>
         </div>
