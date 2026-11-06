@@ -96,6 +96,18 @@ export default function Home() {
   const [transactions, setTransactions] = useState<TransactionRow[]>(INITIAL_TRANSACTIONS);
   const [gridMutation, setGridMutation] = useState<GridMutationState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [authenticatedUser, setAuthenticatedUser] = useState<{ name: string; email: string } | null>(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("connected") === "paypal") {
+        return {
+          name: params.get("userName") || "Sandbox User",
+          email: params.get("userEmail") || "",
+        };
+      }
+    }
+    return null;
+  });
 
   const [messages, setMessages] = useState<ChatMessageItem[]>([
     {
@@ -332,7 +344,8 @@ export default function Home() {
         </div>
 
         {/* Operating Mode Indicator */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Persona Badge */}
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs">
             <span className="text-zinc-400">Mode:</span>
             <span className="font-semibold text-emerald-400 flex items-center gap-1">
@@ -343,10 +356,35 @@ export default function Home() {
             </span>
           </div>
 
+          {/* Sandbox Status */}
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-300">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="font-mono">Sandbox Connected</span>
           </div>
+
+          {/* Log in with PayPal / Authenticated User */}
+          {authenticatedUser ? (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900 border border-blue-500/30 text-xs">
+              <span className="w-2 h-2 rounded-full bg-blue-400" />
+              <span className="text-zinc-200 font-medium">{authenticatedUser.name}</span>
+              <button
+                onClick={() => setAuthenticatedUser(null)}
+                className="text-[10px] text-zinc-500 hover:text-zinc-300 ml-1 underline cursor-pointer"
+              >
+                Sign out
+              </button>
+            </div>
+          ) : (
+            <a
+              href="/api/auth/paypal"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0070ba] hover:bg-[#005ea6] active:bg-[#003087] text-white text-xs font-semibold shadow-md shadow-blue-500/20 transition-all cursor-pointer"
+            >
+              <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                <path d="M20.067 8.478c.492.315.844.818.996 1.424.238.948.067 2.05-.48 3.108-1.042 2.015-2.918 3.32-5.148 3.585-.453.053-.91.08-1.367.08h-.468c-.468 0-.87.332-.942.793l-.845 5.353-.028.175c-.033.206-.21.354-.42.354H8.05c-.26 0-.45-.24-.41-.497l2.128-13.49c.04-.257.26-.45.52-.45h4.636c1.69 0 3.19.467 4.143 1.565z" />
+              </svg>
+              <span>Log in with PayPal</span>
+            </a>
+          )}
         </div>
       </header>
 
