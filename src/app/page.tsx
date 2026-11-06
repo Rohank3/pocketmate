@@ -717,17 +717,10 @@ export default function Home() {
                   {currentUser.email}
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 ml-2 border-l border-zinc-800 pl-2">
-                <button
-                  onClick={() => setIsLoginModalOpen(true)}
-                  className="text-[11px] text-blue-400 hover:text-blue-300 font-medium cursor-pointer transition-colors"
-                >
-                  Switch
-                </button>
-                <span className="text-zinc-600">·</span>
+              <div className="flex items-center ml-2 border-l border-zinc-800 pl-2">
                 <button
                   onClick={handleUserLogout}
-                  className="text-[11px] text-zinc-400 hover:text-rose-400 font-medium cursor-pointer transition-colors"
+                  className="text-xs text-zinc-400 hover:text-rose-400 font-medium cursor-pointer transition-colors"
                 >
                   Log Out
                 </button>
