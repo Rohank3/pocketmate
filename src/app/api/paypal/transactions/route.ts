@@ -1,24 +1,42 @@
 import { NextRequest, NextResponse } from "next/server";
 import { paypalClient } from "@/lib/paypal/client";
+import { verifySessionCookie } from "@/lib/auth/session";
+import { z } from "zod";
+
+const TransactionsQuerySchema = z.object({
+  hoursBack: z.coerce.number().finite().min(0.5).max(720).default(720),
+  scope: z.enum(["personal", "all"]).optional(),
+});
 
 export async function GET(req: NextRequest) {
   try {
-    const hoursBackParam = req.nextUrl.searchParams.get("hoursBack");
-    const hoursBack = hoursBackParam ? parseFloat(hoursBackParam) : 720; // default 30 days
-    const scopeParam = req.nextUrl.searchParams.get("scope"); // "personal" | "all"
+    const rawHours = req.nextUrl.searchParams.get("hoursBack");
+    const rawScope = req.nextUrl.searchParams.get("scope");
+
+    const queryParse = TransactionsQuerySchema.safeParse({
+      hoursBack: rawHours ?? undefined,
+      scope: rawScope ?? undefined,
+    });
+
+    const hoursBack = queryParse.success ? queryParse.data.hoursBack : 720;
+    const scopeParam = queryParse.success ? queryParse.data.scope : undefined;
 
     // Inspect logged-in user from session cookie
     const userCookie = req.cookies.get("pocketmate_user")?.value;
-    let currentUser: { id?: string; email?: string; name?: string } | null = null;
-    if (userCookie) {
-      try {
-        currentUser = JSON.parse(userCookie);
-      } catch {
-        // ignore parse error
-      }
-    }
+    const verified = verifySessionCookie(userCookie);
+    const userEmail = verified?.email || "";
 
-    const userEmail = (currentUser?.email || "").toLowerCase().trim();
+    if (!userEmail) {
+      return NextResponse.json({
+        success: true,
+        count: 0,
+        totalPlatformCount: 0,
+        activeScope: "personal",
+        userRole: "GUEST",
+        currentUser: null,
+        transactions: [],
+      });
+    }
 
     // Determine account role
     const isBusiness =
@@ -28,11 +46,11 @@ export async function GET(req: NextRequest) {
       userEmail.includes("studio") ||
       userEmail.includes("ventures");
 
-    // Default to 'personal' if logged in as personal buyer, otherwise 'all'
-    const activeScope = scopeParam || (currentUser && !isBusiness ? "personal" : "all");
+    // Scope enforcement: personal accounts are strictly restricted to their own transactions
+    const activeScope = isBusiness && scopeParam === "all" ? "all" : "personal";
 
     // Query PayPal live APIs - if personal scope, query strictly for this user
-    const queryEmail = activeScope === "personal" && userEmail ? userEmail : undefined;
+    const queryEmail = activeScope === "personal" ? userEmail : undefined;
     const txs = await paypalClient.fetchRecentTransactions(hoursBack, queryEmail);
 
     // Also get total platform count if in personal mode
@@ -91,8 +109,8 @@ export async function GET(req: NextRequest) {
       count: formatted.length,
       totalPlatformCount,
       activeScope,
-      userRole: isBusiness ? "BUSINESS" : currentUser ? "PERSONAL" : "GUEST",
-      currentUser: currentUser ? { name: currentUser.name, email: currentUser.email } : null,
+      userRole: isBusiness ? "BUSINESS" : "PERSONAL",
+      currentUser: verified ? { name: verified.name, email: verified.email } : null,
       transactions: formatted,
     });
   } catch (error: unknown) {
