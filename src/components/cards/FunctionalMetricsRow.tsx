@@ -5,12 +5,14 @@ import {
   Wallet,
   Users,
   Clock,
+  ShieldAlert,
   BarChart3,
   CalendarDays,
   Send,
   Filter,
   CheckCircle2,
   ArrowRight,
+  Sparkles,
   CreditCard,
 } from "lucide-react";
 import type { CategoryItem } from "@/components/categories/CategoryControlBar";
@@ -34,6 +36,17 @@ interface DebtorSummary {
   totalOwed: number;
   count: number;
   sampleMerchant: string;
+}
+
+interface ActionQueueItem {
+  id: string;
+  type: "dispute" | "uncategorized" | "debtor" | "budget_breach" | "debt_owed";
+  title: string;
+  description: string;
+  amount?: number;
+  severity: "high" | "medium" | "low";
+  prompt: string;
+  buttonLabel: string;
 }
 
 export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
@@ -300,10 +313,99 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
     };
   }, [events, transactions, currentUser, activeScope, isClient]);
 
+  // ==========================================
+  // 4. CARD 4: ACTION REQUIRED (TRIAGE LIST)
+  // ==========================================
+  const actionItems = useMemo<ActionQueueItem[]>(() => {
+    const queue: ActionQueueItem[] = [];
+
+    // A. Disputed transactions / split mismatches
+    const disputed = transactions.filter((t) => t.status === "disputed");
+    disputed.forEach((t) => {
+      queue.push({
+        id: `dispute_${t.id}`,
+        type: "dispute",
+        title: `Disputed Split: ${t.merchant}`,
+        description: `Split mismatch flag on $${t.amount.toFixed(2)} with ${t.debtor_name || "debtor"}.`,
+        amount: t.amount,
+        severity: "high",
+        prompt: `PocketMate, please analyze and resolve the disputed split on ${t.merchant} for $${t.amount.toFixed(2)} (Debtor: ${t.debtor_name}).`,
+        buttonLabel: "Resolve with Agent",
+      });
+    });
+
+    // B. Breached category budgets
+    categoryBars.forEach((cat) => {
+      if (cat.isOver) {
+        const diff = cat.spent - cat.monthlyCap;
+        queue.push({
+          id: `budget_${cat.id}`,
+          type: "budget_breach",
+          title: `${cat.name} Cap Breached`,
+          description: `Spent $${cat.spent.toFixed(2)} which exceeds $${cat.monthlyCap.toFixed(0)} cap by $${diff.toFixed(2)}.`,
+          amount: diff,
+          severity: "high",
+          prompt: `PocketMate, my ${cat.name} budget has breached its $${cat.monthlyCap} cap by $${diff.toFixed(2)}. Please review category transactions and suggest cost optimizations.`,
+          buttonLabel: "Audit Spending",
+        });
+      }
+    });
+
+    // C. Uncategorized transactions
+    const uncat = transactions.filter(
+      (t) => t.category === "Uncategorized" || t.category === "uncategorized" || !t.category
+    );
+    if (uncat.length > 0) {
+      queue.push({
+        id: "uncat_batch",
+        type: "uncategorized",
+        title: `${uncat.length} Uncategorized Record${uncat.length > 1 ? "s" : ""}`,
+        description: `${uncat.slice(0, 2).map((t) => t.merchant).join(", ")}${uncat.length > 2 ? "..." : ""} need category tagging.`,
+        severity: "medium",
+        prompt: `PocketMate, please automatically suggest and assign categories for all ${uncat.length} uncategorized transactions in my ledger.`,
+        buttonLabel: "AI Auto-Categorize",
+      });
+    }
+
+    // D. Unassigned debtor splits
+    const unassigned = transactions.filter((t) => t.debtor_name === "Unassigned");
+    if (unassigned.length > 0) {
+      queue.push({
+        id: "unassigned_batch",
+        type: "debtor",
+        title: `${unassigned.length} Unassigned Debtor Split${unassigned.length > 1 ? "s" : ""}`,
+        description: `Shared expenses pending debtor assignment (${unassigned.slice(0, 2).map((t) => t.merchant).join(", ")}).`,
+        severity: "medium",
+        prompt: `PocketMate, please help assign debtors and calculate fair splits for the ${unassigned.length} unassigned shared transactions.`,
+        buttonLabel: "Assign Debtors",
+      });
+    }
+
+    // E. Pending personal debts
+    if (personalDebtBills.length > 0) {
+      const urgentDebt = personalDebtBills[0];
+      queue.push({
+        id: `debt_urgent_${urgentDebt.id}`,
+        type: "debt_owed",
+        title: `Pending Debt: ${urgentDebt.counterparty || urgentDebt.title}`,
+        description: `$${urgentDebt.amount.toFixed(2)} due to ${urgentDebt.counterparty || "peer"}.`,
+        amount: urgentDebt.amount,
+        severity: "high",
+        prompt: `PocketMate, please initiate payment review for the pending debt of $${urgentDebt.amount.toFixed(2)} to ${urgentDebt.counterparty || urgentDebt.title}.`,
+        buttonLabel: "Settle via PayPal",
+      });
+    }
+
+    return queue;
+  }, [transactions, categoryBars, personalDebtBills]);
+
   return (
     <div ref={containerRef} className="relative mb-6">
+      {/* 4 Responsive Actionable Cards */}
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        {/* CARD 1: Total Monthly Budget */}
+        {/* ========================================================= */}
+        {/* CARD 1: Total Monthly Budget (Unaffected by Selection)   */}
+        {/* ========================================================= */}
         <div
           onMouseEnter={() => handleMouseEnter(1)}
           onMouseLeave={handleMouseLeave}
@@ -358,6 +460,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
               className="absolute left-0 top-[calc(100%+8px)] w-80 sm:w-96 p-4 rounded-xl bg-zinc-950/95 border border-zinc-700 shadow-2xl backdrop-blur-xl z-50 animate-in fade-in zoom-in-95 duration-150"
               onClick={(e) => e.stopPropagation()}
             >
+              {/* Flyout Header */}
               <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
                 <div className="flex items-center gap-2">
                   <BarChart3 className="w-4 h-4 text-emerald-400" />
@@ -370,6 +473,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                 </span>
               </div>
 
+              {/* Overall Progress Bar */}
               <div className="mt-3 mb-4">
                 <div className="flex justify-between text-xs mb-1 font-mono">
                   <span className="text-zinc-400">Total Spent</span>
@@ -391,6 +495,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                 </div>
               </div>
 
+              {/* Category-by-Category Horizontal Comparative Bar Chart */}
               <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider mb-2.5">
                 Category Spending Caps
               </p>
@@ -427,6 +532,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                 ))}
               </div>
 
+              {/* Shortcut to full Studio */}
               <div className="mt-4 pt-3 border-t border-zinc-800/80 flex items-center justify-between">
                 <span className="text-[11px] text-zinc-500">Live analytics</span>
                 <button
@@ -445,7 +551,9 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
           )}
         </div>
 
-        {/* CARD 2: Friends Owe You */}
+        {/* ========================================================= */}
+        {/* CARD 2: Friends Owe You (Breakdown on Hover)              */}
+        {/* ========================================================= */}
         <div
           onMouseEnter={() => handleMouseEnter(2)}
           onMouseLeave={handleMouseLeave}
@@ -484,6 +592,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
               className="absolute left-0 sm:left-auto lg:left-0 top-[calc(100%+8px)] w-80 sm:w-96 p-4 rounded-xl bg-zinc-950/95 border border-zinc-700 shadow-2xl backdrop-blur-xl z-50 animate-in fade-in zoom-in-95 duration-150"
               onClick={(e) => e.stopPropagation()}
             >
+              {/* Header */}
               <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
                 <div className="flex items-center gap-2">
                   <Users className="w-4 h-4 text-amber-400" />
@@ -496,6 +605,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                 </span>
               </div>
 
+              {/* Debtor List */}
               <div className="mt-3 flex flex-col gap-2.5 max-h-60 overflow-y-auto pr-1">
                 {debtorList.length === 0 ? (
                   <div className="py-6 text-center">
@@ -528,6 +638,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                           ${debtor.totalOwed.toFixed(2)}
                         </span>
                         <div className="flex items-center gap-1">
+                          {/* 1-Click Filter Ledger */}
                           <button
                             title="Filter ledger for this debtor"
                             onClick={() => {
@@ -540,6 +651,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                           >
                             <Filter className="w-3 h-3" />
                           </button>
+                          {/* 1-Click Send Reminder via PocketMate */}
                           <button
                             title="Ask PocketMate to draft payment reminder"
                             onClick={() => {
@@ -560,6 +672,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                 )}
               </div>
 
+              {/* Footer info */}
               {debtorList.length > 0 && (
                 <div className="mt-3 pt-2.5 border-t border-zinc-800 text-[11px] text-zinc-500 flex items-center justify-between">
                   <span>Click filter icon to view records</span>
@@ -570,7 +683,9 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
           )}
         </div>
 
-        {/* CARD 3: Upcoming Bills Due */}
+        {/* ========================================================= */}
+        {/* CARD 3: Upcoming Bills Due (Subscriptions vs We Owe)     */}
+        {/* ========================================================= */}
         <div
           onMouseEnter={() => handleMouseEnter(3)}
           onMouseLeave={handleMouseLeave}
@@ -613,6 +728,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
               className="absolute right-0 sm:right-auto lg:right-auto top-[calc(100%+8px)] w-80 sm:w-96 p-4 rounded-xl bg-zinc-950/95 border border-zinc-700 shadow-2xl backdrop-blur-xl z-50 animate-in fade-in zoom-in-95 duration-150"
               onClick={(e) => e.stopPropagation()}
             >
+              {/* Header */}
               <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
                 <div className="flex items-center gap-2">
                   <CalendarDays className="w-4 h-4 text-blue-400" />
@@ -629,7 +745,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                   className="text-[11px] font-semibold text-blue-400 hover:text-blue-300 flex items-center gap-1"
                 >
                   <span>Open Calendar</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
+                  <ArrowRight className="w-3 h-3" />
                 </button>
               </div>
 
@@ -722,6 +838,162 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                   )}
                 </div>
               </div>
+            </div>
+          )}
+        </div>
+
+        {/* ========================================================= */}
+        {/* CARD 4: Action Required (Interactive Triage & AI Prompts) */}
+        {/* ========================================================= */}
+        <div
+          onMouseEnter={() => handleMouseEnter(4)}
+          onMouseLeave={handleMouseLeave}
+          onClick={() => handleCardClick(4)}
+          className={`relative p-4 rounded-xl bg-zinc-900/80 border transition-all duration-200 cursor-pointer shadow-sm select-none ${
+            isFlyoutOpen(4)
+              ? "border-rose-500/50 bg-zinc-900 shadow-rose-500/10 ring-1 ring-rose-500/30"
+              : "border-zinc-800/80 hover:border-zinc-700 hover:bg-zinc-900/90"
+          }`}
+          role="button"
+          tabIndex={0}
+          aria-expanded={isFlyoutOpen(4)}
+        >
+          <div className="flex items-center justify-between">
+            <div className="min-w-0 flex-1 pr-2">
+              <p className="text-xs text-zinc-400 font-medium">Action Required</p>
+              <p
+                className={`text-lg font-bold font-mono mt-0.5 tracking-tight truncate ${
+                  actionItems.length > 0 ? "text-rose-400" : "text-emerald-400"
+                }`}
+              >
+                {actionItems.length} {actionItems.length === 1 ? "Item" : "Items"} to Review
+              </p>
+              <p className="text-[11px] text-zinc-400 mt-0.5 truncate">
+                {actionItems.length > 0 ? (
+                  <>
+                    {actionItems.filter((a) => a.type === "dispute").length > 0 &&
+                      `⚠️ ${actionItems.filter((a) => a.type === "dispute").length} Dispute `}
+                    {actionItems.filter((a) => a.type === "uncategorized").length > 0 &&
+                      `· Uncategorized `}
+                    {actionItems.filter((a) => a.type === "budget_breach").length > 0 &&
+                      `· Cap Breached`}
+                  </>
+                ) : (
+                  "✨ All clear! Zero actions pending"
+                )}
+              </p>
+            </div>
+            <div
+              className={`w-10 h-10 rounded-lg border flex items-center justify-center shrink-0 ${
+                actionItems.length > 0
+                  ? "bg-rose-500/10 border-rose-500/20 text-rose-400"
+                  : "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+              }`}
+            >
+              <ShieldAlert className="w-5 h-5" />
+            </div>
+          </div>
+
+          {/* Popover Flyout for Card 4 */}
+          {isFlyoutOpen(4) && (
+            <div
+              onMouseEnter={() => handleMouseEnter(4)}
+              onMouseLeave={handleMouseLeave}
+              className="absolute right-0 top-[calc(100%+8px)] w-80 sm:w-96 p-4 rounded-xl bg-zinc-950/95 border border-zinc-700 shadow-2xl backdrop-blur-xl z-50 animate-in fade-in zoom-in-95 duration-150"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 text-rose-400" />
+                  <span className="text-xs font-bold text-zinc-100 uppercase tracking-wider">
+                    Action Queue ({actionItems.length})
+                  </span>
+                </div>
+                {actionItems.length > 0 && (
+                  <button
+                    onClick={() => {
+                      onSendChatMessage(
+                        "PocketMate, please review and triage all outstanding action items in my ledger."
+                      );
+                      setActiveFlyout(null);
+                      setPinnedFlyout(null);
+                    }}
+                    className="text-[10px] px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 font-semibold transition-colors flex items-center gap-1"
+                  >
+                    <Sparkles className="w-3 h-3 text-rose-400" />
+                    <span>Triage All with Agent</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Action Items List */}
+              <div className="mt-3 flex flex-col gap-2.5 max-h-64 overflow-y-auto pr-1">
+                {actionItems.length === 0 ? (
+                  <div className="py-6 text-center">
+                    <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-2 opacity-80" />
+                    <p className="text-xs font-semibold text-zinc-200">All Clear!</p>
+                    <p className="text-[11px] text-zinc-500 mt-0.5">
+                      No disputes, unassigned records, or budget breaches require attention.
+                    </p>
+                  </div>
+                ) : (
+                  actionItems.map((item) => (
+                    <div
+                      key={item.id}
+                      className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition-colors flex flex-col gap-2"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <span
+                              className={`text-[9px] px-1.5 py-0.2 rounded font-semibold uppercase ${
+                                item.severity === "high"
+                                  ? "bg-rose-500/20 text-rose-400 border border-rose-500/30"
+                                  : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                              }`}
+                            >
+                              {item.type.replace("_", " ")}
+                            </span>
+                            <span className="text-xs font-bold text-zinc-100 truncate">
+                              {item.title}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-zinc-400">{item.description}</p>
+                        </div>
+                        {item.amount && (
+                          <span className="text-xs font-mono font-bold text-rose-400 shrink-0">
+                            ${item.amount.toFixed(2)}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Interactive Button to take action */}
+                      <div className="flex justify-end pt-1">
+                        <button
+                          onClick={() => {
+                            onSendChatMessage(item.prompt);
+                            setActiveFlyout(null);
+                            setPinnedFlyout(null);
+                          }}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded bg-zinc-800 hover:bg-rose-600 text-zinc-200 hover:text-white text-xs font-medium transition-all shadow-sm"
+                        >
+                          <Sparkles className="w-3 h-3 text-rose-400 group-hover:text-white" />
+                          <span>{item.buttonLabel}</span>
+                          <ArrowRight className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Footer */}
+              {actionItems.length > 0 && (
+                <div className="mt-3 pt-2.5 border-t border-zinc-800 text-[10px] text-zinc-500 text-center">
+                  Clicking an action sends an interactive prompt to PocketMate
+                </div>
+              )}
             </div>
           )}
         </div>
