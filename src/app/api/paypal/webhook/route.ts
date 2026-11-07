@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { paypalClient } from "@/lib/paypal/client";
 import { prisma } from "@/lib/db";
+import { cancelSubscriptionCounterparty } from "@/lib/utils/subscriptionLifecycle";
 
 export async function POST(req: NextRequest) {
   try {
@@ -190,6 +191,44 @@ export async function POST(req: NextRequest) {
         } catch (dbErr) {
           console.warn("[PayPal Webhook DB Warning]", dbErr);
         }
+      }
+    }
+
+    // 9. Handle PayPal Subscription Cancelled / Suspended / Expired
+    if (
+      eventType === "BILLING.SUBSCRIPTION.CANCELLED" ||
+      eventType === "BILLING.SUBSCRIPTION.SUSPENDED" ||
+      eventType === "BILLING.SUBSCRIPTION.EXPIRED"
+    ) {
+      const subscriptionId = (resource.id as string) || "";
+      const statusUpdateTime = (resource.status_update_time as string) || new Date().toISOString();
+      const cancelDate = statusUpdateTime.slice(0, 10);
+
+      console.info(`[PayPal Webhook] Subscription ${eventType}: ${subscriptionId}`);
+
+      try {
+        const matchingEvents = await prisma.scheduledEvent.findMany({
+          where: {
+            type: "outgoing",
+            OR: [
+              { counterparty: { contains: subscriptionId } },
+              { title: { contains: subscriptionId } },
+            ],
+          },
+        });
+
+        for (const evt of matchingEvents) {
+          const updatedCp = cancelSubscriptionCounterparty(evt.counterparty, cancelDate);
+          await prisma.scheduledEvent.update({
+            where: { id: evt.id },
+            data: {
+              counterparty: updatedCp,
+              status: "completed",
+            },
+          });
+        }
+      } catch (subErr) {
+        console.warn("[PayPal Webhook Subscription Cancellation Warning]", subErr);
       }
     }
 
