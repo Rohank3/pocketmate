@@ -1085,21 +1085,13 @@ export default function Home() {
                 {/* Actions Bar for Live PayPal Sandbox */}
                 <div className="flex flex-wrap items-center justify-between gap-2 px-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-zinc-300">Live PayPal Ledger</span>
-
-                    {/* Multi-User Scoped View Badge */}
-                    {currentUser ? (
-                      <span
-                        className="text-[11px] font-medium px-2.5 py-0.5 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono"
-                        title={`Showing scoped activity for ${currentUser.name}`}
-                      >
-                        My Invoices ({transactions.length})
-                      </span>
-                    ) : (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono">
-                        {transactions.length} Sandbox Records
-                      </span>
-                    )}
+                    <span className="text-xs font-semibold text-zinc-200">Live PayPal Ledger</span>
+                    <span
+                      className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-zinc-800/80 text-zinc-400 border border-zinc-700/50"
+                      title={currentUser ? `Showing scoped records for ${currentUser.name}` : "Sandbox records"}
+                    >
+                      {transactions.length} records
+                    </span>
                   </div>
 
                   <div className="flex items-center gap-2">
