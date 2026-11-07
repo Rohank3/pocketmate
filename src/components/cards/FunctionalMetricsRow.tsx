@@ -4,11 +4,14 @@ import React, { useState, useRef, useEffect, useMemo, useSyncExternalStore } fro
 import {
   Wallet,
   Users,
+  Clock,
   BarChart3,
+  CalendarDays,
   Send,
   Filter,
   CheckCircle2,
   ArrowRight,
+  CreditCard,
 } from "lucide-react";
 import type { CategoryItem } from "@/components/categories/CategoryControlBar";
 import type { TransactionRow } from "@/components/grid/TransactionGrid";
@@ -36,9 +39,9 @@ interface DebtorSummary {
 export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
   categories,
   transactions,
-  events: _events,
-  currentUser: _currentUser,
-  activeScope: _activeScope,
+  events,
+  currentUser,
+  activeScope,
   onNavigateTab,
   onFilterLedger,
   onSendChatMessage,
@@ -48,7 +51,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
   const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const _isClient = useSyncExternalStore(
+  const isClient = useSyncExternalStore(
     () => () => {},
     () => true,
     () => false
@@ -191,6 +194,111 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
 
     return { debtorList: list, totalFriendsOwe: sum, totalPendingCount: count };
   }, [transactions]);
+
+  // ==========================================
+  // 3. CARD 3: UPCOMING BILLS DUE (MONTHLY)
+  // Subscriptions vs. What We Owe Someone
+  // ==========================================
+  const {
+    subscriptionBills,
+    personalDebtBills,
+    totalSubscriptionsAmount,
+    totalPersonalDebtsAmount,
+    totalMonthlyDue,
+  } = useMemo(() => {
+    if (!isClient) {
+      return {
+        subscriptionBills: [],
+        personalDebtBills: [],
+        totalSubscriptionsAmount: 0,
+        totalPersonalDebtsAmount: 0,
+        totalMonthlyDue: 0,
+      };
+    }
+
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    // Outgoing events for the current month
+    const outgoingEvents = events.filter((e) => {
+      if (e.type !== "outgoing" || e.status === "completed") return false;
+      if (e.date) {
+        const d = new Date(e.date);
+        return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+      }
+      return true; // Recurring monthly rule
+    });
+
+    const subs: ScheduledEvent[] = [];
+    const debts: ScheduledEvent[] = [];
+
+    outgoingEvents.forEach((ev) => {
+      const titleLower = ev.title.toLowerCase();
+      const catLower = ev.category.toLowerCase();
+      const cpLower = (ev.counterparty || "").toLowerCase();
+
+      const isSub =
+        catLower.includes("sub") ||
+        catLower.includes("util") ||
+        titleLower.includes("netflix") ||
+        titleLower.includes("spotify") ||
+        titleLower.includes("gym") ||
+        titleLower.includes("chatgpt") ||
+        titleLower.includes("cloud") ||
+        titleLower.includes("aws") ||
+        titleLower.includes("wifi") ||
+        titleLower.includes("adobe") ||
+        titleLower.includes("subscription") ||
+        cpLower.includes("start:") ||
+        cpLower.includes("ongoing");
+
+      if (isSub) {
+        subs.push(ev);
+      } else {
+        debts.push(ev);
+      }
+    });
+
+    // Also include transactions where currentUser is debtor
+    const currentUserNameLower = (currentUser?.name || "").toLowerCase().trim();
+    if (currentUser && activeScope === "personal") {
+      const userOwedTxs = transactions.filter((t) => {
+        const d = (t.debtor_name || "").toLowerCase().trim();
+        return (
+          (t.status === "pending" || t.status === "unresolved") &&
+          currentUserNameLower &&
+          d.length > 0 &&
+          (d.includes(currentUserNameLower) || currentUserNameLower.includes(d))
+        );
+      });
+
+      userOwedTxs.forEach((tx) => {
+        debts.push({
+          id: `tx_owed_${tx.id}`,
+          title: `Owed for ${tx.merchant}`,
+          amount: tx.amount,
+          date: tx.date.slice(0, 10),
+          dayOfMonth: parseInt(tx.date.slice(8, 10)) || 15,
+          type: "outgoing",
+          category: tx.category,
+          counterparty: tx.merchant,
+          status: "pending",
+        });
+      });
+    }
+
+    const subTotal = subs.reduce((sum, s) => sum + s.amount, 0);
+    const debtTotal = debts.reduce((sum, d) => sum + d.amount, 0);
+
+    return {
+      subscriptionBills: subs,
+      personalDebtBills: debts,
+      totalSubscriptionsAmount: subTotal,
+      totalPersonalDebtsAmount: debtTotal,
+      totalMonthlyDue: subTotal + debtTotal,
+    };
+  }, [events, transactions, currentUser, activeScope, isClient]);
 
   return (
     <div ref={containerRef} className="relative mb-6">
@@ -458,6 +566,162 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                   <span>Click send to remind</span>
                 </div>
               )}
+            </div>
+          )}
+        </div>
+
+        {/* CARD 3: Upcoming Bills Due */}
+        <div
+          onMouseEnter={() => handleMouseEnter(3)}
+          onMouseLeave={handleMouseLeave}
+          onClick={() => handleCardClick(3)}
+          className={`relative p-4 rounded-xl bg-zinc-900/80 border transition-all duration-200 cursor-pointer shadow-sm select-none ${
+            isFlyoutOpen(3)
+              ? "border-blue-500/50 bg-zinc-900 shadow-blue-500/10 ring-1 ring-blue-500/30"
+              : "border-zinc-800/80 hover:border-zinc-700 hover:bg-zinc-900/90"
+          }`}
+          role="button"
+          tabIndex={0}
+          aria-expanded={isFlyoutOpen(3)}
+        >
+          <div className="flex items-center justify-between">
+            <div className="min-w-0 flex-1 pr-2">
+              <p className="text-xs text-zinc-400 font-medium">Upcoming Bills Due</p>
+              <p className="text-lg font-bold text-zinc-100 font-mono mt-0.5 tracking-tight truncate">
+                ${totalMonthlyDue.toFixed(2)} Due
+              </p>
+              {/* Dual Summary Badges directly on Card Face */}
+              <div className="flex items-center gap-1.5 mt-1">
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/20 font-mono truncate">
+                  💳 Subs: ${totalSubscriptionsAmount.toFixed(0)}
+                </span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-300 border border-purple-500/20 font-mono truncate">
+                  🤝 Owed: ${totalPersonalDebtsAmount.toFixed(0)}
+                </span>
+              </div>
+            </div>
+            <div className="w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 shrink-0">
+              <Clock className="w-5 h-5" />
+            </div>
+          </div>
+
+          {/* Popover Flyout for Card 3 */}
+          {isFlyoutOpen(3) && (
+            <div
+              onMouseEnter={() => handleMouseEnter(3)}
+              onMouseLeave={handleMouseLeave}
+              className="absolute right-0 sm:right-auto lg:right-auto top-[calc(100%+8px)] w-80 sm:w-96 p-4 rounded-xl bg-zinc-950/95 border border-zinc-700 shadow-2xl backdrop-blur-xl z-50 animate-in fade-in zoom-in-95 duration-150"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+                <div className="flex items-center gap-2">
+                  <CalendarDays className="w-4 h-4 text-blue-400" />
+                  <span className="text-xs font-bold text-zinc-100 uppercase tracking-wider">
+                    Monthly Due Breakdown
+                  </span>
+                </div>
+                <button
+                  onClick={() => {
+                    onNavigateTab("upcoming");
+                    setActiveFlyout(null);
+                    setPinnedFlyout(null);
+                  }}
+                  className="text-[11px] font-semibold text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                >
+                  <span>Open Calendar</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <div className="mt-3 flex flex-col gap-3.5 max-h-64 overflow-y-auto pr-1">
+                {/* SECTION 1: Subscriptions */}
+                <div>
+                  <div className="flex items-center justify-between text-xs mb-2">
+                    <span className="font-semibold text-blue-300 flex items-center gap-1.5">
+                      <CreditCard className="w-3.5 h-3.5" />
+                      Recurring Subscriptions
+                    </span>
+                    <span className="font-mono text-zinc-400">
+                      ${totalSubscriptionsAmount.toFixed(2)}
+                    </span>
+                  </div>
+                  {subscriptionBills.length === 0 ? (
+                    <p className="text-[11px] text-zinc-500 italic p-2 bg-zinc-900/60 rounded">
+                      No active recurring subscriptions due this month.
+                    </p>
+                  ) : (
+                    <div className="flex flex-col gap-1.5">
+                      {subscriptionBills.map((sub) => (
+                        <div
+                          key={sub.id}
+                          className="p-2 rounded bg-zinc-900 border border-zinc-800/80 flex items-center justify-between text-xs"
+                        >
+                          <div className="min-w-0">
+                            <p className="font-medium text-zinc-200 truncate">{sub.title}</p>
+                            <p className="text-[10px] text-zinc-400">
+                              Due: {sub.date || `Day ${sub.dayOfMonth}`} · {sub.category}
+                            </p>
+                          </div>
+                          <span className="font-mono font-bold text-zinc-200 shrink-0">
+                            ${sub.amount.toFixed(2)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* SECTION 2: Personal Debts & What We Owe */}
+                <div className="pt-2 border-t border-zinc-800/60">
+                  <div className="flex items-center justify-between text-xs mb-2">
+                    <span className="font-semibold text-purple-300 flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5" />
+                      What We Owe Someone
+                    </span>
+                    <span className="font-mono text-zinc-400">
+                      ${totalPersonalDebtsAmount.toFixed(2)}
+                    </span>
+                  </div>
+                  {personalDebtBills.length === 0 ? (
+                    <p className="text-[11px] text-zinc-500 italic p-2 bg-zinc-900/60 rounded">
+                      ✨ You do not owe anyone any pending payments.
+                    </p>
+                  ) : (
+                    <div className="flex flex-col gap-1.5">
+                      {personalDebtBills.map((debt) => (
+                        <div
+                          key={debt.id}
+                          className="p-2 rounded bg-zinc-900 border border-zinc-800/80 flex items-center justify-between text-xs"
+                        >
+                          <div className="min-w-0">
+                            <p className="font-medium text-purple-200 truncate">{debt.title}</p>
+                            <p className="text-[10px] text-zinc-400">
+                              Recipient: {debt.counterparty || "Peer"}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="font-mono font-bold text-purple-300">
+                              ${debt.amount.toFixed(2)}
+                            </span>
+                            <button
+                              onClick={() => {
+                                onSendChatMessage(
+                                  `PocketMate, please help settle my pending payment of $${debt.amount.toFixed(2)} for ${debt.title}.`
+                                );
+                                setActiveFlyout(null);
+                                setPinnedFlyout(null);
+                              }}
+                              className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 text-[10px] font-semibold transition-colors"
+                            >
+                              Settle
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </div>
