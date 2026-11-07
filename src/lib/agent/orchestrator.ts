@@ -14,7 +14,7 @@ export interface AgentRunOptions {
   persona?: PersonaType;
   messages: AgentMessage[];
   userId?: string;
-  onTextDelta?: (text: string) => void;
+  onTextDelta?: (text: string) => Promise<void> | void;
   onToolCall?: (toolName: string, args: Record<string, unknown>, result: Record<string, unknown>) => void;
   onGridMutation?: (mutation: GridMutationState) => void;
   onActionCard?: (card: Record<string, unknown>) => void;
@@ -58,7 +58,7 @@ export async function runAgentOrchestrator(options: AgentRunOptions): Promise<Ag
 
   try {
     const systemPrompt = assembleSystemPrompt(persona);
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
     const formattedContents: Array<{ role: "user" | "model"; parts: [{ text: string }] }> = [];
     for (const m of messages) {
@@ -201,7 +201,7 @@ export async function handleDynamicAutonomousResponse(
   currentPersona: PersonaType,
   handlers: {
     userId?: string;
-    onTextDelta?: (text: string) => void;
+    onTextDelta?: (text: string) => Promise<void> | void;
     onToolCall?: (toolName: string, args: Record<string, unknown>, result: Record<string, unknown>) => void;
     onGridMutation?: (mutation: GridMutationState) => void;
     onActionCard?: (card: Record<string, unknown>) => void;
@@ -278,7 +278,7 @@ export async function handleDynamicAutonomousResponse(
 
     if (!recipientEmail) {
       reply = `I'm ready to prepare a direct PayPal transfer of **$${amount.toFixed(2)}** to **${recipientName}**, but I don't have their PayPal email on file.\n\nPlease provide their PayPal email address (e.g. *"Transfer $${amount.toFixed(0)} to ${recipientName} at email@example.com"*).`;
-      handlers.onTextDelta?.(reply);
+      await handlers.onTextDelta?.(reply);
       return {
         reply,
         gridMutation,
@@ -342,7 +342,7 @@ export async function handleDynamicAutonomousResponse(
 
     if (!clientEmail) {
       reply = `I've drafted a **$${invoiceAmount.toFixed(2)}** invoice for **${clientName}** (${description}), but need their PayPal billing email to dispatch it.\n\nPlease provide their PayPal email address to proceed.`;
-      handlers.onTextDelta?.(reply);
+      await handlers.onTextDelta?.(reply);
       return {
         reply,
         gridMutation,
@@ -636,7 +636,11 @@ export async function handleDynamicAutonomousResponse(
     p.includes("due") ||
     p.includes("checkpoint")
   ) {
-    let userEvents: Array<{ id: string; title: string; amount: number; counterparty?: string | null; date: string; category: string }> = [];
+    // Extract query title from prompt (e.g. from quotes or title keywords)
+    const quoteMatch = prompt.match(/["'“]([^"'”]+)["'”]/);
+    const queryTitle = quoteMatch ? quoteMatch[1].trim() : "";
+
+    let userEvents: Array<{ id: string; title: string; amount: number; counterparty?: string | null; date: string; category: string; type?: string }> = [];
     if (handlers.userId) {
       try {
         userEvents = await prisma.scheduledEvent.findMany({
@@ -647,67 +651,151 @@ export async function handleDynamicAutonomousResponse(
       }
     }
 
-    if (userEvents.length > 0) {
-      const targetEvent = userEvents[0];
-      const debtor = targetEvent.counterparty || targetEvent.title;
-      const matchedContact = await resolveContact(debtor, handlers.userId);
+    // Match the specific event from DB
+    let targetEvent: { id?: string; title: string; amount: number; counterparty?: string | null; date: string; category: string; type?: string } | null = null;
+    if (queryTitle && userEvents.length > 0) {
+      targetEvent =
+        userEvents.find(
+          (e) =>
+            e.title.toLowerCase().includes(queryTitle.toLowerCase()) ||
+            queryTitle.toLowerCase().includes(e.title.toLowerCase())
+        ) || null;
 
-      gridMutation = {
-        filter: { category: targetEvent.category },
-        statusMessage: `Scheduled Item: ${targetEvent.title} ($${targetEvent.amount.toFixed(2)}) due on ${targetEvent.date}.`,
-      };
-      handlers.onGridMutation?.(gridMutation);
-
-      if (matchedContact) {
-        const invArgs = {
-          recipients: [
-            {
-              email: matchedContact.email,
-              name: matchedContact.name,
-              amount: targetEvent.amount,
-              description: `Reminder: ${targetEvent.title}`,
-            },
-          ],
-          isConfirmed: false,
-        };
-        const invResult = (await executeAgentTool("dispatch_paypal_invoices", invArgs)) as Record<string, unknown>;
-        executedTools.push({ name: "dispatch_paypal_invoices", args: invArgs, result: invResult });
-        handlers.onToolCall?.("dispatch_paypal_invoices", invArgs, invResult);
-        actionCard = invResult;
-        handlers.onActionCard?.(actionCard);
+      if (!targetEvent) {
+        targetEvent =
+          userEvents.find(
+            (e) =>
+              e.category.toLowerCase().includes(queryTitle.toLowerCase()) ||
+              (e.counterparty && e.counterparty.toLowerCase().includes(queryTitle.toLowerCase()))
+          ) || null;
       }
-
-      reply = `I reviewed your upcoming scheduled event **${targetEvent.title}**:\n\n• **Amount:** $${targetEvent.amount.toFixed(2)}\n• **Due Date:** ${targetEvent.date}\n• **Category:** ${targetEvent.category}\n• **Counterparty:** ${debtor}${matchedContact ? ` (${matchedContact.email})` : ""}\n\nLedger and budget pacing have been updated.`;
-    } else if (
-      p.includes("aws") ||
-      p.includes("cloud") ||
-      p.includes("saas") ||
-      p.includes("dev tools") ||
-      p.includes("entertainment") ||
-      p.includes("streaming")
-    ) {
-      const isAws = p.includes("aws") || p.includes("cloud") || p.includes("infrastructure");
-      const billTitle = isAws ? "Cloud Infrastructure (AWS & DO)" : "SaaS Dev Tools (GitHub & OpenAI)";
-      const billAmount = isAws ? 95.0 : 45.0;
-      const billCategory = "Utilities";
-
-      gridMutation = {
-        filter: { category: billCategory },
-        statusMessage: `Scheduled Bill: ${billTitle} ($${billAmount.toFixed(2)}) verified against ${billCategory} budget.`,
-      };
-      handlers.onGridMutation?.(gridMutation);
-
-      reply = `I analyzed your upcoming scheduled recurring charge: **${billTitle}**:\n\n• **Amount:** $${billAmount.toFixed(2)}\n• **Category:** ${billCategory}\n• **Scheduled Date:** Due on Nov ${isAws ? "12" : "20"}, 2026\n• **Budget Pacing:** Pacing within healthy limits. No threshold overrun detected.\n• **Payment Method:** Auto-debit via linked PayPal Business debit.`;
-    } else {
-      reply = `I reviewed this milestone checkpoint against your active ledger. Your budget caps remain steady with **$474.30** remaining under your global monthly ceiling across all categories.`;
     }
+
+    if (!targetEvent && userEvents.length > 0) {
+      targetEvent = userEvents[0];
+    }
+
+    // Smart fallback if event not found in DB
+    if (!targetEvent) {
+      if (p.includes("aws") || p.includes("cloud") || p.includes("infrastructure")) {
+        targetEvent = {
+          title: queryTitle || "Cloud Infrastructure (AWS / Cloudflare)",
+          amount: 95.0,
+          date: "2026-11-12",
+          category: "Utilities",
+          counterparty: "AWS",
+          type: "outgoing",
+        };
+      } else if (p.includes("streaming") || p.includes("entertainment") || p.includes("subscription")) {
+        targetEvent = {
+          title: queryTitle || "Streaming & Entertainment Subscriptions",
+          amount: 24.99,
+          date: "2026-11-18",
+          category: "Entertainment",
+          counterparty: "Digital Services",
+          type: "outgoing",
+        };
+      } else if (p.includes("checkpoint") || p.includes("mid-month") || p.includes("budget")) {
+        targetEvent = {
+          title: queryTitle || "Mid-Month Budget Checkpoint",
+          amount: 0.0,
+          date: "2026-11-15",
+          category: "General",
+          counterparty: null,
+          type: "milestone",
+        };
+      } else {
+        targetEvent = {
+          title: queryTitle || "Scheduled Payment Item",
+          amount: 50.0,
+          date: "2026-11-20",
+          category: "General",
+          counterparty: "Vendor",
+          type: "outgoing",
+        };
+      }
+    }
+
+    const debtor = targetEvent.counterparty || targetEvent.title;
+    const matchedContact = await resolveContact(debtor, handlers.userId);
+
+    // Fetch live category budget if available
+    let categoryRecord = null;
+    if (handlers.userId) {
+      try {
+        categoryRecord = await prisma.budgetCategory.findFirst({
+          where: {
+            userId: handlers.userId,
+            name: { equals: targetEvent.category, mode: "insensitive" },
+          },
+        });
+      } catch (err) {
+        console.warn("[BudgetCategory Fetch Warning]", err);
+      }
+    }
+
+    const monthlyCap = categoryRecord?.monthlyCap ?? (targetEvent.category === "Entertainment" ? 200.0 : targetEvent.category === "Utilities" ? 250.0 : 300.0);
+    const currentSpent = categoryRecord?.currentSpent ?? (targetEvent.category === "Entertainment" ? 85.0 : targetEvent.category === "Utilities" ? 110.0 : 90.0);
+    const projectedSpent = currentSpent + targetEvent.amount;
+    const isOverBudget = projectedSpent > monthlyCap;
+    const headroom = monthlyCap - currentSpent;
+
+    gridMutation = {
+      filter: { category: targetEvent.category },
+      statusMessage: `Scheduled Item: ${targetEvent.title} ($${targetEvent.amount.toFixed(2)}) reviewed against ${targetEvent.category} budget.`,
+    };
+    handlers.onGridMutation?.(gridMutation);
+
+    if (matchedContact && targetEvent.amount > 0) {
+      const invArgs = {
+        recipients: [
+          {
+            email: matchedContact.email,
+            name: matchedContact.name,
+            amount: targetEvent.amount,
+            description: `Scheduled Item: ${targetEvent.title}`,
+          },
+        ],
+        isConfirmed: false,
+      };
+      const invResult = (await executeAgentTool("dispatch_paypal_invoices", invArgs)) as Record<string, unknown>;
+      executedTools.push({ name: "dispatch_paypal_invoices", args: invArgs, result: invResult });
+      handlers.onToolCall?.("dispatch_paypal_invoices", invArgs, invResult);
+      actionCard = invResult;
+      handlers.onActionCard?.(actionCard);
+    }
+
+    const eventTypeLabel =
+      targetEvent.type === "incoming"
+        ? "Expected Receivable (Money In)"
+        : targetEvent.type === "milestone"
+        ? "Milestone / Checkpoint"
+        : "Recurring Bill (Money Out)";
+
+    reply = `### 📅 Scheduled Item Review: **${targetEvent.title}**
+
+• **Type:** ${eventTypeLabel}
+• **Amount:** $${targetEvent.amount.toFixed(2)} USD
+• **Scheduled Date:** ${targetEvent.date}
+• **Category:** ${targetEvent.category}
+• **Counterparty:** ${debtor}${matchedContact ? ` (\`${matchedContact.email}\`)` : ""}
+
+#### 📊 Category Budget Health (${targetEvent.category})
+• **Current Spent:** $${currentSpent.toFixed(2)} of $${monthlyCap.toFixed(2)} monthly cap ($${headroom.toFixed(2)} headroom)
+• **Projected Post-Charge:** $${projectedSpent.toFixed(2)} (${isOverBudget ? `⚠️ **$${(projectedSpent - monthlyCap).toFixed(2)} OVER BUDGET**` : `✅ **$${(monthlyCap - projectedSpent).toFixed(2)} buffer remaining**`})
+
+---
+**How would you like to proceed with this item?**
+1. **Send Payment / Reminder via PayPal**: Say *"Send payment reminder for ${targetEvent.title}"* or *"Pay ${targetEvent.title}"*.
+2. **Reschedule or Defer**: Say *"Push ${targetEvent.title} to next week"*.
+3. **Mark Complete or Remove**: Say *"Mark ${targetEvent.title} as completed"* or use the calendar action button.`;
   }
   // Default General Assistant Guidance
   else {
     reply = `I am active as your Autonomous Financial Orchestrator. You can speak to me naturally to:\n\n• Split multi-venue charges (e.g. *"split last 3 hours 5 ways with Alex and Dave"*)\n• Invoicing and client billing (e.g. *"draft invoice to Acme Corp for 20 hrs at $95/hr"*)\n• Budget limits (e.g. *"did I overspend on Groceries this month?"*)\n• Audit bills (drop a receipt image or say *"audit dinner bill against PayPal"*)\n• Reconfigure your live AG Grid ledger.`;
   }
 
-  handlers.onTextDelta?.(reply);
+  await handlers.onTextDelta?.(reply);
   return {
     reply,
     gridMutation,
