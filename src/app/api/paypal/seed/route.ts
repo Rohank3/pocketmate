@@ -25,15 +25,14 @@ export async function POST(req: NextRequest) {
     const userCookie = req.cookies.get("pocketmate_user")?.value;
     const verified = verifySessionCookie(userCookie);
 
-    const sanitizedUser =
-      verified && typeof verified.email === "string" && verified.email.includes("@")
-        ? {
-            name: typeof verified.name === "string" ? verified.name.trim().slice(0, 100) : undefined,
-            email: verified.email.trim().toLowerCase().slice(0, 255),
-          }
-        : undefined;
+    if (!verified || !verified.email) {
+      return NextResponse.json(
+        { error: "Please log in with PayPal to synchronize and initialize your sandbox activity." },
+        { status: 401 }
+      );
+    }
 
-    const rawTxs = await paypalClient.seedSandboxData(sanitizedUser);
+    const rawTxs = await paypalClient.syncUserTransactions(verified.email);
 
     // Map to TransactionRow format expected by the frontend
     const formatted = rawTxs.map((t) => {
@@ -71,7 +70,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: "Successfully seeded live PayPal Sandbox transactions and invoices.",
+      message: "Successfully synchronized live PayPal Sandbox transactions.",
       transactions: formatted,
     });
   } catch (error) {
