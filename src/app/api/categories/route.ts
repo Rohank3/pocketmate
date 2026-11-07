@@ -1,28 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { getAuthenticatedUser, getUserIdFromRequest } from "@/lib/auth/session";
+import { z } from "zod";
 
-async function getUserIdFromRequest(req: NextRequest): Promise<string> {
-  const cookie = req.cookies.get("pocketmate_user")?.value;
-  if (cookie) {
-    try {
-      const parsed = JSON.parse(cookie);
-      if (parsed.email) {
-        const u = await prisma.user.findUnique({ where: { email: parsed.email } });
-        if (u) return u.id;
-      }
-    } catch {
-      // ignore
-    }
-  }
+const CreateCategorySchema = z.object({
+  name: z.string().trim().min(1, "Category name is required").max(50, "Name must be 50 characters or less"),
+  monthlyCap: z.number().finite().nonnegative("Monthly cap must be non-negative").max(1000000),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Must be a valid hex color code").default("#3b82f6"),
+});
 
-  // Fallback to demo user if no cookie session
-  const defaultUser = await prisma.user.upsert({
-    where: { email: "demo@pocketmate.ai" },
-    update: {},
-    create: { email: "demo@pocketmate.ai", name: "PocketMate User", persona: "GENERAL" },
-  });
-  return defaultUser.id;
-}
+const UpdateCategorySchema = z.object({
+  id: z.string().trim().min(1, "Category ID is required").max(100),
+  monthlyCap: z.number().finite().nonnegative().max(1000000).optional(),
+  name: z.string().trim().min(1).max(50).optional(),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+});
 
 export async function GET(req: NextRequest) {
   try {
@@ -56,33 +48,39 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const userId = await getUserIdFromRequest(req);
-    const { name, monthlyCap, color } = (await req.json()) as {
-      name: string;
-      monthlyCap: number;
-      color?: string;
-    };
-
-    if (!name || !monthlyCap) {
-      return NextResponse.json({ error: "Name and monthlyCap are required" }, { status: 400 });
+    const authUser = await getAuthenticatedUser(req);
+    if (!authUser && process.env.PAYPAL_ENVIRONMENT === "live") {
+      return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
     }
+    const userId = authUser ? authUser.id : await getUserIdFromRequest(req);
+    const rawBody = await req.json();
+    const parseResult = CreateCategorySchema.safeParse(rawBody);
+
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: parseResult.error.issues.map((i) => i.message).join(", ") },
+        { status: 400 }
+      );
+    }
+
+    const { name, monthlyCap, color } = parseResult.data;
 
     const created = await prisma.budgetCategory.upsert({
       where: {
         userId_name: {
           userId,
-          name: name.trim(),
+          name,
         },
       },
       update: {
-        monthlyCap: parseFloat(String(monthlyCap)),
-        color: color || "#3b82f6",
+        monthlyCap,
+        color,
       },
       create: {
         userId,
-        name: name.trim(),
-        monthlyCap: parseFloat(String(monthlyCap)),
-        color: color || "#3b82f6",
+        name,
+        monthlyCap,
+        color,
         currentSpent: 0,
       },
     });
@@ -96,23 +94,37 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const { id, monthlyCap, name, color } = (await req.json()) as {
-      id: string;
-      monthlyCap?: number;
-      name?: string;
-      color?: string;
-    };
+    const authUser = await getAuthenticatedUser(req);
+    if (!authUser && process.env.PAYPAL_ENVIRONMENT === "live") {
+      return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
+    }
+    const userId = authUser ? authUser.id : await getUserIdFromRequest(req);
+    const rawBody = await req.json();
+    const parseResult = UpdateCategorySchema.safeParse(rawBody);
 
-    if (!id) {
-      return NextResponse.json({ error: "Category ID is required" }, { status: 400 });
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: parseResult.error.issues.map((i) => i.message).join(", ") },
+        { status: 400 }
+      );
+    }
+
+    const { id, monthlyCap, name, color } = parseResult.data;
+
+    const existing = await prisma.budgetCategory.findFirst({
+      where: { id, userId },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: "Category not found or access denied" }, { status: 404 });
     }
 
     const updated = await prisma.budgetCategory.update({
       where: { id },
       data: {
-        ...(monthlyCap !== undefined ? { monthlyCap: parseFloat(String(monthlyCap)) } : {}),
-        ...(name ? { name: name.trim() } : {}),
-        ...(color ? { color } : {}),
+        ...(monthlyCap !== undefined ? { monthlyCap } : {}),
+        ...(name !== undefined ? { name } : {}),
+        ...(color !== undefined ? { color } : {}),
       },
     });
 
@@ -125,9 +137,22 @@ export async function PATCH(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
+    const authUser = await getAuthenticatedUser(req);
+    if (!authUser && process.env.PAYPAL_ENVIRONMENT === "live") {
+      return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
+    }
+    const userId = authUser ? authUser.id : await getUserIdFromRequest(req);
     const id = req.nextUrl.searchParams.get("id");
-    if (!id) {
-      return NextResponse.json({ error: "Category ID is required" }, { status: 400 });
+    if (!id || typeof id !== "string") {
+      return NextResponse.json({ error: "Valid Category ID is required" }, { status: 400 });
+    }
+
+    const existing = await prisma.budgetCategory.findFirst({
+      where: { id, userId },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: "Category not found or access denied" }, { status: 404 });
     }
 
     await prisma.budgetCategory.delete({ where: { id } });
