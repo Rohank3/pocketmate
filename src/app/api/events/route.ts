@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthenticatedUser, getUserIdFromRequest } from "@/lib/auth/session";
+import { reconcileAutopaySubscriptions } from "@/lib/services/autopayReconciliation";
 import { z } from "zod";
 
 const CreateEventSchema = z.object({
@@ -16,13 +17,19 @@ const CreateEventSchema = z.object({
 
 export async function GET(req: NextRequest) {
   try {
-    const userId = await getUserIdFromRequest(req);
+    const authUser = await getAuthenticatedUser(req);
+    const userId = authUser ? authUser.id : await getUserIdFromRequest(req);
+    const userEmail = authUser?.email;
+
+    // Autonomous autopay subscription detection & transaction reconciliation
+    const reconciliation = await reconcileAutopaySubscriptions(userId, userEmail);
+
     const events = await prisma.scheduledEvent.findMany({
       where: { userId },
       orderBy: { date: "asc" },
     });
 
-    return NextResponse.json({ success: true, events });
+    return NextResponse.json({ success: true, events, reconciliation });
   } catch (error) {
     console.error("[Events GET Error]", error);
     return NextResponse.json({ success: false, error: "Failed to fetch events" }, { status: 500 });

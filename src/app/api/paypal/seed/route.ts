@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { paypalClient } from "@/lib/paypal/client";
 import { verifySessionCookie } from "@/lib/auth/session";
+import { prisma } from "@/lib/db";
+import { reconcileAutopaySubscriptions } from "@/lib/services/autopayReconciliation";
 
 let lastSeedTimestamp = 0;
 
@@ -33,6 +35,12 @@ export async function POST(req: NextRequest) {
     }
 
     const rawTxs = await paypalClient.syncUserTransactions(verified.email);
+
+    // Reconcile and auto-detect recurring bills from fresh transaction activity
+    const user = await prisma.user.findUnique({ where: { email: verified.email } });
+    if (user) {
+      await reconcileAutopaySubscriptions(user.id, verified.email);
+    }
 
     // Map to TransactionRow format expected by the frontend
     const formatted = rawTxs.map((t) => {
