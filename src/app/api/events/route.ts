@@ -144,3 +144,41 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ success: false, error: "Failed to delete event" }, { status: 500 });
   }
 }
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const authUser = await getAuthenticatedUser(req);
+    if (!authUser && process.env.PAYPAL_ENVIRONMENT === "live") {
+      return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
+    }
+    const userId = authUser ? authUser.id : await getUserIdFromRequest(req);
+    const body = await req.json();
+    const { id, status } = body;
+
+    if (!id || typeof id !== "string") {
+      return NextResponse.json({ error: "Valid Event ID is required" }, { status: 400 });
+    }
+
+    if (!["pending", "scheduled", "completed"].includes(status)) {
+      return NextResponse.json({ error: "Invalid status value" }, { status: 400 });
+    }
+
+    const existing = await prisma.scheduledEvent.findFirst({
+      where: { id, userId },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: "Event not found or access denied" }, { status: 404 });
+    }
+
+    const updated = await prisma.scheduledEvent.update({
+      where: { id },
+      data: { status },
+    });
+
+    return NextResponse.json({ success: true, event: updated });
+  } catch (error) {
+    console.error("[Events PATCH Error]", error);
+    return NextResponse.json({ success: false, error: "Failed to update event" }, { status: 500 });
+  }
+}
