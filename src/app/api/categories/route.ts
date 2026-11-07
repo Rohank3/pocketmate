@@ -19,6 +19,9 @@ const UpdateCategorySchema = z.object({
 export async function GET(req: NextRequest) {
   try {
     const userId = await getUserIdFromRequest(req);
+    if (!userId) {
+      return NextResponse.json({ success: true, categories: [] });
+    }
     let categories = await prisma.budgetCategory.findMany({
       where: { userId },
       orderBy: { createdAt: "asc" },
@@ -53,6 +56,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
     }
     const userId = authUser ? authUser.id : await getUserIdFromRequest(req);
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
+    }
     const rawBody = await req.json();
     const parseResult = CreateCategorySchema.safeParse(rawBody);
 
@@ -99,6 +105,9 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
     }
     const userId = authUser ? authUser.id : await getUserIdFromRequest(req);
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
+    }
     const rawBody = await req.json();
     const parseResult = UpdateCategorySchema.safeParse(rawBody);
 
@@ -142,6 +151,9 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
     }
     const userId = authUser ? authUser.id : await getUserIdFromRequest(req);
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
+    }
     const id = req.nextUrl.searchParams.get("id");
     if (!id || typeof id !== "string") {
       return NextResponse.json({ error: "Valid Category ID is required" }, { status: 400 });

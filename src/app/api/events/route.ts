@@ -19,7 +19,18 @@ export async function GET(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
     const userId = authUser ? authUser.id : await getUserIdFromRequest(req);
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
+    }
     const userEmail = authUser?.email;
+
+    if (!userId) {
+      return NextResponse.json({
+        success: true,
+        events: [],
+        reconciliation: { reconciledCount: 0, newSubscriptionsCount: 0, reconciledEventTitles: [] },
+      });
+    }
 
     // Autonomous autopay subscription detection & transaction reconciliation
     const reconciliation = await reconcileAutopaySubscriptions(userId, userEmail);
@@ -43,6 +54,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
     }
     const userId = authUser ? authUser.id : await getUserIdFromRequest(req);
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
+    }
     const rawBody = await req.json();
     const parseResult = CreateEventSchema.safeParse(rawBody);
 
@@ -83,6 +97,9 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
     }
     const userId = authUser ? authUser.id : await getUserIdFromRequest(req);
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
+    }
     const id = req.nextUrl.searchParams.get("id");
     if (!id || typeof id !== "string") {
       return NextResponse.json({ error: "Valid Event ID is required" }, { status: 400 });
@@ -111,6 +128,9 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
     }
     const userId = authUser ? authUser.id : await getUserIdFromRequest(req);
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
+    }
     const body = await req.json();
     const { id, status, counterparty } = body;
 

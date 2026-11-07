@@ -51,7 +51,8 @@ export async function POST(req: NextRequest) {
     }
 
     const { messages, persona } = parseResult.data;
-    const userId = await getUserIdFromRequest(req);
+    const rawUserId = await getUserIdFromRequest(req);
+    const userId = rawUserId ?? undefined;
 
     const apiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY_SECONDARY;
     const encoder = new TextEncoder();

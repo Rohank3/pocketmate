@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
 
     const { messages, persona, actionToConfirm } = parseResult.data;
     const authenticatedUser = await getAuthenticatedUser(req);
-    const userId = authenticatedUser ? authenticatedUser.id : await getUserIdFromRequest(req);
+    const userId = (authenticatedUser ? authenticatedUser.id : await getUserIdFromRequest(req)) ?? undefined;
 
     // Handle single-tap confirmation of an action card (Layer D)
     if (actionToConfirm && actionToConfirm.action === "DISPATCH_INVOICES") {

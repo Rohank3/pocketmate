@@ -2,41 +2,6 @@ import { prisma } from "@/lib/db";
 import { PersonaType } from "./prompts";
 
 /**
- * Ensures a default demo user exists in the Neon database
- */
-export async function getOrCreateDefaultUser() {
-  try {
-    const user = await prisma.user.upsert({
-      where: { email: "demo@pocketmate.ai" },
-      update: {},
-      create: {
-        email: "demo@pocketmate.ai",
-        name: "PocketMate User",
-        persona: "GENERAL",
-      },
-    });
-
-    // Ensure default budget categories exist
-    const count = await prisma.budgetCategory.count({ where: { userId: user.id } });
-    if (count === 0) {
-      await prisma.budgetCategory.createMany({
-        data: [
-          { userId: user.id, name: "Groceries", monthlyCap: 400.0, currentSpent: 340.0, color: "#10b981" },
-          { userId: user.id, name: "Dining", monthlyCap: 250.0, currentSpent: 180.0, color: "#3b82f6" },
-          { userId: user.id, name: "Shopping", monthlyCap: 300.0, currentSpent: 120.0, color: "#a855f7" },
-          { userId: user.id, name: "Entertainment", monthlyCap: 200.0, currentSpent: 85.0, color: "#6366f1" },
-        ],
-      });
-    }
-
-    return user;
-  } catch (error) {
-    console.warn("[DB Sync Warning] Database connection not active; proceeding in memory mode.", error);
-    return null;
-  }
-}
-
-/**
  * Persists a message to the ChatMessage table in Neon Postgres
  */
 export async function persistChatMessage(
@@ -47,16 +12,11 @@ export async function persistChatMessage(
   userId?: string
 ) {
   try {
-    let targetUserId = userId;
-    if (!targetUserId) {
-      const user = await getOrCreateDefaultUser();
-      targetUserId = user?.id;
-    }
-    if (!targetUserId) return;
+    if (!userId) return;
 
     await prisma.chatMessage.create({
       data: {
-        userId: targetUserId,
+        userId,
         role,
         content,
         persona,
@@ -79,16 +39,11 @@ export async function syncBudgetExpenseToDB(
   userId?: string
 ) {
   try {
-    let targetUserId = userId;
-    if (!targetUserId) {
-      const user = await getOrCreateDefaultUser();
-      targetUserId = user?.id;
-    }
-    if (!targetUserId) return;
+    if (!userId) return;
 
     let category = await prisma.budgetCategory.findFirst({
       where: {
-        userId: targetUserId,
+        userId,
         name: { equals: categoryName, mode: "insensitive" },
       },
     });
@@ -96,7 +51,7 @@ export async function syncBudgetExpenseToDB(
     if (!category) {
       category = await prisma.budgetCategory.create({
         data: {
-          userId: targetUserId,
+          userId,
           name: categoryName,
           monthlyCap: 350.0,
           currentSpent: 0,

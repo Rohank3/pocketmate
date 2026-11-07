@@ -28,9 +28,9 @@ export async function parseReceiptWithGeminiVision(
 ): Promise<ParsedReceiptResult> {
   const apiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY_SECONDARY;
 
-  // Fallback fixture if no live API key is present
+  // Require API key for live receipt vision parsing
   if (!apiKey || apiKey === "your-gemini-api-key") {
-    return getMockReceiptResult();
+    throw new Error("GEMINI_API_KEY is not configured for receipt vision OCR.");
   }
 
   const prompt = `
@@ -81,15 +81,15 @@ Return ONLY raw valid JSON, no markdown code fence.
     }).finally(() => clearTimeout(timeoutId));
 
     if (!res.ok) {
-      console.warn(`[Gemini Vision] HTTP ${res.status}. Fallback to mock parser.`);
-      return getMockReceiptResult();
+      const errText = await res.text().catch(() => "");
+      throw new Error(`Gemini Vision OCR failed with status ${res.status}: ${errText.slice(0, 200)}`);
     }
 
     const data = await res.json();
     const textOutput = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!textOutput) {
-      return getMockReceiptResult();
+      throw new Error("Gemini Vision OCR returned no text candidates.");
     }
 
     const rawParsed = JSON.parse(textOutput);
@@ -110,7 +110,7 @@ Return ONLY raw valid JSON, no markdown code fence.
       merchantName:
         typeof rawParsed.merchantName === "string" && rawParsed.merchantName.trim()
           ? rawParsed.merchantName.slice(0, 100).trim()
-          : "Bistro Lumiere",
+          : "Merchant",
       date: typeof rawParsed.date === "string" ? rawParsed.date.slice(0, 30) : undefined,
       lineItems,
       subtotal,
@@ -121,25 +121,6 @@ Return ONLY raw valid JSON, no markdown code fence.
     };
   } catch (error) {
     console.error("[Gemini Vision Parse Error]", error);
-    return getMockReceiptResult();
+    throw error;
   }
-}
-
-function getMockReceiptResult(): ParsedReceiptResult {
-  return {
-    merchantName: "Bistro Lumiere",
-    date: new Date().toLocaleDateString(),
-    lineItems: [
-      { name: "Steak Frites", amount: 38.0 },
-      { name: "Pan-Seared Salmon", amount: 32.0 },
-      { name: "Truffle Fries", amount: 14.0 },
-      { name: "Sparkling Water", amount: 6.0 },
-      { name: "Chocolate Soufflé", amount: 10.0 },
-    ],
-    subtotal: 100.0,
-    tax: 5.0,
-    tip: 10.0,
-    total: 115.0,
-    confidence: 0.96,
-  };
 }

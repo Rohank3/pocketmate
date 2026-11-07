@@ -675,49 +675,17 @@ export async function handleDynamicAutonomousResponse(
       targetEvent = userEvents[0];
     }
 
-    // Smart fallback if event not found in DB
+    // Return early if event not found
     if (!targetEvent) {
-      const now = new Date();
-      const yr = now.getFullYear();
-      const mo = String(now.getMonth() + 1).padStart(2, "0");
-
-      if (p.includes("aws") || p.includes("cloud") || p.includes("infrastructure")) {
-        targetEvent = {
-          title: queryTitle || "Cloud Infrastructure (AWS / Cloudflare)",
-          amount: 95.0,
-          date: `${yr}-${mo}-12`,
-          category: "Utilities",
-          counterparty: "AWS",
-          type: "outgoing",
-        };
-      } else if (p.includes("streaming") || p.includes("entertainment") || p.includes("subscription")) {
-        targetEvent = {
-          title: queryTitle || "Streaming & Entertainment Subscriptions",
-          amount: 24.99,
-          date: `${yr}-${mo}-18`,
-          category: "Entertainment",
-          counterparty: "Digital Services",
-          type: "outgoing",
-        };
-      } else if (p.includes("checkpoint") || p.includes("mid-month") || p.includes("budget")) {
-        targetEvent = {
-          title: queryTitle || "Mid-Month Budget Checkpoint",
-          amount: 0.0,
-          date: `${yr}-${mo}-15`,
-          category: "General",
-          counterparty: null,
-          type: "milestone",
-        };
-      } else {
-        targetEvent = {
-          title: queryTitle || "Scheduled Payment Item",
-          amount: 50.0,
-          date: `${yr}-${mo}-20`,
-          category: "General",
-          counterparty: "Vendor",
-          type: "outgoing",
-        };
-      }
+      reply = `No scheduled bill or payment found matching "${queryTitle || "your request"}". Please check your upcoming bills in the Scheduler tab.`;
+      await handlers.onTextDelta?.(reply);
+      return {
+        reply,
+        gridMutation: null,
+        actionCard: null,
+        executedTools,
+        activePersona: persona,
+      };
     }
 
     const debtor = targetEvent.counterparty || targetEvent.title;
@@ -738,8 +706,8 @@ export async function handleDynamicAutonomousResponse(
       }
     }
 
-    const monthlyCap = categoryRecord?.monthlyCap ?? (targetEvent.category === "Entertainment" ? 200.0 : targetEvent.category === "Utilities" ? 250.0 : 300.0);
-    const currentSpent = categoryRecord?.currentSpent ?? (targetEvent.category === "Entertainment" ? 85.0 : targetEvent.category === "Utilities" ? 110.0 : 90.0);
+    const monthlyCap = categoryRecord?.monthlyCap ?? 350.0;
+    const currentSpent = categoryRecord?.currentSpent ?? 0.0;
     const projectedSpent = currentSpent + targetEvent.amount;
     const isOverBudget = projectedSpent > monthlyCap;
     const headroom = monthlyCap - currentSpent;

@@ -127,19 +127,10 @@ export async function getAuthenticatedUser(
 }
 
 /**
- * Helper to retrieve active user ID, creating a demo user if in local demo mode.
+ * Helper to retrieve active authenticated user ID.
+ * Returns null if not authenticated.
  */
-export async function getUserIdFromRequest(req: NextRequest): Promise<string> {
+export async function getUserIdFromRequest(req: NextRequest): Promise<string | null> {
   const authUser = await getAuthenticatedUser(req);
-  if (authUser) {
-    return authUser.id;
-  }
-
-  // Demo user fallback
-  const defaultUser = await prisma.user.upsert({
-    where: { email: "demo@pocketmate.ai" },
-    update: {},
-    create: { email: "demo@pocketmate.ai", name: "PocketMate User", persona: "GENERAL" },
-  });
-  return defaultUser.id;
+  return authUser ? authUser.id : null;
 }

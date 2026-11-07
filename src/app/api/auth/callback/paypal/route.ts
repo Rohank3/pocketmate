@@ -57,41 +57,6 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Ensure starter upcoming bills exist for the scheduler in DB
-    const eventCount = await prisma.scheduledEvent.count({ where: { userId: user.id } });
-    if (eventCount === 0) {
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, "0");
-
-      await prisma.scheduledEvent.createMany({
-        data: [
-          {
-            userId: user.id,
-            title: "Cloud Infrastructure (AWS / Cloudflare)",
-            amount: 95.0,
-            date: `${year}-${month}-12`,
-            dayOfMonth: 12,
-            type: "outgoing",
-            category: "Utilities",
-            counterparty: "AWS",
-            status: "scheduled",
-          },
-          {
-            userId: user.id,
-            title: "Streaming & Entertainment Subscriptions",
-            amount: 24.99,
-            date: `${year}-${month}-18`,
-            dayOfMonth: 18,
-            type: "outgoing",
-            category: "Entertainment",
-            counterparty: "Digital Services",
-            status: "scheduled",
-          },
-        ],
-      });
-    }
-
     const redirectRes = NextResponse.redirect(
       `${appUrl}/?connected=paypal&userName=${encodeURIComponent(user.name || "PayPal User")}&userEmail=${encodeURIComponent(
         user.email
