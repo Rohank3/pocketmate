@@ -3,7 +3,11 @@
 import React, { useState, useRef, useEffect, useMemo, useSyncExternalStore } from "react";
 import {
   Wallet,
+  Users,
   BarChart3,
+  Send,
+  Filter,
+  CheckCircle2,
   ArrowRight,
 } from "lucide-react";
 import type { CategoryItem } from "@/components/categories/CategoryControlBar";
@@ -22,6 +26,13 @@ export interface FunctionalMetricsRowProps {
   onSendChatMessage: (prompt: string) => void;
 }
 
+interface DebtorSummary {
+  name: string;
+  totalOwed: number;
+  count: number;
+  sampleMerchant: string;
+}
+
 export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
   categories,
   transactions,
@@ -29,8 +40,8 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
   currentUser: _currentUser,
   activeScope: _activeScope,
   onNavigateTab,
-  onFilterLedger: _onFilterLedger,
-  onSendChatMessage: _onSendChatMessage,
+  onFilterLedger,
+  onSendChatMessage,
 }) => {
   const [activeFlyout, setActiveFlyout] = useState<number | null>(null);
   const [pinnedFlyout, setPinnedFlyout] = useState<number | null>(null);
@@ -144,10 +155,47 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
       };
     }, [transactions, categories]);
 
+  // ==========================================
+  // 2. CARD 2: FRIENDS OWE YOU
+  // ==========================================
+  const { debtorList, totalFriendsOwe, totalPendingCount } = useMemo(() => {
+    const debtorPendingTxs = transactions.filter(
+      (t) =>
+        (t.status === "pending" || t.status === "disputed" || t.status === "unresolved") &&
+        t.debtor_name &&
+        t.debtor_name !== "Self" &&
+        t.debtor_name !== "—" &&
+        t.debtor_name !== "Unassigned"
+    );
+
+    const map = new Map<string, DebtorSummary>();
+    debtorPendingTxs.forEach((t) => {
+      const name = t.debtor_name;
+      const existing = map.get(name);
+      if (existing) {
+        existing.totalOwed += t.amount;
+        existing.count += 1;
+      } else {
+        map.set(name, {
+          name,
+          totalOwed: t.amount,
+          count: 1,
+          sampleMerchant: t.merchant,
+        });
+      }
+    });
+
+    const list = Array.from(map.values()).sort((a, b) => b.totalOwed - a.totalOwed);
+    const sum = list.reduce((acc, d) => acc + d.totalOwed, 0);
+    const count = list.reduce((acc, d) => acc + d.count, 0);
+
+    return { debtorList: list, totalFriendsOwe: sum, totalPendingCount: count };
+  }, [transactions]);
+
   return (
     <div ref={containerRef} className="relative mb-6">
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        {/* CARD 1: Total Monthly Budget (Unaffected by Selection) */}
+        {/* CARD 1: Total Monthly Budget */}
         <div
           onMouseEnter={() => handleMouseEnter(1)}
           onMouseLeave={handleMouseLeave}
@@ -202,7 +250,6 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
               className="absolute left-0 top-[calc(100%+8px)] w-80 sm:w-96 p-4 rounded-xl bg-zinc-950/95 border border-zinc-700 shadow-2xl backdrop-blur-xl z-50 animate-in fade-in zoom-in-95 duration-150"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Flyout Header */}
               <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
                 <div className="flex items-center gap-2">
                   <BarChart3 className="w-4 h-4 text-emerald-400" />
@@ -215,7 +262,6 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                 </span>
               </div>
 
-              {/* Overall Progress Bar */}
               <div className="mt-3 mb-4">
                 <div className="flex justify-between text-xs mb-1 font-mono">
                   <span className="text-zinc-400">Total Spent</span>
@@ -237,7 +283,6 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                 </div>
               </div>
 
-              {/* Category-by-Category Horizontal Comparative Bar Chart */}
               <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider mb-2.5">
                 Category Spending Caps
               </p>
@@ -274,7 +319,6 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                 ))}
               </div>
 
-              {/* Shortcut to full Studio */}
               <div className="mt-4 pt-3 border-t border-zinc-800/80 flex items-center justify-between">
                 <span className="text-[11px] text-zinc-500">Live analytics</span>
                 <button
@@ -289,6 +333,131 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>
+            </div>
+          )}
+        </div>
+
+        {/* CARD 2: Friends Owe You */}
+        <div
+          onMouseEnter={() => handleMouseEnter(2)}
+          onMouseLeave={handleMouseLeave}
+          onClick={() => handleCardClick(2)}
+          className={`relative p-4 rounded-xl bg-zinc-900/80 border transition-all duration-200 cursor-pointer shadow-sm select-none ${
+            isFlyoutOpen(2)
+              ? "border-amber-500/50 bg-zinc-900 shadow-amber-500/10 ring-1 ring-amber-500/30"
+              : "border-zinc-800/80 hover:border-zinc-700 hover:bg-zinc-900/90"
+          }`}
+          role="button"
+          tabIndex={0}
+          aria-expanded={isFlyoutOpen(2)}
+        >
+          <div className="flex items-center justify-between">
+            <div className="min-w-0 flex-1 pr-2">
+              <p className="text-xs text-zinc-400 font-medium">Friends Owe You</p>
+              <p className="text-lg font-bold text-amber-400 font-mono mt-0.5 tracking-tight truncate">
+                ${totalFriendsOwe.toFixed(2)} Owed
+              </p>
+              <p className="text-[11px] text-zinc-400 mt-0.5 truncate">
+                {debtorList.length > 0
+                  ? `${debtorList.length} friend${debtorList.length > 1 ? "s" : ""} (${totalPendingCount} pending splits)`
+                  : "All balances settled"}
+              </p>
+            </div>
+            <div className="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
+              <Users className="w-5 h-5" />
+            </div>
+          </div>
+
+          {/* Popover Flyout for Card 2 */}
+          {isFlyoutOpen(2) && (
+            <div
+              onMouseEnter={() => handleMouseEnter(2)}
+              onMouseLeave={handleMouseLeave}
+              className="absolute left-0 sm:left-auto lg:left-0 top-[calc(100%+8px)] w-80 sm:w-96 p-4 rounded-xl bg-zinc-950/95 border border-zinc-700 shadow-2xl backdrop-blur-xl z-50 animate-in fade-in zoom-in-95 duration-150"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+                <div className="flex items-center gap-2">
+                  <Users className="w-4 h-4 text-amber-400" />
+                  <span className="text-xs font-bold text-zinc-100 uppercase tracking-wider">
+                    Debtor Balances & Splits
+                  </span>
+                </div>
+                <span className="text-xs font-mono font-bold text-amber-400">
+                  ${totalFriendsOwe.toFixed(2)} Total
+                </span>
+              </div>
+
+              <div className="mt-3 flex flex-col gap-2.5 max-h-60 overflow-y-auto pr-1">
+                {debtorList.length === 0 ? (
+                  <div className="py-6 text-center">
+                    <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-2 opacity-80" />
+                    <p className="text-xs font-semibold text-zinc-200">All Balances Settled!</p>
+                    <p className="text-[11px] text-zinc-500 mt-0.5">
+                      No friends currently owe money on shared expenses.
+                    </p>
+                  </div>
+                ) : (
+                  debtorList.map((debtor) => (
+                    <div
+                      key={debtor.name}
+                      className="p-2.5 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition-colors flex items-center justify-between gap-3"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-7 h-7 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center font-bold text-xs shrink-0">
+                          {debtor.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-zinc-200 truncate">{debtor.name}</p>
+                          <p className="text-[10px] text-zinc-400 truncate">
+                            {debtor.count} pending item{debtor.count > 1 ? "s" : ""} · {debtor.sampleMerchant}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs font-bold font-mono text-amber-400">
+                          ${debtor.totalOwed.toFixed(2)}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            title="Filter ledger for this debtor"
+                            onClick={() => {
+                              onFilterLedger(debtor.name);
+                              onNavigateTab("transactions");
+                              setActiveFlyout(null);
+                              setPinnedFlyout(null);
+                            }}
+                            className="p-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors"
+                          >
+                            <Filter className="w-3 h-3" />
+                          </button>
+                          <button
+                            title="Ask PocketMate to draft payment reminder"
+                            onClick={() => {
+                              onSendChatMessage(
+                                `PocketMate, please draft and send a friendly payment reminder to ${debtor.name} for $${debtor.totalOwed.toFixed(2)} owed on split expenses.`
+                              );
+                              setActiveFlyout(null);
+                              setPinnedFlyout(null);
+                            }}
+                            className="p-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 transition-colors"
+                          >
+                            <Send className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {debtorList.length > 0 && (
+                <div className="mt-3 pt-2.5 border-t border-zinc-800 text-[11px] text-zinc-500 flex items-center justify-between">
+                  <span>Click filter icon to view records</span>
+                  <span>Click send to remind</span>
+                </div>
+              )}
             </div>
           )}
         </div>
