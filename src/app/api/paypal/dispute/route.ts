@@ -12,9 +12,9 @@ const DisputeSchema = z.object({
 export async function POST(req: NextRequest) {
   try {
     const user = await getAuthenticatedUser(req);
-    if (!user && process.env.PAYPAL_ENVIRONMENT === "live") {
+    if (!user) {
       return NextResponse.json(
-        { error: "Unauthorized: Active session required to file disputes." },
+        { error: "Unauthorized: Active PayPal session required to file disputes." },
         { status: 401 }
       );
     }
