@@ -1,11 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { exchangePayPalCodeForTokens, fetchPayPalUserInfo } from "@/lib/paypal/auth";
 import { prisma } from "@/lib/db";
+import { createSignedSessionCookie } from "@/lib/auth/session";
+import { z } from "zod";
+import crypto from "crypto";
+
+const ManualLoginSchema = z.object({
+  email: z.string().trim().email("Invalid email format").max(255),
+  name: z.string().trim().max(100).optional(),
+});
 
 export async function GET(req: NextRequest) {
   try {
     const code = req.nextUrl.searchParams.get("code");
+    const stateParam = req.nextUrl.searchParams.get("state");
+    const savedState = req.cookies.get("paypal_oauth_state")?.value;
     const appUrl = process.env.RENDER_EXTERNAL_URL || process.env.NEXTAUTH_URL || "http://localhost:3000";
+
+    const isStateValid =
+      Boolean(savedState) &&
+      Boolean(stateParam) &&
+      savedState!.length === stateParam!.length &&
+      crypto.timingSafeEqual(Buffer.from(savedState!), Buffer.from(stateParam!));
+
+    if (!isStateValid) {
+      return NextResponse.redirect(`${appUrl}/?auth_error=invalid_state`);
+    }
 
     if (!code) {
       return NextResponse.redirect(`${appUrl}/?auth_error=missing_code`);
@@ -84,13 +104,14 @@ export async function GET(req: NextRequest) {
       )}`
     );
 
-    // Set user session cookie (readable on client & server)
+    redirectRes.cookies.set("paypal_oauth_state", "", { maxAge: 0, path: "/" });
     redirectRes.cookies.set(
       "pocketmate_user",
-      JSON.stringify({ id: user.id, email: user.email, name: user.name }),
+      createSignedSessionCookie({ id: user.id, email: user.email, name: user.name }),
       {
-        httpOnly: false,
+        httpOnly: true,
         secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
         maxAge: 60 * 60 * 24 * 7, // 7 days
         path: "/",
       }
@@ -112,13 +133,26 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { email, name } = (await req.json()) as { email?: string; name?: string };
-    if (!email) {
-      return NextResponse.json({ error: "Email is required" }, { status: 400 });
+    if (process.env.PAYPAL_ENVIRONMENT === "live") {
+      return NextResponse.json(
+        { error: "Direct sandbox credential login is disabled in production live environment." },
+        { status: 403 }
+      );
     }
 
-    const cleanEmail = email.trim().toLowerCase();
-    const cleanName = name?.trim() || cleanEmail.split("@")[0].replace(/[._]/g, " ");
+    const rawBody = await req.json();
+    const parseResult = ManualLoginSchema.safeParse(rawBody);
+
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: parseResult.error.issues.map((i) => i.message).join(", ") },
+        { status: 400 }
+      );
+    }
+
+    const { email, name } = parseResult.data;
+    const cleanEmail = email.toLowerCase();
+    const cleanName = name || cleanEmail.split("@")[0].replace(/[._]/g, " ");
 
     const user = await prisma.user.upsert({
       where: { email: cleanEmail },
@@ -146,10 +180,11 @@ export async function POST(req: NextRequest) {
     const res = NextResponse.json({ success: true, user });
     res.cookies.set(
       "pocketmate_user",
-      JSON.stringify({ id: user.id, email: user.email, name: user.name }),
+      createSignedSessionCookie({ id: user.id, email: user.email, name: user.name }),
       {
-        httpOnly: false,
+        httpOnly: true,
         secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
         maxAge: 60 * 60 * 24 * 7,
         path: "/",
       }
