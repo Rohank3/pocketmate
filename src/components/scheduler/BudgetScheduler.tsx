@@ -104,8 +104,12 @@ export default function BudgetScheduler({
 
   // Open the Day Details popup for a specific date
   const handleOpenDayModal = (dateStr: string, dayNumber: number) => {
+    let resolvedDateStr = dateStr;
+    if (!resolvedDateStr || resolvedDateStr.split("-").length < 3) {
+      resolvedDateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(dayNumber).padStart(2, "0")}`;
+    }
     // Parse date parts safely to avoid timezone drift
-    const [y, m, d] = dateStr.split("-").map(Number);
+    const [y, m, d] = resolvedDateStr.split("-").map(Number);
     const parsedDate = new Date(y, m - 1, d);
     const formatted = parsedDate.toLocaleDateString("en-US", {
       weekday: "long",
@@ -115,7 +119,7 @@ export default function BudgetScheduler({
     });
 
     setSelectedDayModal({
-      dateStr,
+      dateStr: resolvedDateStr,
       dayNumber,
       formattedTitle: formatted,
     });
@@ -137,13 +141,28 @@ export default function BudgetScheduler({
     });
   }, [events, filterType, selectedCategory]);
 
+  // Helper to determine if a scheduled item belongs to a calendar day
+  const doesEventMatchDay = (e: ScheduledEvent, cellDateStr: string, cellDay: number) => {
+    // 1. Exact date match (e.g. one-time scheduled event on this specific date)
+    if (e.date === cellDateStr) return true;
+
+    // 2. Monthly recurring bill or milestone on this day of the month
+    if (e.dayOfMonth === cellDay) return true;
+
+    return false;
+  };
+
   // Aggregate metrics for currently viewed month
   const currentMonthPrefix = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}`;
+  const daysInCurrentMonth = useMemo(() => new Date(viewYear, viewMonth + 1, 0).getDate(), [viewYear, viewMonth]);
+
   const monthEvents = useMemo(() => {
-    return displayedEvents.filter(
-      (e) => !e.date || e.date.startsWith(currentMonthPrefix)
-    );
-  }, [displayedEvents, currentMonthPrefix]);
+    return displayedEvents.filter((e) => {
+      if (e.date && e.date.startsWith(currentMonthPrefix)) return true;
+      if (e.dayOfMonth && e.dayOfMonth <= daysInCurrentMonth) return true;
+      return false;
+    });
+  }, [displayedEvents, currentMonthPrefix, daysInCurrentMonth]);
 
   const upcomingBills = useMemo(() => {
     return monthEvents
@@ -160,7 +179,6 @@ export default function BudgetScheduler({
   // Calendar generation with dynamic day-of-week alignment and padding
   const calendarDays = useMemo(() => {
     const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay(); // 0 = Sun..6 = Sat
-    const daysInCurrentMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
     const daysInPrevMonth = new Date(viewYear, viewMonth, 0).getDate();
 
     const realToday = new Date();
@@ -189,16 +207,14 @@ export default function BudgetScheduler({
         dateStr,
         isCurrentMonth: false,
         isToday: false,
-        events: displayedEvents.filter((e) => e.date === dateStr),
+        events: displayedEvents.filter((e) => doesEventMatchDay(e, dateStr, day)),
       });
     }
 
     // Days in current month
     for (let day = 1; day <= daysInCurrentMonth; day++) {
       const dateStr = `${currentMonthPrefix}-${String(day).padStart(2, "0")}`;
-      const dayEvents = displayedEvents.filter(
-        (e) => e.date === dateStr || (!e.date && e.dayOfMonth === day)
-      );
+      const dayEvents = displayedEvents.filter((e) => doesEventMatchDay(e, dateStr, day));
       cells.push({
         key: `cur-${dateStr}`,
         day,
@@ -222,12 +238,12 @@ export default function BudgetScheduler({
         dateStr,
         isCurrentMonth: false,
         isToday: false,
-        events: displayedEvents.filter((e) => e.date === dateStr),
+        events: displayedEvents.filter((e) => doesEventMatchDay(e, dateStr, day)),
       });
     }
 
     return cells;
-  }, [viewYear, viewMonth, currentMonthPrefix, displayedEvents]);
+  }, [viewYear, viewMonth, currentMonthPrefix, daysInCurrentMonth, displayedEvents]);
 
   // Handle adding event from the day details modal
   const handleCreateEventForDay = (e: React.FormEvent) => {
@@ -258,10 +274,8 @@ export default function BudgetScheduler({
   // Selected day items for modal
   const selectedDayEvents = useMemo(() => {
     if (!selectedDayModal) return [];
-    return events.filter(
-      (e) =>
-        e.date === selectedDayModal.dateStr ||
-        (!e.date && e.dayOfMonth === selectedDayModal.dayNumber)
+    return events.filter((e) =>
+      doesEventMatchDay(e, selectedDayModal.dateStr, selectedDayModal.dayNumber)
     );
   }, [events, selectedDayModal]);
 
@@ -563,8 +577,9 @@ export default function BudgetScheduler({
                   <div
                     key={evt.id}
                     onClick={() => {
-                      const day = parseInt(evt.date.split("-")[2], 10) || evt.dayOfMonth || 15;
-                      handleOpenDayModal(evt.date, day);
+                      const day = evt.date ? parseInt(evt.date.split("-")[2], 10) : evt.dayOfMonth || 15;
+                      const dateStr = evt.date || `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                      handleOpenDayModal(dateStr, day);
                     }}
                     className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl border transition-all cursor-pointer gap-2 ${
                       isCompleted
