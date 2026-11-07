@@ -1,18 +1,90 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runAgentOrchestrator } from "@/lib/agent/orchestrator";
 import { executeAgentTool } from "@/lib/agent/tools";
+import { getAuthenticatedUser, getUserIdFromRequest } from "@/lib/auth/session";
+import { z } from "zod";
+
+const ActionToConfirmSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("DISPATCH_INVOICES"),
+    recipients: z
+      .array(
+        z.object({
+          email: z.string().trim().email().max(255),
+          name: z.string().trim().max(100).optional(),
+          amount: z.number().finite().positive().max(50000),
+          description: z.string().trim().min(1).max(255),
+        })
+      )
+      .min(1)
+      .max(50),
+  }),
+  z.object({
+    action: z.literal("DISPATCH_PAYOUT"),
+    recipientEmail: z.string().trim().email().max(255).optional(),
+    recipients: z
+      .array(
+        z.object({
+          email: z.string().trim().email().max(255),
+          description: z.string().trim().max(255).optional(),
+        })
+      )
+      .optional(),
+    amount: z.number().finite().positive().max(50000).optional(),
+    totalAmount: z.number().finite().positive().max(50000).optional(),
+    note: z.string().trim().max(255).optional(),
+  }),
+]);
+
+const AgentPayloadSchema = z.object({
+  messages: z
+    .array(
+      z.object({
+        role: z.enum(["user", "assistant", "system"]),
+        content: z.string().min(1).max(10000),
+      })
+    )
+    .min(1)
+    .max(50)
+    .optional(),
+  persona: z.enum(["GENERAL", "FREELANCER", "BUSINESS"]).default("GENERAL"),
+  actionToConfirm: ActionToConfirmSchema.optional(),
+});
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { messages, persona = "GENERAL", actionToConfirm } = body;
+    const rawBody = await req.json();
+    const parseResult = AgentPayloadSchema.safeParse(rawBody);
+
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: parseResult.error.issues.map((i) => i.message).join(", ") },
+        { status: 400 }
+      );
+    }
+
+    const { messages, persona, actionToConfirm } = parseResult.data;
+    const authenticatedUser = await getAuthenticatedUser(req);
+    const userId = authenticatedUser ? authenticatedUser.id : await getUserIdFromRequest(req);
 
     // Handle single-tap confirmation of an action card (Layer D)
     if (actionToConfirm && actionToConfirm.action === "DISPATCH_INVOICES") {
-      const dispatchResult = await executeAgentTool("dispatch_paypal_invoices", {
-        recipients: actionToConfirm.recipients,
-        isConfirmed: true,
-      });
+      if (!authenticatedUser && process.env.PAYPAL_ENVIRONMENT === "live") {
+        return NextResponse.json(
+          { error: "Unauthorized: Active authenticated session required to dispatch live invoices." },
+          { status: 401 }
+        );
+      }
+
+      const dispatchResult = await executeAgentTool(
+        "dispatch_paypal_invoices",
+        {
+          recipients: actionToConfirm.recipients,
+          isConfirmed: true,
+        },
+        userId,
+        true
+      );
 
       return NextResponse.json({
         reply: `✅ Successfully dispatched ${dispatchResult.dispatchedCount} PayPal invoices via Sandbox API.`,
@@ -22,16 +94,35 @@ export async function POST(req: NextRequest) {
     }
 
     if (actionToConfirm && actionToConfirm.action === "DISPATCH_PAYOUT") {
+      if (!authenticatedUser && process.env.PAYPAL_ENVIRONMENT === "live") {
+        return NextResponse.json(
+          { error: "Unauthorized: Active authenticated session required to dispatch live payouts." },
+          { status: 401 }
+        );
+      }
+
       const recipientEmail = actionToConfirm.recipientEmail || actionToConfirm.recipients?.[0]?.email;
       const amount = actionToConfirm.amount || actionToConfirm.totalAmount;
       const note = actionToConfirm.note || actionToConfirm.recipients?.[0]?.description || "Direct Settlement via PocketMate";
 
-      const payoutResult = await executeAgentTool("send_direct_payout", {
-        recipientEmail,
-        amount,
-        note,
-        isConfirmed: true,
-      });
+      if (!recipientEmail || !amount) {
+        return NextResponse.json(
+          { error: "recipientEmail and a valid amount are required to dispatch payout." },
+          { status: 400 }
+        );
+      }
+
+      const payoutResult = await executeAgentTool(
+        "send_direct_payout",
+        {
+          recipientEmail,
+          amount,
+          note,
+          isConfirmed: true,
+        },
+        userId,
+        true
+      );
 
       return NextResponse.json({
         reply: `✅ Successfully transferred $${Number(amount).toFixed(2)} to ${recipientEmail} via PayPal Payouts API.`,
@@ -50,6 +141,7 @@ export async function POST(req: NextRequest) {
     const result = await runAgentOrchestrator({
       persona,
       messages,
+      userId,
     });
 
     return NextResponse.json(result);

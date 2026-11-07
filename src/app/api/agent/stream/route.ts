@@ -1,27 +1,43 @@
 import { NextRequest } from "next/server";
-import { assembleSystemPrompt, PersonaType } from "@/lib/agent/prompts";
+import { assembleSystemPrompt } from "@/lib/agent/prompts";
 import { agentToolDeclarations, executeAgentTool } from "@/lib/agent/tools";
 import { persistChatMessage } from "@/lib/agent/dbSync";
 import { handleDynamicAutonomousResponse } from "@/lib/agent/orchestrator";
+import { getUserIdFromRequest } from "@/lib/auth/session";
+import { z } from "zod";
 
-interface StreamMessage {
-  role: "user" | "assistant" | "system";
-  content: string;
-}
+const StreamRequestSchema = z.object({
+  messages: z
+    .array(
+      z.object({
+        role: z.enum(["user", "assistant", "system"]),
+        content: z.string().min(1).max(10000),
+      })
+    )
+    .min(1)
+    .max(50),
+  persona: z.enum(["GENERAL", "FREELANCER", "BUSINESS"]).default("GENERAL"),
+});
 
 export async function POST(req: NextRequest) {
   try {
-    const { messages, persona = "GENERAL" as PersonaType } = (await req.json()) as {
-      messages: StreamMessage[];
-      persona?: PersonaType;
-    };
+    const rawBody = await req.json();
+    const parseResult = StreamRequestSchema.safeParse(rawBody);
 
-    if (!messages || !Array.isArray(messages)) {
-      return new Response(JSON.stringify({ error: "Invalid 'messages' payload" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+    if (!parseResult.success) {
+      return new Response(
+        JSON.stringify({
+          error: parseResult.error.issues.map((i) => i.message).join(", "),
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
     }
+
+    const { messages, persona } = parseResult.data;
+    const userId = await getUserIdFromRequest(req);
 
     const apiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY_SECONDARY;
     const encoder = new TextEncoder();
@@ -34,13 +50,14 @@ export async function POST(req: NextRequest) {
 
         const lastUserMsg = [...messages].reverse().find((m) => m.role === "user")?.content || "";
         if (lastUserMsg) {
-          persistChatMessage("user", lastUserMsg, persona);
+          persistChatMessage("user", lastUserMsg, persona, undefined, userId);
         }
 
         // Helper to stream through dynamic autonomous engine with pacing
         const runDynamicFallback = async () => {
           const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
           await handleDynamicAutonomousResponse(lastUserMsg, persona, {
+            userId,
             onTextDelta: async (text: string) => {
               for (const word of text.split(" ")) {
                 sendEvent("text_delta", { text: word + " " });
@@ -75,10 +92,28 @@ export async function POST(req: NextRequest) {
           const systemPrompt = assembleSystemPrompt(persona);
           const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:streamGenerateContent?key=${apiKey}&alt=sse`;
 
-          const formattedContents = messages.map((m) => ({
-            role: m.role === "assistant" ? "model" : "user",
-            parts: [{ text: m.content }],
-          }));
+          const formattedContents: Array<{ role: "user" | "model"; parts: [{ text: string }] }> = [];
+          for (const m of messages) {
+            const role = m.role === "assistant" ? "model" : "user";
+            if (formattedContents.length === 0 && role === "model") {
+              continue;
+            }
+            if (
+              formattedContents.length > 0 &&
+              formattedContents[formattedContents.length - 1].role === role
+            ) {
+              formattedContents[formattedContents.length - 1].parts[0].text += `\n${m.content}`;
+            } else {
+              formattedContents.push({
+                role,
+                parts: [{ text: m.content }],
+              });
+            }
+          }
+
+          if (formattedContents.length === 0 || formattedContents[formattedContents.length - 1].role !== "user") {
+            formattedContents.push({ role: "user", parts: [{ text: lastUserMsg || "Hello" }] });
+          }
 
           const toolsPayload = [
             {
@@ -145,7 +180,7 @@ export async function POST(req: NextRequest) {
                       const toolArgs = part.functionCall.args || {};
 
                       sendEvent("tool_start", { name: toolName });
-                      const toolResult = (await executeAgentTool(toolName, toolArgs)) as Record<string, unknown>;
+                      const toolResult = (await executeAgentTool(toolName, toolArgs, userId)) as Record<string, unknown>;
                       liveExecutedTools.push({ name: toolName, result: toolResult });
                       sendEvent("tool_call", { name: toolName, args: toolArgs, result: toolResult });
 

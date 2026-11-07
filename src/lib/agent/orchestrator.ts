@@ -13,6 +13,7 @@ export interface AgentMessage {
 export interface AgentRunOptions {
   persona?: PersonaType;
   messages: AgentMessage[];
+  userId?: string;
   onTextDelta?: (text: string) => void;
   onToolCall?: (toolName: string, args: Record<string, unknown>, result: Record<string, unknown>) => void;
   onGridMutation?: (mutation: GridMutationState) => void;
@@ -32,6 +33,7 @@ export async function runAgentOrchestrator(options: AgentRunOptions): Promise<Ag
   const {
     persona = "GENERAL",
     messages,
+    userId,
     onTextDelta,
     onToolCall,
     onGridMutation,
@@ -45,6 +47,7 @@ export async function runAgentOrchestrator(options: AgentRunOptions): Promise<Ag
   // If no Gemini API key is configured or set to placeholder, run through dynamic autonomous engine
   if (!apiKey || apiKey === "your-gemini-api-key") {
     return handleDynamicAutonomousResponse(lastUserMsg, persona, {
+      userId,
       onTextDelta,
       onToolCall,
       onGridMutation,
@@ -57,10 +60,28 @@ export async function runAgentOrchestrator(options: AgentRunOptions): Promise<Ag
     const systemPrompt = assembleSystemPrompt(persona);
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
 
-    const formattedContents = messages.map((m) => ({
-      role: m.role === "assistant" ? "model" : "user",
-      parts: [{ text: m.content }],
-    }));
+    const formattedContents: Array<{ role: "user" | "model"; parts: [{ text: string }] }> = [];
+    for (const m of messages) {
+      const role = m.role === "assistant" ? "model" : "user";
+      if (formattedContents.length === 0 && role === "model") {
+        continue; // First message must be user
+      }
+      if (
+        formattedContents.length > 0 &&
+        formattedContents[formattedContents.length - 1].role === role
+      ) {
+        formattedContents[formattedContents.length - 1].parts[0].text += `\n${m.content}`;
+      } else {
+        formattedContents.push({
+          role,
+          parts: [{ text: m.content }],
+        });
+      }
+    }
+
+    if (formattedContents.length === 0 || formattedContents[formattedContents.length - 1].role !== "user") {
+      formattedContents.push({ role: "user", parts: [{ text: lastUserMsg || "Hello" }] });
+    }
 
     const toolsPayload = [
       {
@@ -121,7 +142,7 @@ export async function runAgentOrchestrator(options: AgentRunOptions): Promise<Ag
         const toolName = part.functionCall.name;
         const toolArgs = part.functionCall.args || {};
 
-        const toolResult = (await executeAgentTool(toolName, toolArgs)) as Record<string, unknown>;
+        const toolResult = (await executeAgentTool(toolName, toolArgs, userId)) as Record<string, unknown>;
         executedTools.push({ name: toolName, args: toolArgs, result: toolResult });
         onToolCall?.(toolName, toolArgs, toolResult);
 
@@ -179,6 +200,7 @@ export async function handleDynamicAutonomousResponse(
   prompt: string,
   currentPersona: PersonaType,
   handlers: {
+    userId?: string;
     onTextDelta?: (text: string) => void;
     onToolCall?: (toolName: string, args: Record<string, unknown>, result: Record<string, unknown>) => void;
     onGridMutation?: (mutation: GridMutationState) => void;
@@ -501,7 +523,7 @@ export async function handleDynamicAutonomousResponse(
     const categoryName = p.includes("dining") ? "Dining" : p.includes("shopping") ? "Shopping" : "Groceries";
 
     const logArgs = { category: categoryName, amount: amountToLog, merchant: "Target Superstore", description: categoryName };
-    const logResult = (await executeAgentTool("log_category_expense", logArgs)) as {
+    const logResult = (await executeAgentTool("log_category_expense", logArgs, handlers.userId)) as {
       success: boolean;
       newSpent: number;
       monthlyCap: number;
