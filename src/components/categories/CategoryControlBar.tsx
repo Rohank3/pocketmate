@@ -180,7 +180,7 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
   const handleCreateCategory = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim()) return;
-    const capNum = parseFloat(newCap) || 200;
+    const capNum = Math.max(0, parseFloat(newCap) || 200);
     onAddCategory({
       name: newName.trim(),
       monthlyCap: capNum,
@@ -201,7 +201,7 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
   };
 
   const handleSaveInlineEdit = (catId: string) => {
-    const cap = parseFloat(editCapDraft) || 100;
+    const cap = Math.max(0, parseFloat(editCapDraft) || 100);
     const name = editNameDraft.trim() || undefined;
     onEditCategory(catId, cap, name, editColorDraft);
     setEditingCategoryId(null);
@@ -218,7 +218,7 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
   const handleQuickEditSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!quickEditCategory) return;
-    const cap = parseFloat(editCapDraft) || quickEditCategory.monthlyCap;
+    const cap = Math.max(0, parseFloat(editCapDraft) || quickEditCategory.monthlyCap);
     const name = editNameDraft.trim() || quickEditCategory.name;
     onEditCategory(quickEditCategory.id, cap, name, editColorDraft);
     setQuickEditCategory(null);

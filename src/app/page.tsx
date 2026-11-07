@@ -216,8 +216,10 @@ export default function Home() {
       if (typeof window !== "undefined") {
         const params = new URLSearchParams(window.location.search);
         if (params.get("connected") === "paypal") {
-          const userName = params.get("userName") || "PayPal User";
-          const userEmail = params.get("userEmail") || "Sandbox Account";
+          const rawUserName = params.get("userName") || "PayPal User";
+          const rawUserEmail = params.get("userEmail") || "Sandbox Account";
+          const userName = rawUserName.replace(/[<>[\]()]/g, "").slice(0, 50);
+          const userEmail = rawUserEmail.replace(/[<>[\]()]/g, "").slice(0, 80);
           if (isSubscribed) {
             setMessages((prev) => [
               ...prev,

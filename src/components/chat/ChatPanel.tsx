@@ -50,7 +50,13 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (file.size > 10 * 1024 * 1024) {
+        alert("Receipt file must be under 10MB.");
+        e.target.value = "";
+        return;
+      }
       onUploadReceipt(file);
+      e.target.value = "";
     }
   };
 
@@ -166,6 +172,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           <input
             type="text"
             value={inputText}
+            maxLength={2000}
             onChange={(e) => setInputText(e.target.value)}
             placeholder="Type a financial request (e.g. 'split dinner $120 with Dave and Sam', 'did I overspend on dining?')..."
             className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-4 pr-24 py-3 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 transition-all"

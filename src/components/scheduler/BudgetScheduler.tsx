@@ -114,7 +114,7 @@ export default function BudgetScheduler({
     e.preventDefault();
     if (!newTitle.trim()) return;
 
-    const amt = parseFloat(newAmount) || 0;
+    const amt = Math.max(0, parseFloat(newAmount) || 0);
     const parsedDay = parseInt(newDate.split("-")[2], 10) || 15;
 
     const created: ScheduledEvent = {
