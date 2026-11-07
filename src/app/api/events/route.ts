@@ -1,27 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { getAuthenticatedUser, getUserIdFromRequest } from "@/lib/auth/session";
+import { z } from "zod";
 
-async function getUserIdFromRequest(req: NextRequest): Promise<string> {
-  const cookie = req.cookies.get("pocketmate_user")?.value;
-  if (cookie) {
-    try {
-      const parsed = JSON.parse(cookie);
-      if (parsed.email) {
-        const u = await prisma.user.findUnique({ where: { email: parsed.email } });
-        if (u) return u.id;
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  const defaultUser = await prisma.user.upsert({
-    where: { email: "demo@pocketmate.ai" },
-    update: {},
-    create: { email: "demo@pocketmate.ai", name: "PocketMate User", persona: "GENERAL" },
-  });
-  return defaultUser.id;
-}
+const CreateEventSchema = z.object({
+  title: z.string().trim().min(1, "Title is required").max(100),
+  amount: z.number().finite().nonnegative("Amount must be non-negative").max(1000000),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD"),
+  dayOfMonth: z.number().int().min(1).max(31),
+  type: z.enum(["incoming", "outgoing", "milestone"]).default("outgoing"),
+  category: z.string().trim().min(1).max(50).default("General"),
+  counterparty: z.string().trim().max(100).nullable().optional(),
+  status: z.enum(["pending", "scheduled", "completed"]).default("scheduled"),
+});
 
 export async function GET(req: NextRequest) {
   try {
@@ -88,20 +79,34 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const userId = await getUserIdFromRequest(req);
-    const body = await req.json();
+    const authUser = await getAuthenticatedUser(req);
+    if (!authUser && process.env.PAYPAL_ENVIRONMENT === "live") {
+      return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
+    }
+    const userId = authUser ? authUser.id : await getUserIdFromRequest(req);
+    const rawBody = await req.json();
+    const parseResult = CreateEventSchema.safeParse(rawBody);
+
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: parseResult.error.issues.map((i) => i.message).join(", ") },
+        { status: 400 }
+      );
+    }
+
+    const { title, amount, date, dayOfMonth, type, category, counterparty, status } = parseResult.data;
 
     const created = await prisma.scheduledEvent.create({
       data: {
         userId,
-        title: body.title,
-        amount: parseFloat(String(body.amount || 0)),
-        date: body.date,
-        dayOfMonth: parseInt(String(body.dayOfMonth || 1)),
-        type: body.type || "outgoing",
-        category: body.category || "General",
-        counterparty: body.counterparty || null,
-        status: body.status || "scheduled",
+        title,
+        amount,
+        date,
+        dayOfMonth,
+        type,
+        category,
+        counterparty: counterparty || null,
+        status,
       },
     });
 
@@ -114,9 +119,22 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
+    const authUser = await getAuthenticatedUser(req);
+    if (!authUser && process.env.PAYPAL_ENVIRONMENT === "live") {
+      return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
+    }
+    const userId = authUser ? authUser.id : await getUserIdFromRequest(req);
     const id = req.nextUrl.searchParams.get("id");
-    if (!id) {
-      return NextResponse.json({ error: "Event ID is required" }, { status: 400 });
+    if (!id || typeof id !== "string") {
+      return NextResponse.json({ error: "Valid Event ID is required" }, { status: 400 });
+    }
+
+    const existing = await prisma.scheduledEvent.findFirst({
+      where: { id, userId },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: "Event not found or access denied" }, { status: 404 });
     }
 
     await prisma.scheduledEvent.delete({ where: { id } });
