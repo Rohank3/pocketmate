@@ -112,13 +112,13 @@ export async function PATCH(req: NextRequest) {
     }
     const userId = authUser ? authUser.id : await getUserIdFromRequest(req);
     const body = await req.json();
-    const { id, status } = body;
+    const { id, status, counterparty } = body;
 
     if (!id || typeof id !== "string") {
       return NextResponse.json({ error: "Valid Event ID is required" }, { status: 400 });
     }
 
-    if (!["pending", "scheduled", "completed"].includes(status)) {
+    if (status && !["pending", "scheduled", "completed"].includes(status)) {
       return NextResponse.json({ error: "Invalid status value" }, { status: 400 });
     }
 
@@ -130,9 +130,13 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Event not found or access denied" }, { status: 404 });
     }
 
+    const updatePayload: Record<string, unknown> = {};
+    if (status) updatePayload.status = status;
+    if (counterparty !== undefined) updatePayload.counterparty = counterparty;
+
     const updated = await prisma.scheduledEvent.update({
       where: { id },
-      data: { status },
+      data: updatePayload,
     });
 
     return NextResponse.json({ success: true, event: updated });
