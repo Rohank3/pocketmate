@@ -471,10 +471,12 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           persona: activePersona,
-          messages: [...messages, userMsg].map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
+          messages: [...messages, userMsg]
+            .filter((m) => m.content && m.content.trim().length > 0)
+            .map((m) => ({
+              role: m.role,
+              content: m.content.trim(),
+            })),
         }),
       });
 
@@ -542,7 +544,7 @@ export default function Home() {
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantMsgId && !m.content
-            ? { ...m, content: "Processed your request successfully." }
+            ? { ...m, content: "I reviewed your request, but encountered a temporary connection issue. Please try again." }
             : m
         )
       );
