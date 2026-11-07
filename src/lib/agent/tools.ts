@@ -142,14 +142,7 @@ export interface MockBudgetStore {
   [category: string]: { monthlyCap: number; currentSpent: number };
 }
 
-export const inMemoryBudgets: MockBudgetStore = Object.assign(Object.create(null), {
-  Food: { monthlyCap: 400.0, currentSpent: 340.0 },
-  Groceries: { monthlyCap: 400.0, currentSpent: 340.0 },
-  Dining: { monthlyCap: 250.0, currentSpent: 180.0 },
-  Shopping: { monthlyCap: 300.0, currentSpent: 120.0 },
-  Software: { monthlyCap: 150.0, currentSpent: 99.0 },
-  Travel: { monthlyCap: 500.0, currentSpent: 150.0 },
-});
+export const inMemoryBudgets: MockBudgetStore = Object.assign(Object.create(null), {});
 
 // ============================================================================
 // Tool Declarations for Gemini Function Calling
@@ -581,9 +574,20 @@ export async function executeAgentTool(
 
     case "audit_receipt_against_transaction": {
       const { receiptTotal, tax, tip, transactionId } = AuditReceiptSchema.parse(rawArgs);
-      void transactionId;
-      // Look up transaction
-      const chargedAmount = 130.0; // Bistro Lumiere fixture from scenario 3
+      let chargedAmount = receiptTotal + (tax || 0) + (tip || 0);
+
+      if (transactionId) {
+        try {
+          const recentTxs = await paypalClient.fetchRecentTransactions(168);
+          const foundTx = recentTxs.find((t) => t.id === transactionId);
+          if (foundTx) {
+            chargedAmount = foundTx.amount;
+          }
+        } catch (err) {
+          console.warn("[AuditReceipt PayPal Warning]", err);
+        }
+      }
+
       const receiptSum = receiptTotal + (tax || 0) + (tip || 0);
       const diff = Math.abs(chargedAmount - receiptSum);
 

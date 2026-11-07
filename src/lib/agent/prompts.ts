@@ -74,7 +74,7 @@ User: "Hey, take all the expenses made in the last 3 hours and split them evenly
 Assistant Tool Calls:
 1. \`fetch_recent_transactions({ hoursBack: 3 })\` -> Returns Bar ($65), Bowling ($85), Diner ($50) totaling $200.00.
 2. \`calculate_deterministic_split({ totalAmount: 200.0, participants: [{ name: "You (Host)" }, { name: "Alex" }, { name: "Dave" }, { name: "Priya" }, { name: "Sam" }], memo: "Bar ($65), Bowling ($85), Diner ($50)" })\` -> Returns penny-locked allocation of $40.00/person.
-3. \`dispatch_paypal_invoices({ recipients: [{ email: "alex@example.com", name: "Alex", amount: 40.0 }, { email: "dave@example.com", name: "Dave", amount: 40.0 }, { email: "priya@example.com", name: "Priya", amount: 40.0 }, { email: "sam@example.com", name: "Sam", amount: 40.0 }], isConfirmed: false })\`
+3. \`dispatch_paypal_invoices({ recipients: [{ email: "alex@sandbox.paypal.com", name: "Alex", amount: 40.0 }, { email: "dave@sandbox.paypal.com", name: "Dave", amount: 40.0 }, { email: "priya@sandbox.paypal.com", name: "Priya", amount: 40.0 }, { email: "sam@sandbox.paypal.com", name: "Sam", amount: 40.0 }], isConfirmed: false })\`
 4. \`mutate_ag_grid({ groupBy: ["debtor_name"], filter: { status: "pending" }, statusMessage: "Displaying pending split allocations across Alex, Dave, Priya, and Sam ($40.00 each)." })\`
 Assistant Response:
 "Pulled your expenses from the last 3 hours (Bar: $65, Bowling: $85, Diner: $50 = $200.00 total). Each person's share is $40.00. I've prepared 4 PayPal invoices for Alex, Dave, Priya, and Sam. Review the preview card below and confirm dispatch when ready."
@@ -82,7 +82,7 @@ Assistant Response:
 #### Scenario 2: Mall Trip Multi-Item Split & Budget Ceiling Check
 User: "I just paid for everything at the mall. The Zara hoodie ($65) and Starbucks ($14) were for Sarah. Log the remaining Target groceries under my monthly food budget."
 Assistant Tool Calls:
-1. \`dispatch_paypal_invoices({ recipients: [{ email: "sarah@example.com", name: "Sarah", amount: 79.0, description: "Zara hoodie ($65) + Starbucks ($14)" }], isConfirmed: false })\`
+1. \`dispatch_paypal_invoices({ recipients: [{ email: "sarah@sandbox.paypal.com", name: "Sarah", amount: 79.0, description: "Zara hoodie ($65) + Starbucks ($14)" }], isConfirmed: false })\`
 2. \`log_category_expense({ category: "Groceries", amount: 82.50, merchant: "Target", description: "Groceries" })\` -> Returns overrun alert: $422.50 spent of $400.00 cap.
 3. \`mutate_ag_grid({ filter: { category: "Groceries" }, renderChart: "budget_burn_bar", statusMessage: "Groceries budget updated: $422.50 spent of $400.00 cap." })\`
 Assistant Response:

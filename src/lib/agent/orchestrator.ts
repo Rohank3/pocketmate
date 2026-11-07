@@ -1,9 +1,9 @@
 import { assembleSystemPrompt, PersonaType } from "./prompts";
 import { agentToolDeclarations, executeAgentTool } from "./tools";
 import { GridMutationState, ToolExecutionRecord, AgentRunResult } from "@/types/agent";
-import { SandboxStore } from "@/lib/sandbox/sandboxStore";
 import { paypalClient } from "@/lib/paypal/client";
-import { findSandboxAccount, ALL_SANDBOX_ACCOUNTS } from "@/lib/sandbox/sandboxAccounts";
+import { resolveContact } from "@/lib/contacts/contactResolver";
+import { prisma } from "@/lib/db";
 
 export interface AgentMessage {
   role: "user" | "assistant" | "system";
@@ -272,9 +272,21 @@ export async function handleDynamicAutonomousResponse(
       recipientQuery = toMatch[1].replace(/for\b.*/i, "").trim();
     }
 
-    const matchedAccount = recipientQuery ? findSandboxAccount(recipientQuery) : null;
-    const recipientEmail = matchedAccount ? matchedAccount.email : recipientQuery.includes("@") ? recipientQuery : "dave.chen.pm@personal.example.com";
-    const recipientName = matchedAccount ? matchedAccount.name : recipientQuery || "Dave Chen";
+    const matchedAccount = recipientQuery ? await resolveContact(recipientQuery, handlers.userId) : null;
+    const recipientEmail = matchedAccount ? matchedAccount.email : recipientQuery.includes("@") ? recipientQuery : "";
+    const recipientName = matchedAccount ? matchedAccount.name : recipientQuery || "Recipient";
+
+    if (!recipientEmail) {
+      reply = `I'm ready to prepare a direct PayPal transfer of **$${amount.toFixed(2)}** to **${recipientName}**, but I don't have their PayPal email on file.\n\nPlease provide their PayPal email address (e.g. *"Transfer $${amount.toFixed(0)} to ${recipientName} at email@example.com"*).`;
+      handlers.onTextDelta?.(reply);
+      return {
+        reply,
+        gridMutation,
+        actionCard,
+        executedTools,
+        activePersona: persona,
+      };
+    }
 
     const noteMatch = prompt.match(/for\s+([^.$]+)/i);
     const note = noteMatch ? noteMatch[1].trim() : `Direct P2P Settlement to ${recipientName} via PocketMate`;
@@ -306,11 +318,14 @@ export async function handleDynamicAutonomousResponse(
     const rateMatch = prompt.match(/\$(\d+(\.\d+)?)\s*\/?\s*hr/i) || prompt.match(/rate\s*(?:of)?\s*\$?(\d+(\.\d+)?)/i);
     const flatAmountMatch = prompt.match(/\$(\d+(\.\d+)?)/);
 
-    let clientName = "Client Accounts Payable";
+    let clientName = "Client";
     const clientMatch = prompt.match(/invoice\s+(?:to\s+)?([A-Za-z0-9\s&]+?)(?:\s+for|\s+at|\s+\$|$)/i);
     if (clientMatch && clientMatch[1]?.trim()) {
       clientName = clientMatch[1].trim();
     }
+
+    const matchedClient = clientName ? await resolveContact(clientName, handlers.userId) : null;
+    const clientEmail = matchedClient ? matchedClient.email : clientName.includes("@") ? clientName : "";
 
     let invoiceAmount = 500.0;
     let description = `Professional Consulting Services for ${clientName}`;
@@ -325,10 +340,22 @@ export async function handleDynamicAutonomousResponse(
       description = `Consulting Services - Invoice for ${clientName}`;
     }
 
+    if (!clientEmail) {
+      reply = `I've drafted a **$${invoiceAmount.toFixed(2)}** invoice for **${clientName}** (${description}), but need their PayPal billing email to dispatch it.\n\nPlease provide their PayPal email address to proceed.`;
+      handlers.onTextDelta?.(reply);
+      return {
+        reply,
+        gridMutation,
+        actionCard,
+        executedTools,
+        activePersona: persona,
+      };
+    }
+
     const invArgs = {
       recipients: [
         {
-          email: `${clientName.toLowerCase().replace(/[^a-z0-9]/g, "") || "client"}@example.com`,
+          email: clientEmail,
           name: clientName,
           amount: invoiceAmount,
           description,
@@ -348,12 +375,17 @@ export async function handleDynamicAutonomousResponse(
     };
     handlers.onGridMutation?.(gridMutation);
 
-    reply = `Operating in Freelancer mode. I've drafted an itemized PayPal invoice for **${clientName}**:\n\n• **Amount:** $${invoiceAmount.toFixed(2)}\n• **Description:** ${description}\n• **Tax Classification:** Tagged for 1099 quarterly reserve.\n\nPlease review the invoice card below and tap **Confirm & Send** to dispatch via PayPal.`;
+    reply = `Operating in Freelancer mode. I've drafted an itemized PayPal invoice for **${clientName}** (\`${clientEmail}\`):\n\n• **Amount:** $${invoiceAmount.toFixed(2)}\n• **Description:** ${description}\n• **Tax Classification:** Tagged for 1099 quarterly reserve.\n\nPlease review the invoice card below and tap **Confirm & Send** to dispatch via PayPal.`;
   }
   // 3. Dynamic Temporal or Explicit Expense Splitting
   else if (p.includes("split") || p.includes("divide") || p.includes("share") || p.includes("ways")) {
     let splitAmount = 0;
-    const participantsList: { name: string; emailOrHandle: string }[] = [{ name: "You (Host)", emailOrHandle: "host@example.com" }];
+    let hostEmail = "host@paypal.sandbox";
+    if (handlers.userId) {
+      const u = await prisma.user.findUnique({ where: { id: handlers.userId } }).catch(() => null);
+      if (u?.email) hostEmail = u.email;
+    }
+    const participantsList: { name: string; emailOrHandle: string }[] = [{ name: "You (Host)", emailOrHandle: hostEmail }];
     let splitMemo = "Shared Expenses";
 
     // Check if temporal query (e.g. "last 3 hours", "last 24 hours")
@@ -403,31 +435,20 @@ export async function handleDynamicAutonomousResponse(
       for (const name of rawNames) {
         const clean = name.replace(/[.,]/g, "").trim();
         if (clean) {
-          const matchedAcc = findSandboxAccount(clean);
+          const matchedAcc = await resolveContact(clean, handlers.userId);
           if (matchedAcc) {
             participantsList.push({
               name: matchedAcc.name,
               emailOrHandle: matchedAcc.email,
             });
+            disambiguationNotes.push(`Found ${matchedAcc.name} (${matchedAcc.email}) in ${matchedAcc.source === "database_contact" ? "contacts" : "past transactions"}.`);
+          } else if (clean.includes("@")) {
+            participantsList.push({ name: clean.split("@")[0].replace(/[._]/g, " "), emailOrHandle: clean });
           } else {
-            // Resolve contact against user's past transaction history & contacts
-            const res = SandboxStore.resolveContactByName("usr_alex", clean);
-            if (res.match) {
-              participantsList.push({
-                name: res.match.name,
-                emailOrHandle: res.match.email,
-              });
-              if (res.reason) {
-                disambiguationNotes.push(res.reason);
-              }
-            } else if (clean.includes("@")) {
-              participantsList.push({ name: clean.split("@")[0], emailOrHandle: clean });
-            } else {
-              participantsList.push({
-                name: clean,
-                emailOrHandle: `${clean.toLowerCase().replace(/[^a-z0-9]/g, "")}.pm@personal.example.com`,
-              });
-            }
+            participantsList.push({
+              name: clean,
+              emailOrHandle: "",
+            });
           }
         }
       }
@@ -437,20 +458,9 @@ export async function handleDynamicAutonomousResponse(
     const waysMatch = prompt.match(/(\d+)\s*ways?/i);
     const targetWays = waysMatch ? parseInt(waysMatch[1], 10) : participantsList.length;
 
-    const availableSandboxUsers = ALL_SANDBOX_ACCOUNTS.filter((a) => a.type === "PERSONAL");
-    let sandboxUserIdx = 0;
-    while (participantsList.length < targetWays && participantsList.length < 5) {
-      const nextAcc = availableSandboxUsers[sandboxUserIdx % availableSandboxUsers.length];
-      sandboxUserIdx++;
-      if (nextAcc && !participantsList.some((p) => p.emailOrHandle === nextAcc.email)) {
-        participantsList.push({
-          name: nextAcc.name,
-          emailOrHandle: nextAcc.email,
-        });
-      } else {
-        const idx = participantsList.length;
-        participantsList.push({ name: `Participant ${idx}`, emailOrHandle: `guest${idx}.pm@personal.example.com` });
-      }
+    while (participantsList.length < targetWays && participantsList.length < 10) {
+      const idx = participantsList.length;
+      participantsList.push({ name: `Participant ${idx}`, emailOrHandle: "" });
     }
 
     // Execute deterministic penny-locked split math
@@ -466,18 +476,24 @@ export async function handleDynamicAutonomousResponse(
     executedTools.push({ name: "calculate_deterministic_split", args: splitArgs, result: splitResult });
     handlers.onToolCall?.("calculate_deterministic_split", splitArgs, splitResult);
 
-    // Prepare PayPal invoices for all non-host participants
-    const recipients = (splitResult.allocations || [])
-      .filter((a) => !a.isHost && a.name !== "You (Host)")
+    const nonHostAllocs = (splitResult.allocations || []).filter((a) => !a.isHost && a.name !== "You (Host)");
+    const missingEmailParticipants = nonHostAllocs.filter((a) => {
+      const pObj = participantsList.find((p) => p.name === a.name);
+      return !pObj?.emailOrHandle || !pObj.emailOrHandle.includes("@");
+    });
+
+    // Prepare PayPal invoices for participants who have valid emails
+    const recipients = nonHostAllocs
       .map((a) => {
         const pObj = participantsList.find((p) => p.name === a.name);
         return {
-          email: pObj?.emailOrHandle || `${a.name.toLowerCase().replace(/[^a-z0-9]/g, "")}@sandbox.paypal.com`,
+          email: pObj?.emailOrHandle || "",
           name: a.name,
           amount: a.amount,
           description: splitMemo,
         };
-      });
+      })
+      .filter((r) => Boolean(r.email && r.email.includes("@")));
 
     if (recipients.length > 0) {
       const invoiceArgs = { recipients, isConfirmed: false };
@@ -496,25 +512,48 @@ export async function handleDynamicAutonomousResponse(
     };
     handlers.onGridMutation?.(gridMutation);
 
-    const shareDesc = recipients.map((r) => `${r.name} (${r.email}): $${r.amount.toFixed(2)}`).join(", ");
-    const noteSection = disambiguationNotes.length > 0 ? `\n\n🔍 **Contact History:** ${disambiguationNotes.join(" ")}` : "";
-    reply = `Pulled and calculated your split: **$${splitAmount.toFixed(2)}** total across ${participantsList.length} people.\n\n• ${shareDesc}${noteSection}\n\nI have generated ${recipients.length} itemized PayPal invoices ready to dispatch. Tap Confirm & Send below to proceed.`;
+    const shareDesc = (splitResult.allocations || []).map((a) => {
+      const pObj = participantsList.find((p) => p.name === a.name);
+      const emailTag = pObj?.emailOrHandle ? ` (${pObj.emailOrHandle})` : " [PayPal email needed]";
+      return `• **${a.name}**${emailTag}: $${a.amount.toFixed(2)}`;
+    }).join("\n");
+
+    const noteSection = disambiguationNotes.length > 0 ? `\n\n🔍 ${disambiguationNotes.join("\n")}` : "";
+    const promptForMissing =
+      missingEmailParticipants.length > 0
+        ? `\n\n⚠️ **Action Required:** To dispatch invoices via PayPal, please provide the PayPal email address for: **${missingEmailParticipants.map((m) => m.name).join(", ")}**.`
+        : "\n\nAll invoices are prepared on your PayPal Invoicing rail. Review the preview card below and tap **Confirm & Send** to dispatch.";
+
+    reply = `Calculated penny-locked split: **$${splitAmount.toFixed(2)}** across ${participantsList.length} participants:\n\n${shareDesc}${noteSection}${promptForMissing}`;
   }
   // 4. Mall Trip / Multi-Item Expense & Category Budget Logging
-  else if (p.includes("mall") || (p.includes("log") && p.includes("budget")) || (p.includes("zara") && p.includes("sarah"))) {
-    // 1. Prepare invoice for Sarah if mentioned
-    if (p.includes("sarah") || p.includes("zara")) {
-      const invArgs = {
-        recipients: [
-          { email: "sarah@example.com", name: "Sarah", amount: 79.0, description: "Zara hoodie ($65) + Starbucks drinks ($14)" },
-        ],
-        isConfirmed: false,
-      };
-      const invResult = (await executeAgentTool("dispatch_paypal_invoices", invArgs)) as Record<string, unknown>;
-      executedTools.push({ name: "dispatch_paypal_invoices", args: invArgs, result: invResult });
-      handlers.onToolCall?.("dispatch_paypal_invoices", invArgs, invResult);
-      actionCard = invResult;
-      handlers.onActionCard?.(actionCard);
+  else if (p.includes("mall") || (p.includes("log") && p.includes("budget"))) {
+    // 1. Prepare invoice if a friend's purchase is mentioned
+    const friendMatch = prompt.match(/(?:for|with)\s+([A-Za-z]+)/i);
+    const friendName = friendMatch ? friendMatch[1] : "";
+    if (friendName && !["me", "myself", "everything", "budget", "mall"].includes(friendName.toLowerCase())) {
+      const matched = await resolveContact(friendName, handlers.userId);
+      const itemAmountMatch = prompt.match(/\$([0-9]+(\.[0-9]{1,2})?)/);
+      const itemAmount = itemAmountMatch ? parseFloat(itemAmountMatch[1]) : 50.0;
+
+      if (matched) {
+        const invArgs = {
+          recipients: [
+            {
+              email: matched.email,
+              name: matched.name,
+              amount: itemAmount,
+              description: `Shared purchase from shopping trip`,
+            },
+          ],
+          isConfirmed: false,
+        };
+        const invResult = (await executeAgentTool("dispatch_paypal_invoices", invArgs)) as Record<string, unknown>;
+        executedTools.push({ name: "dispatch_paypal_invoices", args: invArgs, result: invResult });
+        handlers.onToolCall?.("dispatch_paypal_invoices", invArgs, invResult);
+        actionCard = invResult;
+        handlers.onActionCard?.(actionCard);
+      }
     }
 
     // 2. Log Groceries or general budget
@@ -593,61 +632,52 @@ export async function handleDynamicAutonomousResponse(
   else if (
     p.includes("scheduled") ||
     p.includes("reminder") ||
-    p.includes("dave chen") ||
-    p.includes("alex miller") ||
-    p.includes("sarah jenkins") ||
-    p.includes("aws") ||
-    p.includes("infrastructure") ||
-    p.includes("saas") ||
-    p.includes("checkpoint") ||
-    p.includes("due")
+    p.includes("bill") ||
+    p.includes("due") ||
+    p.includes("checkpoint")
   ) {
-    if (
-      p.includes("dave") ||
-      p.includes("alex") ||
-      p.includes("sarah") ||
-      p.includes("split") ||
-      p.includes("invoice")
-    ) {
-      let debtorName = "Dave Chen";
-      let amount = 65.0;
-      let memo = "Downtown Craft Bar & Grill Split";
-
-      if (p.includes("alex")) {
-        debtorName = "Alex Miller";
-        amount = 42.5;
-        memo = "Dinner & Social Gathering Split";
-      } else if (p.includes("sarah")) {
-        debtorName = "Sarah Jenkins";
-        amount = 79.0;
-        memo = "Zara Mall Galleria ($65) & Starbucks ($14)";
+    let userEvents: Array<{ id: string; title: string; amount: number; counterparty?: string | null; date: string; category: string }> = [];
+    if (handlers.userId) {
+      try {
+        userEvents = await prisma.scheduledEvent.findMany({
+          where: { userId: handlers.userId },
+        });
+      } catch (err) {
+        console.warn("[ScheduledEvents DB Warning]", err);
       }
+    }
 
-      const invArgs = {
-        recipients: [
-          {
-            email: `${debtorName.toLowerCase().replace(/[^a-z0-9]/g, "")}@example.com`,
-            name: debtorName,
-            amount,
-            description: memo,
-          },
-        ],
-        isConfirmed: false,
-      };
-
-      const invResult = (await executeAgentTool("dispatch_paypal_invoices", invArgs)) as Record<string, unknown>;
-      executedTools.push({ name: "dispatch_paypal_invoices", args: invArgs, result: invResult });
-      handlers.onToolCall?.("dispatch_paypal_invoices", invArgs, invResult);
-      actionCard = invResult;
-      handlers.onActionCard?.(actionCard);
+    if (userEvents.length > 0) {
+      const targetEvent = userEvents[0];
+      const debtor = targetEvent.counterparty || targetEvent.title;
+      const matchedContact = await resolveContact(debtor, handlers.userId);
 
       gridMutation = {
-        filter: { debtor_name: debtorName },
-        statusMessage: `Payment Reminder: Drafted $${amount.toFixed(2)} PayPal invoice for ${debtorName}.`,
+        filter: { category: targetEvent.category },
+        statusMessage: `Scheduled Item: ${targetEvent.title} ($${targetEvent.amount.toFixed(2)}) due on ${targetEvent.date}.`,
       };
       handlers.onGridMutation?.(gridMutation);
 
-      reply = `I reviewed the scheduled payment for **${debtorName}**:\n\n• **Amount Due:** $${amount.toFixed(2)}\n• **Settlement Status:** Unpaid Split\n• **Linked Memo:** ${memo}\n\nI have generated an itemized PayPal invoice reminder ready to dispatch to their sandbox account. Please review the card below and tap **Confirm & Send**.`;
+      if (matchedContact) {
+        const invArgs = {
+          recipients: [
+            {
+              email: matchedContact.email,
+              name: matchedContact.name,
+              amount: targetEvent.amount,
+              description: `Reminder: ${targetEvent.title}`,
+            },
+          ],
+          isConfirmed: false,
+        };
+        const invResult = (await executeAgentTool("dispatch_paypal_invoices", invArgs)) as Record<string, unknown>;
+        executedTools.push({ name: "dispatch_paypal_invoices", args: invArgs, result: invResult });
+        handlers.onToolCall?.("dispatch_paypal_invoices", invArgs, invResult);
+        actionCard = invResult;
+        handlers.onActionCard?.(actionCard);
+      }
+
+      reply = `I reviewed your upcoming scheduled event **${targetEvent.title}**:\n\n• **Amount:** $${targetEvent.amount.toFixed(2)}\n• **Due Date:** ${targetEvent.date}\n• **Category:** ${targetEvent.category}\n• **Counterparty:** ${debtor}${matchedContact ? ` (${matchedContact.email})` : ""}\n\nLedger and budget pacing have been updated.`;
     } else if (
       p.includes("aws") ||
       p.includes("cloud") ||
