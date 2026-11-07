@@ -22,6 +22,20 @@ const StreamRequestSchema = z.object({
 export async function POST(req: NextRequest) {
   try {
     const rawBody = await req.json();
+
+    // Sanitize message stream input: filter out empty messages and trim content
+    if (rawBody?.messages && Array.isArray(rawBody.messages)) {
+      rawBody.messages = rawBody.messages
+        .filter((m: { content?: string }) => typeof m?.content === "string" && m.content.trim().length > 0)
+        .map((m: { role: string; content: string }) => ({
+          role: m.role,
+          content: m.content.trim(),
+        }));
+      if (rawBody.messages.length === 0) {
+        rawBody.messages = [{ role: "user", content: "Hello" }];
+      }
+    }
+
     const parseResult = StreamRequestSchema.safeParse(rawBody);
 
     if (!parseResult.success) {
@@ -44,8 +58,24 @@ export async function POST(req: NextRequest) {
 
     const stream = new ReadableStream({
       async start(controller) {
+        let isClosed = false;
         const sendEvent = (event: string, data: unknown) => {
-          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+          if (isClosed) return;
+          try {
+            controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+          } catch {
+            isClosed = true;
+          }
+        };
+
+        const safeClose = () => {
+          if (isClosed) return;
+          isClosed = true;
+          try {
+            controller.close();
+          } catch {
+            // Already closed
+          }
         };
 
         const lastUserMsg = [...messages].reverse().find((m) => m.role === "user")?.content || "";
@@ -60,8 +90,9 @@ export async function POST(req: NextRequest) {
             userId,
             onTextDelta: async (text: string) => {
               for (const word of text.split(" ")) {
+                if (isClosed) break;
                 sendEvent("text_delta", { text: word + " " });
-                await delay(20);
+                await delay(15);
               }
             },
             onToolCall: (name, args, result) => {
@@ -84,13 +115,13 @@ export async function POST(req: NextRequest) {
         // If no Gemini key configured or is placeholder, run through dynamic autonomous engine
         if (!apiKey || apiKey === "your-gemini-api-key") {
           await runDynamicFallback();
-          controller.close();
+          safeClose();
           return;
         }
 
         try {
           const systemPrompt = assembleSystemPrompt(persona);
-          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:streamGenerateContent?key=${apiKey}&alt=sse`;
+          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?key=${apiKey}&alt=sse`;
 
           const formattedContents: Array<{ role: "user" | "model"; parts: [{ text: string }] }> = [];
           for (const m of messages) {
@@ -146,7 +177,7 @@ export async function POST(req: NextRequest) {
           if (!geminiRes.ok || !geminiRes.body) {
             console.warn(`[Gemini SSE] HTTP ${geminiRes.status}. Falling back to dynamic autonomous engine.`);
             await runDynamicFallback();
-            controller.close();
+            safeClose();
             return;
           }
 
@@ -221,11 +252,11 @@ export async function POST(req: NextRequest) {
           }
 
           sendEvent("done", { status: "complete" });
-          controller.close();
+          safeClose();
         } catch (err: unknown) {
           console.warn("[Stream API Fallback]", err);
           await runDynamicFallback();
-          controller.close();
+          safeClose();
         }
       },
     });
