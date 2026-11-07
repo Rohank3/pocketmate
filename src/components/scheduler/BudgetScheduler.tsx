@@ -15,6 +15,8 @@ import {
   Trash2,
   CheckCircle2,
   Circle,
+  AlertCircle,
+  Check,
 } from "lucide-react";
 import type { CategoryItem } from "@/components/categories/CategoryControlBar";
 
@@ -44,7 +46,6 @@ export default function BudgetScheduler({
   categories = [],
   selectedCategory = "all",
   events: propEvents,
-  onEventClick,
   onAddEvent,
   onDeleteEvent,
   onToggleStatus,
@@ -75,19 +76,19 @@ export default function BudgetScheduler({
 
   const [filterType, setFilterType] = useState<"all" | "incoming" | "outgoing">("all");
 
-  // Modal for "+ Add Scheduled Bill / Reminder"
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [newTitle, setNewTitle] = useState("");
-  const [newAmount, setNewAmount] = useState("50");
-  const [newDate, setNewDate] = useState(() => {
-    const y = viewDate.getFullYear();
-    const m = String(viewDate.getMonth() + 1).padStart(2, "0");
-    const d = String(Math.min(15, new Date(y, viewDate.getMonth() + 1, 0).getDate())).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-  });
-  const [newType, setNewType] = useState<"incoming" | "outgoing" | "milestone">("outgoing");
-  const [newCategory, setNewCategory] = useState("Dining");
-  const [newCounterparty, setNewCounterparty] = useState("");
+  // Selected Day Details Modal (Dual-Pane)
+  const [selectedDayModal, setSelectedDayModal] = useState<{
+    dateStr: string; // "YYYY-MM-DD"
+    dayNumber: number;
+    formattedTitle: string; // e.g. "Wednesday, November 18, 2026"
+  } | null>(null);
+
+  // Form state for creating an event inside Day Modal or standalone
+  const [modalTitle, setModalTitle] = useState("");
+  const [modalAmount, setModalAmount] = useState("50");
+  const [modalType, setModalType] = useState<"incoming" | "outgoing" | "milestone">("outgoing");
+  const [modalCategory, setModalCategory] = useState("Dining");
+  const [modalCounterparty, setModalCounterparty] = useState("");
 
   const handlePrevMonth = () => {
     setViewDate(new Date(viewYear, viewMonth - 1, 1));
@@ -99,6 +100,30 @@ export default function BudgetScheduler({
 
   const handleJumpToToday = () => {
     setViewDate(new Date());
+  };
+
+  // Open the Day Details popup for a specific date
+  const handleOpenDayModal = (dateStr: string, dayNumber: number) => {
+    // Parse date parts safely to avoid timezone drift
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const parsedDate = new Date(y, m - 1, d);
+    const formatted = parsedDate.toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    setSelectedDayModal({
+      dateStr,
+      dayNumber,
+      formattedTitle: formatted,
+    });
+    setModalTitle("");
+    setModalAmount("50");
+    setModalType("outgoing");
+    setModalCategory(categories[0]?.name || "Utilities");
+    setModalCounterparty("");
   };
 
   // Filtered events
@@ -204,32 +229,53 @@ export default function BudgetScheduler({
     return cells;
   }, [viewYear, viewMonth, currentMonthPrefix, displayedEvents]);
 
-  const handleAddEvent = (e: React.FormEvent) => {
+  // Handle adding event from the day details modal
+  const handleCreateEventForDay = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim()) return;
+    if (!selectedDayModal || !modalTitle.trim()) return;
 
-    const amt = Math.max(0, parseFloat(newAmount) || 0);
-    const parsedDay = parseInt(newDate.split("-")[2], 10) || 15;
+    const amt = Math.max(0, parseFloat(modalAmount) || 0);
 
     const created: ScheduledEvent = {
       id: `evt_${Date.now()}`,
-      title: newTitle.trim(),
+      title: modalTitle.trim(),
       amount: amt,
-      date: newDate,
-      dayOfMonth: parsedDay,
-      type: newType,
-      category: newCategory,
-      counterparty: newCounterparty.trim() || undefined,
+      date: selectedDayModal.dateStr,
+      dayOfMonth: selectedDayModal.dayNumber,
+      type: modalType,
+      category: modalCategory,
+      counterparty: modalCounterparty.trim() || undefined,
       status: "scheduled",
     };
 
     setEvents((prev) => [...prev, created]);
     onAddEvent?.(created);
-    setIsAddModalOpen(false);
-    setNewTitle("");
-    setNewAmount("50");
-    setNewCounterparty("");
+    setModalTitle("");
+    setModalAmount("50");
+    setModalCounterparty("");
   };
+
+  // Selected day items for modal
+  const selectedDayEvents = useMemo(() => {
+    if (!selectedDayModal) return [];
+    return events.filter(
+      (e) =>
+        e.date === selectedDayModal.dateStr ||
+        (!e.date && e.dayOfMonth === selectedDayModal.dayNumber)
+    );
+  }, [events, selectedDayModal]);
+
+  const selectedDayTotalBills = useMemo(() => {
+    return selectedDayEvents
+      .filter((e) => e.type === "outgoing" && e.status !== "completed")
+      .reduce((sum, e) => sum + e.amount, 0);
+  }, [selectedDayEvents]);
+
+  const selectedDayTotalReceivables = useMemo(() => {
+    return selectedDayEvents
+      .filter((e) => e.type === "incoming" && e.status !== "completed")
+      .reduce((sum, e) => sum + e.amount, 0);
+  }, [selectedDayEvents]);
 
   return (
     <div className="h-full w-full flex flex-col bg-zinc-950 rounded-xl border border-zinc-800 overflow-hidden shadow-xl">
@@ -276,7 +322,7 @@ export default function BudgetScheduler({
               </div>
             </div>
             <p className="text-xs text-zinc-400">
-              Clear visual payment timeline: Expected receivables, recurring bills & budget check-ins
+              Click any day to inspect bills, mark as done, or schedule reminders
             </p>
           </div>
         </div>
@@ -295,14 +341,13 @@ export default function BudgetScheduler({
             </div>
           </div>
 
-          {/* Add Event Button */}
+          {/* Quick Schedule Today Button */}
           <button
             onClick={() => {
               const y = viewDate.getFullYear();
               const m = String(viewDate.getMonth() + 1).padStart(2, "0");
               const d = String(Math.min(15, new Date(y, viewDate.getMonth() + 1, 0).getDate())).padStart(2, "0");
-              setNewDate(`${y}-${m}-${d}`);
-              setIsAddModalOpen(true);
+              handleOpenDayModal(`${y}-${m}-${d}`, parseInt(d, 10));
             }}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white text-xs font-semibold cursor-pointer shadow-sm transition-all focus-visible:outline-2 focus-visible:outline-blue-400"
           >
@@ -402,13 +447,15 @@ export default function BudgetScheduler({
               {calendarDays.map((cell) => (
                 <div
                   key={cell.key}
-                  className={`min-h-[85px] sm:min-h-[95px] p-1.5 rounded-lg border transition-all flex flex-col justify-between ${
+                  onClick={() => handleOpenDayModal(cell.dateStr, cell.day)}
+                  className={`min-h-[85px] sm:min-h-[95px] p-1.5 rounded-lg border transition-all flex flex-col justify-between cursor-pointer group ${
                     cell.isToday
-                      ? "bg-zinc-900/90 border-blue-500/60 shadow-xs shadow-blue-500/10"
+                      ? "bg-zinc-900/90 border-blue-500/60 shadow-xs shadow-blue-500/10 hover:border-blue-400"
                       : cell.isCurrentMonth
-                      ? "bg-zinc-950/80 border-zinc-800/80 hover:border-zinc-700"
-                      : "bg-zinc-950/40 border-zinc-900 text-zinc-600 opacity-60"
+                      ? "bg-zinc-950/80 border-zinc-800/80 hover:border-zinc-700 hover:bg-zinc-900/40"
+                      : "bg-zinc-950/40 border-zinc-900 text-zinc-600 opacity-60 hover:opacity-80"
                   }`}
+                  title={`Click to view or add bills for ${cell.dateStr}`}
                 >
                   {/* Day Header */}
                   <div className="flex items-center justify-between">
@@ -417,7 +464,7 @@ export default function BudgetScheduler({
                         cell.isToday
                           ? "bg-blue-600 text-white"
                           : cell.isCurrentMonth
-                          ? "text-zinc-400"
+                          ? "text-zinc-400 group-hover:text-zinc-200"
                           : "text-zinc-600"
                       }`}
                     >
@@ -440,7 +487,7 @@ export default function BudgetScheduler({
                       return (
                         <div
                           key={evt.id}
-                          className={`group relative flex items-center justify-between w-full text-left p-1 rounded text-[10px] transition-all cursor-pointer font-medium border ${
+                          className={`flex items-center justify-between w-full text-left p-1 rounded text-[10px] transition-all font-medium border ${
                             isCompleted
                               ? "bg-zinc-900/80 border-zinc-800 text-zinc-500 line-through"
                               : isIncoming
@@ -451,19 +498,15 @@ export default function BudgetScheduler({
                           }`}
                           title={`${evt.title} - $${evt.amount.toFixed(2)} (${evt.status})`}
                         >
-                          <button
-                            type="button"
-                            onClick={() => onEventClick?.(evt.title)}
-                            className="flex-1 text-left truncate flex items-center gap-1 cursor-pointer"
-                          >
+                          <span className="truncate flex items-center gap-1">
                             <span className="font-bold shrink-0">
                               {evt.amount > 0 ? `$${evt.amount.toFixed(0)} ` : ""}
                             </span>
                             <span className="truncate">{evt.title}</span>
-                          </button>
+                          </span>
 
-                          {/* Quick Actions (Complete & Delete) */}
-                          <div className="hidden group-hover:flex items-center gap-0.5 shrink-0 ml-1">
+                          {/* Quick Actions (Complete & Delete) right on hover */}
+                          <div className="flex items-center gap-0.5 shrink-0 ml-1">
                             {onToggleStatus && (
                               <button
                                 type="button"
@@ -507,7 +550,7 @@ export default function BudgetScheduler({
           /* Agenda / Chronological Timeline View */
           <div className="flex flex-col gap-3">
             <p className="text-xs text-zinc-400 mb-1">
-              Upcoming financial milestones ordered chronologically. Click any item to inspect details or ask the agent to act on it.
+              Upcoming financial milestones ordered chronologically. Click any item to inspect details or manage status.
             </p>
 
             <div className="flex flex-col gap-2.5">
@@ -519,7 +562,10 @@ export default function BudgetScheduler({
                 return (
                   <div
                     key={evt.id}
-                    onClick={() => onEventClick?.(evt.title)}
+                    onClick={() => {
+                      const day = parseInt(evt.date.split("-")[2], 10) || evt.dayOfMonth || 15;
+                      handleOpenDayModal(evt.date, day);
+                    }}
                     className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl border transition-all cursor-pointer gap-2 ${
                       isCompleted
                         ? "bg-zinc-950/60 border-zinc-800/60 opacity-60"
@@ -644,140 +690,311 @@ export default function BudgetScheduler({
           </span>
         </div>
         <span className="text-zinc-500 text-[10px]">
-          Click any event to draft PayPal invoice or request AI advice
+          Click any day to inspect summary, mark items done, or set reminders
         </span>
       </div>
 
-      {/* Modal: Add Scheduled Bill or Reminder */}
-      {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-800 bg-zinc-900/90">
-              <div className="flex items-center gap-2">
-                <CalendarIcon className="w-4 h-4 text-purple-400" />
-                <h3 className="text-sm font-semibold text-zinc-100">Schedule Payment / Reminder</h3>
+      {/* Dual-Pane Day Details & Scheduling Popup Modal */}
+      {selectedDayModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800 bg-zinc-950/80">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
+                  <CalendarIcon className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-zinc-100 flex items-center gap-2">
+                    {selectedDayModal.formattedTitle}
+                  </h3>
+                  <div className="flex items-center gap-3 text-xs mt-0.5 font-mono">
+                    <span className="text-rose-400">Bills Due: -${selectedDayTotalBills.toFixed(2)}</span>
+                    <span className="text-zinc-600">·</span>
+                    <span className="text-emerald-400">Receivables: +${selectedDayTotalReceivables.toFixed(2)}</span>
+                  </div>
+                </div>
               </div>
+
               <button
-                onClick={() => setIsAddModalOpen(false)}
-                className="text-zinc-400 hover:text-zinc-200 p-1 rounded-lg hover:bg-zinc-800 cursor-pointer"
+                type="button"
+                onClick={() => setSelectedDayModal(null)}
+                className="text-zinc-400 hover:text-zinc-100 p-1.5 rounded-lg hover:bg-zinc-800 cursor-pointer transition-colors"
+                title="Close modal"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleAddEvent} className="p-5 flex flex-col gap-3.5">
-              <div>
-                <label className="text-xs font-medium text-zinc-300 block mb-1">
-                  Payment / Milestone Title
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Electric Bill, Gym Membership, Sarah Split"
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  required
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-hidden focus:border-blue-500"
-                />
-              </div>
+            {/* Modal Body: Dual Pane Layout */}
+            <div className="grid grid-cols-1 md:grid-cols-12 flex-1 overflow-y-auto divide-y md:divide-y-0 md:divide-x divide-zinc-800">
+              {/* Left Pane (7 cols): List of Bills / Reminders for this Day */}
+              <div className="md:col-span-7 p-4 sm:p-5 flex flex-col gap-3 overflow-y-auto">
+                <div className="flex items-center justify-between pb-1 border-b border-zinc-800/80">
+                  <h4 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <span>Scheduled for this Day</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-zinc-800 text-zinc-400">
+                      {selectedDayEvents.length}
+                    </span>
+                  </h4>
+                </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-zinc-300 block mb-1">
-                    Amount ($)
-                  </label>
-                  <div className="relative">
-                    <DollarSign className="w-4 h-4 absolute left-2.5 top-2.5 text-zinc-500" />
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={newAmount}
-                      onChange={(e) => setNewAmount(e.target.value)}
-                      required
-                      className="w-full pl-8 pr-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 font-mono focus:outline-hidden focus:border-blue-500"
-                    />
+                {selectedDayEvents.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center p-8 text-center bg-zinc-950/40 rounded-xl border border-dashed border-zinc-800 flex-1 min-h-[160px]">
+                    <div className="w-10 h-10 rounded-xl bg-zinc-800/50 flex items-center justify-center text-zinc-500 mb-2">
+                      <Clock className="w-5 h-5" />
+                    </div>
+                    <p className="text-xs font-medium text-zinc-300">No items scheduled for this day</p>
+                    <p className="text-[11px] text-zinc-500 mt-0.5 max-w-xs">
+                      Use the quick-set form to add a bill, receivable, or checkpoint for this date.
+                    </p>
                   </div>
-                </div>
+                ) : (
+                  <div className="flex flex-col gap-2.5">
+                    {selectedDayEvents.map((evt) => {
+                      const isIncoming = evt.type === "incoming";
+                      const isOutgoing = evt.type === "outgoing";
+                      const isCompleted = evt.status === "completed";
 
+                      return (
+                        <div
+                          key={evt.id}
+                          className={`p-3 rounded-xl border transition-all flex flex-col gap-2 ${
+                            isCompleted
+                              ? "bg-zinc-950/40 border-zinc-800/50 opacity-60"
+                              : "bg-zinc-950/90 border-zinc-800 hover:border-zinc-700"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2.5">
+                              <div
+                                className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${
+                                  isCompleted
+                                    ? "bg-zinc-800/40 border-zinc-700 text-zinc-500"
+                                    : isIncoming
+                                    ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                                    : isOutgoing
+                                    ? "bg-rose-500/10 border-rose-500/20 text-rose-400"
+                                    : "bg-purple-500/10 border-purple-500/20 text-purple-400"
+                                }`}
+                              >
+                                {isIncoming ? (
+                                  <ArrowDownLeft className="w-4 h-4" />
+                                ) : isOutgoing ? (
+                                  <ArrowUpRight className="w-4 h-4" />
+                                ) : (
+                                  <Sparkles className="w-4 h-4" />
+                                )}
+                              </div>
+
+                              <div>
+                                <p
+                                  className={`text-xs font-semibold ${
+                                    isCompleted ? "text-zinc-400 line-through" : "text-zinc-100"
+                                  }`}
+                                >
+                                  {evt.title}
+                                </p>
+                                <div className="flex items-center gap-2 mt-0.5 text-[11px] text-zinc-400">
+                                  <span className="px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-300 text-[10px]">
+                                    {evt.category}
+                                  </span>
+                                  {evt.counterparty && (
+                                    <span>To/From: <span className="text-zinc-300">{evt.counterparty}</span></span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="text-right shrink-0">
+                              <span
+                                className={`text-sm font-bold font-mono block ${
+                                  isCompleted
+                                    ? "text-zinc-500 line-through"
+                                    : isIncoming
+                                    ? "text-emerald-400"
+                                    : isOutgoing
+                                    ? "text-rose-400"
+                                    : "text-purple-400"
+                                }`}
+                              >
+                                {evt.amount > 0 ? `${isIncoming ? "+" : "-"}$${evt.amount.toFixed(2)}` : "Milestone"}
+                              </span>
+                              <span
+                                className={`text-[9px] uppercase font-semibold ${
+                                  isCompleted
+                                    ? "text-emerald-400"
+                                    : isIncoming
+                                    ? "text-emerald-400/80"
+                                    : "text-zinc-500"
+                                }`}
+                              >
+                                {isCompleted ? "Completed" : evt.type}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Action Row */}
+                          <div className="flex items-center justify-between pt-2 border-t border-zinc-850/80 text-xs">
+                            <span className="text-[10px] text-zinc-500">
+                              Status: <span className="text-zinc-300 capitalize">{evt.status}</span>
+                            </span>
+
+                            <div className="flex items-center gap-2">
+                              {onToggleStatus && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    onToggleStatus(evt.id, isCompleted ? "scheduled" : "completed")
+                                  }
+                                  className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium cursor-pointer transition-colors ${
+                                    isCompleted
+                                      ? "bg-zinc-800 hover:bg-zinc-700 text-zinc-300"
+                                      : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs"
+                                  }`}
+                                >
+                                  {isCompleted ? (
+                                    <span>Reopen</span>
+                                  ) : (
+                                    <>
+                                      <Check className="w-3 h-3" />
+                                      <span>Mark Done</span>
+                                    </>
+                                  )}
+                                </button>
+                              )}
+
+                              {onDeleteEvent && (
+                                <button
+                                  type="button"
+                                  onClick={() => onDeleteEvent(evt.id)}
+                                  className="flex items-center gap-1 px-2 py-1 rounded bg-zinc-900 hover:bg-rose-950 text-zinc-400 hover:text-rose-400 border border-zinc-800 transition-colors cursor-pointer text-xs"
+                                  title="Delete item"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  <span>Delete</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Right Pane (5 cols): Inline Form to Set Bill or Reminder for this Date */}
+              <div className="md:col-span-5 p-4 sm:p-5 bg-zinc-950/60 flex flex-col justify-between">
                 <div>
-                  <label className="text-xs font-medium text-zinc-300 block mb-1">
-                    Due Date
-                  </label>
-                  <input
-                    type="date"
-                    value={newDate}
-                    onChange={(e) => setNewDate(e.target.value)}
-                    required
-                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 font-mono focus:outline-hidden focus:border-blue-500"
-                  />
+                  <div className="pb-1 mb-3 border-b border-zinc-800/80">
+                    <h4 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Plus className="w-3.5 h-3.5 text-blue-400" />
+                      <span>Set Reminder for this Day</span>
+                    </h4>
+                    <p className="text-[11px] text-zinc-500 mt-0.5">
+                      Date locked: <span className="text-zinc-300 font-mono">{selectedDayModal.dateStr}</span>
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleCreateEventForDay} className="flex flex-col gap-3">
+                    <div>
+                      <label className="text-[11px] font-medium text-zinc-400 block mb-1">
+                        Bill / Reminder Title
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. WiFi Bill, Client Retainer, Split"
+                        value={modalTitle}
+                        onChange={(e) => setModalTitle(e.target.value)}
+                        required
+                        className="w-full px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 placeholder:text-zinc-600 focus:outline-hidden focus:border-blue-500"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="text-[11px] font-medium text-zinc-400 block mb-1">
+                          Amount ($)
+                        </label>
+                        <div className="relative">
+                          <DollarSign className="w-3.5 h-3.5 absolute left-2 top-2 text-zinc-500" />
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={modalAmount}
+                            onChange={(e) => setModalAmount(e.target.value)}
+                            required
+                            className="w-full pl-6 pr-2 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 font-mono focus:outline-hidden focus:border-blue-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-medium text-zinc-400 block mb-1">
+                          Type
+                        </label>
+                        <select
+                          value={modalType}
+                          onChange={(e) => setModalType(e.target.value as "incoming" | "outgoing" | "milestone")}
+                          className="w-full px-2 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-[11px] text-zinc-100 focus:outline-hidden focus:border-blue-500 cursor-pointer"
+                        >
+                          <option value="outgoing">Bill Due</option>
+                          <option value="incoming">Receivable</option>
+                          <option value="milestone">Checkpoint</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-medium text-zinc-400 block mb-1">
+                        Category
+                      </label>
+                      <select
+                        value={modalCategory}
+                        onChange={(e) => setModalCategory(e.target.value)}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-[11px] text-zinc-100 focus:outline-hidden focus:border-blue-500 cursor-pointer"
+                      >
+                        {categories.map((c) => (
+                          <option key={c.id} value={c.name}>
+                            {c.name}
+                          </option>
+                        ))}
+                        <option value="Utilities">Utilities</option>
+                        <option value="General">General</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-medium text-zinc-400 block mb-1">
+                        Counterparty / Merchant (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Netflix, Alex, Landlord"
+                        value={modalCounterparty}
+                        onChange={(e) => setModalCounterparty(e.target.value)}
+                        className="w-full px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 placeholder:text-zinc-600 focus:outline-hidden focus:border-blue-500"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="mt-2 w-full py-2 rounded-xl bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white text-xs font-semibold cursor-pointer shadow-md transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add to this Day</span>
+                    </button>
+                  </form>
+                </div>
+
+                <div className="pt-3 mt-4 border-t border-zinc-800/80 text-[10px] text-zinc-500 flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0 text-zinc-400" />
+                  <span>Items saved here update your calendar and cashflow projections in real time.</span>
                 </div>
               </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-zinc-300 block mb-1">
-                    Payment Flow
-                  </label>
-                  <select
-                    value={newType}
-                    onChange={(e) => setNewType(e.target.value as "incoming" | "outgoing" | "milestone")}
-                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-hidden focus:border-blue-500 cursor-pointer"
-                  >
-                    <option value="outgoing">Bill (Money Out)</option>
-                    <option value="incoming">Receivable (Money In)</option>
-                    <option value="milestone">Budget Checkpoint</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-zinc-300 block mb-1">
-                    Category
-                  </label>
-                  <select
-                    value={newCategory}
-                    onChange={(e) => setNewCategory(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-hidden focus:border-blue-500 cursor-pointer"
-                  >
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.name}>
-                        {c.name}
-                      </option>
-                    ))}
-                    <option value="Utilities">Utilities</option>
-                    <option value="General">General</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-zinc-300 block mb-1">
-                  Counterparty / Debtor (Optional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Alex Miller, Landlord, Spotify"
-                  value={newCounterparty}
-                  onChange={(e) => setNewCounterparty(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 placeholder:text-zinc-600 focus:outline-hidden focus:border-blue-500"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 mt-2 pt-3 border-t border-zinc-800">
-                <button
-                  type="button"
-                  onClick={() => setIsAddModalOpen(false)}
-                  className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-zinc-400 hover:bg-zinc-800 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold cursor-pointer shadow-md"
-                >
-                  Schedule Event
-                </button>
-              </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
