@@ -87,35 +87,37 @@ export default function FinancialStudio({
 
   // 2. Calculate Debtor / Split Balances
   const debtorAnalytics = useMemo(() => {
-    const debtors: Record<
+    const debtors = new Map<
       string,
       { name: string; amount: number; count: number; status: string; txs: string[] }
-    > = {};
+    >();
 
     transactions
       .filter((t) => t.debtor_name && t.debtor_name !== "Self" && t.debtor_name !== "—")
       .forEach((t) => {
         const name = t.debtor_name;
-        if (!debtors[name]) {
-          debtors[name] = {
+        let entry = debtors.get(name);
+        if (!entry) {
+          entry = {
             name,
             amount: 0,
             count: 0,
             status: t.status,
             txs: [],
           };
+          debtors.set(name, entry);
         }
-        debtors[name].amount += t.amount;
-        debtors[name].count += 1;
-        debtors[name].txs.push(t.merchant);
+        entry.amount += t.amount;
+        entry.count += 1;
+        entry.txs.push(t.merchant);
         if (t.status === "disputed") {
-          debtors[name].status = "disputed";
-        } else if (t.status === "pending" && debtors[name].status !== "disputed") {
-          debtors[name].status = "pending";
+          entry.status = "disputed";
+        } else if (t.status === "pending" && entry.status !== "disputed") {
+          entry.status = "pending";
         }
       });
 
-    const list = Object.values(debtors).sort((a, b) => b.amount - a.amount);
+    const list = Array.from(debtors.values()).sort((a, b) => b.amount - a.amount);
     const totalReceivables = list
       .filter((d) => d.status === "pending" || d.status === "disputed" || d.status === "unresolved")
       .reduce((sum, d) => sum + d.amount, 0);

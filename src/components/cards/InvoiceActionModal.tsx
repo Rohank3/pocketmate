@@ -30,7 +30,10 @@ export const InvoiceActionModal: React.FC<InvoiceActionModalProps> = ({
 
   const handlePay = () => {
     // Open PayPal Sandbox hosted checkout URL in new tab
-    if (invoice.paypalInvoiceUrl) {
+    if (
+      invoice.paypalInvoiceUrl &&
+      /^https:\/\/(www\.)?(sandbox\.)?paypal\.com\//i.test(invoice.paypalInvoiceUrl)
+    ) {
       window.open(invoice.paypalInvoiceUrl, "_blank", "noopener,noreferrer");
     }
     onPay(invoice.id);
@@ -45,7 +48,7 @@ export const InvoiceActionModal: React.FC<InvoiceActionModalProps> = ({
 
   const handleAdjustSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const amt = parseFloat(proposedAmount) || 0;
+    const amt = Math.max(0, parseFloat(proposedAmount) || 0);
     onRequestAdjustment(invoice.id, amt, adjustmentReason.trim() || "Proposed revised share");
     onClose();
   };

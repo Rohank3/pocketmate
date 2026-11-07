@@ -175,12 +175,13 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
 
     return data.filter((row) => {
       for (const [key, val] of Object.entries(gridMutation.filter!)) {
+        if (["__proto__", "prototype", "constructor"].includes(key)) continue;
         if (key === "status" && val === "unpaid") {
           if (row.status !== "pending" && row.status !== "unresolved") return false;
         } else if (key === "category") {
           if (row.category.toLowerCase() !== String(val).toLowerCase()) return false;
-        } else if (row[key as keyof TransactionRow] !== val) {
-          return false;
+        } else if (Object.prototype.hasOwnProperty.call(row, key)) {
+          if (row[key as keyof TransactionRow] !== val) return false;
         }
       }
       return true;
