@@ -16,6 +16,9 @@ export interface PayPalUserProfile {
 
 export function getPayPalOAuthUrl(redirectUri?: string, state?: string): string {
   const clientId = process.env.PAYPAL_CLIENT_ID || "";
+  if (!clientId) {
+    throw new Error("PAYPAL_CLIENT_ID environment variable is missing.");
+  }
   const baseUrl =
     process.env.PAYPAL_ENVIRONMENT === "live"
       ? "https://www.paypal.com"
@@ -26,7 +29,7 @@ export function getPayPalOAuthUrl(redirectUri?: string, state?: string): string 
 
   const scopes = encodeURIComponent("openid profile email");
   const stateQuery = state ? `&state=${encodeURIComponent(state)}` : "";
-  return `${baseUrl}/connect?flowEntry=static&client_id=${clientId}&response_type=code&scope=${scopes}&redirect_uri=${encodeURIComponent(
+  return `${baseUrl}/connect?flowEntry=static&client_id=${encodeURIComponent(clientId)}&response_type=code&scope=${scopes}&redirect_uri=${encodeURIComponent(
     targetRedirect
   )}${stateQuery}`;
 }

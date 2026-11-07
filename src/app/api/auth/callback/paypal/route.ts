@@ -2,13 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { exchangePayPalCodeForTokens, fetchPayPalUserInfo } from "@/lib/paypal/auth";
 import { prisma } from "@/lib/db";
 import { createSignedSessionCookie } from "@/lib/auth/session";
-import { z } from "zod";
 import crypto from "crypto";
-
-const ManualLoginSchema = z.object({
-  email: z.string().trim().email("Invalid email format").max(255),
-  name: z.string().trim().max(100).optional(),
-});
 
 export async function GET(req: NextRequest) {
   try {
@@ -131,67 +125,12 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function POST(req: NextRequest) {
-  try {
-    if (process.env.PAYPAL_ENVIRONMENT === "live") {
-      return NextResponse.json(
-        { error: "Direct sandbox credential login is disabled in production live environment." },
-        { status: 403 }
-      );
-    }
-
-    const rawBody = await req.json();
-    const parseResult = ManualLoginSchema.safeParse(rawBody);
-
-    if (!parseResult.success) {
-      return NextResponse.json(
-        { error: parseResult.error.issues.map((i) => i.message).join(", ") },
-        { status: 400 }
-      );
-    }
-
-    const { email, name } = parseResult.data;
-    const cleanEmail = email.toLowerCase();
-    const cleanName = name || cleanEmail.split("@")[0].replace(/[._]/g, " ");
-
-    const user = await prisma.user.upsert({
-      where: { email: cleanEmail },
-      update: { name: cleanName },
-      create: {
-        email: cleanEmail,
-        name: cleanName,
-        persona: "GENERAL",
-      },
-    });
-
-    // Ensure default budget categories exist
-    const catCount = await prisma.budgetCategory.count({ where: { userId: user.id } });
-    if (catCount === 0) {
-      await prisma.budgetCategory.createMany({
-        data: [
-          { userId: user.id, name: "Groceries", monthlyCap: 400.0, currentSpent: 0.0, color: "#10b981" },
-          { userId: user.id, name: "Dining", monthlyCap: 250.0, currentSpent: 0.0, color: "#3b82f6" },
-          { userId: user.id, name: "Shopping", monthlyCap: 300.0, currentSpent: 0.0, color: "#ec4899" },
-          { userId: user.id, name: "Entertainment", monthlyCap: 200.0, currentSpent: 0.0, color: "#8b5cf6" },
-        ],
-      });
-    }
-
-    const res = NextResponse.json({ success: true, user });
-    res.cookies.set(
-      "pocketmate_user",
-      createSignedSessionCookie({ id: user.id, email: user.email, name: user.name }),
-      {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        maxAge: 60 * 60 * 24 * 7,
-        path: "/",
-      }
-    );
-    return res;
-  } catch (error) {
-    console.error("[Sandbox Manual Login Error]", error);
-    return NextResponse.json({ error: "Failed to authenticate sandbox user" }, { status: 500 });
-  }
+export async function POST() {
+  return NextResponse.json(
+    {
+      error:
+        "Direct simulated/manual login has been permanently decommissioned for security. All authentication must occur via official PayPal OpenID Connect (/api/auth/paypal).",
+    },
+    { status: 403 }
+  );
 }
