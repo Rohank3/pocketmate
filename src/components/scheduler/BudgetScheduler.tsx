@@ -22,6 +22,8 @@ import type { CategoryItem } from "@/components/categories/CategoryControlBar";
 import {
   extractLifecycle,
   formatCounterpartyWithLifecycle,
+  isEventActiveOnDate,
+  cancelSubscriptionCounterparty,
 } from "@/lib/utils/subscriptionLifecycle";
 
 export interface ScheduledEvent {
@@ -46,6 +48,7 @@ export interface BudgetSchedulerProps {
   onAddEvent?: (event: Omit<ScheduledEvent, "id">) => void;
   onDeleteEvent?: (eventId: string) => void;
   onToggleStatus?: (eventId: string, newStatus: "pending" | "scheduled" | "completed") => void;
+  onCancelSubscription?: (eventId: string, updatedCounterparty: string) => void;
 }
 
 export default function BudgetScheduler({
@@ -55,6 +58,7 @@ export default function BudgetScheduler({
   onAddEvent,
   onDeleteEvent,
   onToggleStatus,
+  onCancelSubscription,
 }: BudgetSchedulerProps) {
   const [viewMode, setViewMode] = useState<"calendar" | "agenda">("calendar");
   const [internalEvents, setInternalEvents] = useState<ScheduledEvent[]>([]);
@@ -186,25 +190,7 @@ export default function BudgetScheduler({
 
   // Helper to determine if a scheduled item belongs to a calendar day
   const doesEventMatchDay = (e: ScheduledEvent, cellDateStr: string, cellDay: number) => {
-    const lifecycle = extractLifecycle(e.counterparty, e.date);
-
-    // If a contract has an end date, do not display on future dates after contract end
-    if (lifecycle.endDate && cellDateStr > lifecycle.endDate) {
-      return false;
-    }
-
-    // If a contract has a start date, do not display before contract start
-    if (lifecycle.startDate && cellDateStr < lifecycle.startDate) {
-      return false;
-    }
-
-    // 1. Exact date match (e.g. one-time scheduled event on this specific date)
-    if (e.date === cellDateStr) return true;
-
-    // 2. Monthly recurring bill or milestone on this day of the month
-    if (e.dayOfMonth === cellDay) return true;
-
-    return false;
+    return isEventActiveOnDate(e, cellDateStr, cellDay, "monthly");
   };
 
   // Aggregate metrics for currently viewed month (independent of sub-filter tabs)
@@ -213,13 +199,8 @@ export default function BudgetScheduler({
 
   const monthEvents = useMemo(() => {
     return events.filter((e) => {
-      const lifecycle = extractLifecycle(e.counterparty, e.date);
-      if (lifecycle.endDate && currentMonthPrefix > lifecycle.endDate.slice(0, 7)) return false;
-      if (lifecycle.startDate && currentMonthPrefix < lifecycle.startDate.slice(0, 7)) return false;
-
-      if (e.date && e.date.startsWith(currentMonthPrefix)) return true;
-      if (e.dayOfMonth && e.dayOfMonth <= daysInCurrentMonth) return true;
-      return false;
+      const midDateStr = `${currentMonthPrefix}-${String(Math.min(e.dayOfMonth || 15, daysInCurrentMonth)).padStart(2, "0")}`;
+      return isEventActiveOnDate(e, midDateStr, e.dayOfMonth || 15, "monthly");
     });
   }, [events, currentMonthPrefix, daysInCurrentMonth]);
 
@@ -337,6 +318,33 @@ export default function BudgetScheduler({
     setModalAmount("50");
     setModalCounterparty("");
     setModalEndDate("");
+  };
+
+  // Handle cancelling a recurring subscription from the Day Details modal
+  const handleCancelSubscriptionAction = async (eventId: string, currentCounterparty?: string) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const updatedCp = cancelSubscriptionCounterparty(currentCounterparty, today);
+
+    if (onCancelSubscription) {
+      onCancelSubscription(eventId, updatedCp);
+    } else {
+      try {
+        await fetch("/api/events", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: eventId, counterparty: updatedCp, status: "completed" }),
+        });
+      } catch (err) {
+        console.error(err);
+      }
+      setEvents((prev) =>
+        prev.map((e) =>
+          e.id === eventId
+            ? { ...e, counterparty: updatedCp, status: "completed" }
+            : e
+        )
+      );
+    }
   };
 
   // Selected day items for modal
@@ -885,6 +893,7 @@ export default function BudgetScheduler({
                       const isIncoming = evt.type === "incoming";
                       const isOutgoing = evt.type === "outgoing";
                       const isCompleted = evt.status === "completed";
+                      const lifecycle = extractLifecycle(evt.counterparty, evt.date);
 
                       return (
                         <div
@@ -925,32 +934,35 @@ export default function BudgetScheduler({
                                 >
                                   {evt.title}
                                 </p>
-                                {(() => {
-                                  const lifecycle = extractLifecycle(evt.counterparty, evt.date);
-                                  return (
-                                    <div className="flex flex-col gap-1 mt-0.5 text-[11px] text-zinc-400">
-                                      <div className="flex items-center gap-2">
-                                        <span className="px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-300 text-[10px]">
-                                          {evt.category}
-                                        </span>
-                                        {lifecycle.cleanName && (
-                                          <span>Provider: <span className="text-zinc-300">{lifecycle.cleanName}</span></span>
-                                        )}
-                                      </div>
-                                      {evt.type === "outgoing" && (
-                                        <div className="flex items-center gap-1.5 text-[10px] text-zinc-400">
-                                          {lifecycle.startDate && (
-                                            <span>Started: <span className="text-zinc-300 font-mono">{lifecycle.startDate}</span></span>
-                                          )}
-                                          <span>·</span>
-                                          <span className={lifecycle.isOngoing ? "text-emerald-400/90" : "text-amber-400/90 font-medium"}>
-                                            {lifecycle.contractStatus}
-                                          </span>
-                                        </div>
+                                <div className="flex flex-col gap-1 mt-0.5 text-[11px] text-zinc-400">
+                                  <div className="flex items-center gap-2">
+                                    <span className="px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-300 text-[10px]">
+                                      {evt.category}
+                                    </span>
+                                    {lifecycle.cleanName && (
+                                      <span>Provider: <span className="text-zinc-300">{lifecycle.cleanName}</span></span>
+                                    )}
+                                  </div>
+                                  {evt.type === "outgoing" && (
+                                    <div className="flex items-center gap-1.5 text-[10px] text-zinc-400">
+                                      {lifecycle.startDate && (
+                                        <span>Started: <span className="text-zinc-300 font-mono">{lifecycle.startDate}</span></span>
                                       )}
+                                      <span>·</span>
+                                      <span
+                                        className={
+                                          lifecycle.isCancelled
+                                            ? "text-rose-400 font-medium"
+                                            : lifecycle.isOngoing
+                                            ? "text-emerald-400/90"
+                                            : "text-amber-400/90 font-medium"
+                                        }
+                                      >
+                                        {lifecycle.contractStatus}
+                                      </span>
                                     </div>
-                                  );
-                                })()}
+                                  )}
+                                </div>
                               </div>
                             </div>
 
@@ -1021,6 +1033,17 @@ export default function BudgetScheduler({
                                 >
                                   <Trash2 className="w-3 h-3" />
                                   <span>Delete</span>
+                                </button>
+                              )}
+
+                              {evt.type === "outgoing" && !lifecycle.isCancelled && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCancelSubscriptionAction(evt.id, evt.counterparty)}
+                                  className="flex items-center gap-1 px-2 py-1 rounded bg-zinc-900 hover:bg-rose-950/70 text-zinc-400 hover:text-rose-400 border border-zinc-800 transition-colors cursor-pointer text-xs"
+                                  title="Cancel subscription (preserves past history, removes from future months)"
+                                >
+                                  <span>Cancel</span>
                                 </button>
                               )}
                             </div>
@@ -1154,8 +1177,59 @@ export default function BudgetScheduler({
                         />
                       </div>
                     </div>
-                    <p className="text-[10px] text-zinc-500 -mt-1">
-                      Leave End Date blank for ongoing subscriptions (e.g. Netflix, AWS), or set an End Date for fixed installment plans.
+
+                    {/* Quick Duration Preset Chips */}
+                    <div className="flex items-center gap-1.5 flex-wrap -mt-1">
+                      <span className="text-[10px] text-zinc-400">Duration:</span>
+                      <button
+                        type="button"
+                        onClick={() => setModalEndDate("")}
+                        className={`text-[10px] px-2 py-0.5 rounded cursor-pointer transition-colors border ${
+                          !modalEndDate
+                            ? "bg-blue-600 text-white border-blue-500 font-semibold"
+                            : "bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200"
+                        }`}
+                      >
+                        Ongoing (12 Mo)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const base = new Date(modalStartDate || selectedDayModal.dateStr);
+                          base.setMonth(base.getMonth() + 6);
+                          setModalEndDate(base.toISOString().slice(0, 10));
+                        }}
+                        className="text-[10px] px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-800 hover:text-zinc-200 cursor-pointer transition-colors"
+                      >
+                        6 Months
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const base = new Date(modalStartDate || selectedDayModal.dateStr);
+                          base.setFullYear(base.getFullYear() + 1);
+                          setModalEndDate(base.toISOString().slice(0, 10));
+                        }}
+                        className="text-[10px] px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-800 hover:text-zinc-200 cursor-pointer transition-colors"
+                      >
+                        1 Year
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const base = new Date(modalStartDate || selectedDayModal.dateStr);
+                          base.setFullYear(base.getFullYear() + 3);
+                          setModalEndDate(base.toISOString().slice(0, 10));
+                        }}
+                        className="text-[10px] px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-800 hover:text-zinc-200 cursor-pointer transition-colors"
+                        title="E.g. Spotify Student 3-Year Plan"
+                      >
+                        3 Years (Student)
+                      </button>
+                    </div>
+
+                    <p className="text-[10px] text-zinc-500">
+                      Ongoing subscriptions project up to 12 months ahead until cancelled. Fixed contracts (e.g. 3-Year Spotify Student) project strictly until their End Date.
                     </p>
 
                     <button
