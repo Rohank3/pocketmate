@@ -13,76 +13,124 @@ export const FetchTransactionsSchema = z.object({
 });
 
 export const CalculateSplitSchema = z.object({
-  totalAmount: z.number().positive(),
-  participants: z.array(
-    z.object({
-      name: z.string().min(1),
-      emailOrHandle: z.string().min(1),
-    })
-  ).min(1),
-  memo: z.string().optional(),
+  totalAmount: z.number().finite().positive().max(1000000),
+  participants: z
+    .array(
+      z.object({
+        name: z.string().trim().min(1).max(100),
+        emailOrHandle: z.string().trim().min(1).max(255),
+      })
+    )
+    .min(1)
+    .max(50),
+  memo: z.string().trim().max(255).optional(),
 });
 
 export const DispatchInvoicesSchema = z.object({
-  recipients: z.array(
-    z.object({
-      email: z.string().email(),
-      name: z.string().optional(),
-      amount: z.number().positive(),
-      description: z.string(),
-    })
-  ).min(1),
+  recipients: z
+    .array(
+      z.object({
+        email: z.string().trim().email().max(255),
+        name: z.string().trim().max(100).optional(),
+        amount: z.number().finite().positive().max(50000),
+        description: z.string().trim().min(1).max(255),
+      })
+    )
+    .min(1)
+    .max(50),
   isConfirmed: z.boolean().default(false), // Layer D: Requires explicit confirmation before live write
 });
 
 export const SendPayoutSchema = z.object({
-  recipientEmail: z.string().email(),
-  amount: z.number().positive(),
-  note: z.string().optional(),
+  recipientEmail: z.string().trim().email().max(255),
+  amount: z.number().finite().positive().max(50000),
+  note: z.string().trim().max(255).optional(),
   isConfirmed: z.boolean().default(false),
 });
 
+const PROTOTYPE_POLLUTION_KEYS = new Set([
+  "__proto__",
+  "prototype",
+  "constructor",
+  "toString",
+  "valueOf",
+]);
+
 export const LogCategoryExpenseSchema = z.object({
-  category: z.string().min(1),
-  amount: z.number().positive(),
-  merchant: z.string().optional(),
-  description: z.string().optional(),
+  category: z
+    .string()
+    .trim()
+    .min(1)
+    .max(50)
+    .refine((val) => !PROTOTYPE_POLLUTION_KEYS.has(val), "Invalid category name."),
+  amount: z.number().finite().positive().max(1000000),
+  merchant: z.string().trim().max(100).optional(),
+  description: z.string().trim().max(255).optional(),
 });
 
 export const CheckBudgetStatusSchema = z.object({
-  category: z.string().min(1),
+  category: z
+    .string()
+    .trim()
+    .min(1)
+    .max(50)
+    .refine((val) => !PROTOTYPE_POLLUTION_KEYS.has(val), "Invalid category name."),
 });
 
+const SAFE_FILTER_KEYS = new Set([
+  "id",
+  "date",
+  "debtor_name",
+  "merchantName",
+  "amount",
+  "category",
+  "status",
+  "type",
+  "description",
+]);
+
 export const MutateAGGridSchema = z.object({
-  groupBy: z.array(z.string()).optional(),
-  filter: z.record(z.string(), z.any()).optional(),
-  renderChart: z.string().optional(),
-  highlightRowId: z.string().optional(),
-  statusMessage: z.string().optional(),
+  groupBy: z.array(z.string().max(50)).max(5).optional(),
+  filter: z
+    .record(z.string().max(50), z.union([z.string().max(100), z.number(), z.boolean()]))
+    .refine(
+      (obj) =>
+        Object.keys(obj).every(
+          (k) => !["__proto__", "prototype", "constructor"].includes(k) && SAFE_FILTER_KEYS.has(k)
+        ),
+      "Filter contains unsupported or hazardous property names."
+    )
+    .optional(),
+  renderChart: z.string().max(100).optional(),
+  highlightRowId: z.string().max(100).optional(),
+  statusMessage: z.string().max(500).optional(),
 });
 
 export const AuditReceiptSchema = z.object({
-  receiptTotal: z.number().positive(),
-  tax: z.number().nonnegative().optional().default(0),
-  tip: z.number().nonnegative().optional().default(0),
-  transactionId: z.string().optional(),
-  lineItems: z.array(
-    z.object({
-      name: z.string(),
-      amount: z.number().positive(),
-    })
-  ).optional(),
+  receiptTotal: z.number().finite().positive().max(100000),
+  tax: z.number().finite().nonnegative().max(10000).optional().default(0),
+  tip: z.number().finite().nonnegative().max(10000).optional().default(0),
+  transactionId: z.string().trim().max(100).optional(),
+  lineItems: z
+    .array(
+      z.object({
+        name: z.string().trim().min(1).max(100),
+        amount: z.number().finite().positive().max(50000),
+      })
+    )
+    .max(100)
+    .optional(),
 });
 
 export const UpdatePersonaSchema = z.object({
   newPersona: z.enum(["GENERAL", "FREELANCER", "BUSINESS"]),
-  reason: z.string(),
+  reason: z.string().trim().min(1).max(500),
 });
 
 export const InitiateDisputeSchema = z.object({
-  transactionId: z.string().min(1),
-  reason: z.string().min(1),
-  disputedAmount: z.number().positive(),
+  transactionId: z.string().trim().min(1).max(100),
+  reason: z.string().trim().min(1).max(255),
+  disputedAmount: z.number().finite().positive().max(50000),
   isConfirmed: z.boolean().default(false),
 });
 
@@ -94,14 +142,14 @@ export interface MockBudgetStore {
   [category: string]: { monthlyCap: number; currentSpent: number };
 }
 
-export const inMemoryBudgets: MockBudgetStore = {
+export const inMemoryBudgets: MockBudgetStore = Object.assign(Object.create(null), {
   Food: { monthlyCap: 400.0, currentSpent: 340.0 },
   Groceries: { monthlyCap: 400.0, currentSpent: 340.0 },
   Dining: { monthlyCap: 250.0, currentSpent: 180.0 },
   Shopping: { monthlyCap: 300.0, currentSpent: 120.0 },
   Software: { monthlyCap: 150.0, currentSpent: 99.0 },
   Travel: { monthlyCap: 500.0, currentSpent: 150.0 },
-};
+});
 
 // ============================================================================
 // Tool Declarations for Gemini Function Calling
@@ -171,10 +219,6 @@ export const agentToolDeclarations = [
             required: ["email", "amount", "description"],
           },
         },
-        isConfirmed: {
-          type: "BOOLEAN",
-          description: "True if user explicitly clicked Confirm & Send in the preview card.",
-        },
       },
       required: ["recipients"],
     },
@@ -188,10 +232,6 @@ export const agentToolDeclarations = [
         recipientEmail: { type: "STRING", description: "PayPal email of recipient." },
         amount: { type: "NUMBER", description: "Dollar amount to transfer." },
         note: { type: "STRING", description: "Payment reason or description." },
-        isConfirmed: {
-          type: "BOOLEAN",
-          description: "True if user explicitly clicked Confirm Transfer in the preview card.",
-        },
       },
       required: ["recipientEmail", "amount"],
     },
@@ -296,11 +336,35 @@ export const agentToolDeclarations = [
 // Tool Dispatcher & Execution Handlers
 // ============================================================================
 
-export async function executeAgentTool(name: string, rawArgs: Record<string, unknown>) {
+export async function executeAgentTool(
+  name: string,
+  rawArgs: Record<string, unknown>,
+  userId?: string,
+  isHumanActionConfirmation: boolean = false
+) {
+  // Layer D Security Guardrail:
+  // Live payout/invoice/dispute execution CANNOT be triggered directly by LLM function calls.
+  // isConfirmed is strictly forced to false unless explicitly triggered by an authenticated human confirmation tap.
+  const safeArgs: Record<string, unknown> = {
+    ...rawArgs,
+    isConfirmed: isHumanActionConfirmation === true && Boolean(rawArgs.isConfirmed),
+  };
+
   switch (name) {
     case "fetch_recent_transactions": {
-      const { hoursBack } = FetchTransactionsSchema.parse(rawArgs);
-      const txs = await paypalClient.fetchRecentTransactions(hoursBack);
+      const { hoursBack } = FetchTransactionsSchema.parse(safeArgs);
+      let queryEmail: string | undefined = undefined;
+      if (userId) {
+        try {
+          const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+          if (user?.email && !user.email.includes("business") && !user.email.includes("merchant")) {
+            queryEmail = user.email;
+          }
+        } catch {
+          // ignore
+        }
+      }
+      const txs = await paypalClient.fetchRecentTransactions(hoursBack, queryEmail);
       return {
         success: true,
         hoursLookedBack: hoursBack,
@@ -310,7 +374,7 @@ export async function executeAgentTool(name: string, rawArgs: Record<string, unk
     }
 
     case "calculate_deterministic_split": {
-      const { totalAmount, participants, memo } = CalculateSplitSchema.parse(rawArgs);
+      const { totalAmount, participants, memo } = CalculateSplitSchema.parse(safeArgs);
       const splitResult = calculateEqualSplit(totalAmount, participants as SplitParticipant[], memo);
       return {
         success: true,
@@ -319,7 +383,7 @@ export async function executeAgentTool(name: string, rawArgs: Record<string, unk
     }
 
     case "dispatch_paypal_invoices": {
-      const { recipients, isConfirmed } = DispatchInvoicesSchema.parse(rawArgs);
+      const { recipients, isConfirmed } = DispatchInvoicesSchema.parse(safeArgs);
 
       if (!isConfirmed) {
         // Return structured confirmation card for Layer D security
@@ -348,7 +412,7 @@ export async function executeAgentTool(name: string, rawArgs: Record<string, unk
     }
 
     case "send_direct_payout": {
-      const { recipientEmail, amount, note, isConfirmed } = SendPayoutSchema.parse(rawArgs);
+      const { recipientEmail, amount, note, isConfirmed } = SendPayoutSchema.parse(safeArgs);
 
       if (!isConfirmed) {
         return {
@@ -385,16 +449,21 @@ export async function executeAgentTool(name: string, rawArgs: Record<string, unk
     }
 
     case "log_category_expense": {
-      const { category, amount, merchant, description } = LogCategoryExpenseSchema.parse(rawArgs);
+      const { category, amount, merchant, description } = LogCategoryExpenseSchema.parse(safeArgs);
 
       let prevSpent = 0;
       let cap = 350.0;
       let targetCat = category;
 
       try {
-        const dbCat = await prisma.budgetCategory.findFirst({
-          where: { name: { equals: category, mode: "insensitive" } },
-        });
+        const dbCat = userId
+          ? await prisma.budgetCategory.findFirst({
+              where: {
+                userId,
+                name: { equals: category, mode: "insensitive" },
+              },
+            })
+          : null;
 
         if (dbCat) {
           targetCat = dbCat.name;
@@ -414,15 +483,19 @@ export async function executeAgentTool(name: string, rawArgs: Record<string, unk
           });
           prevSpent = dbCat.currentSpent;
         } else {
-          syncBudgetExpenseToDB(category, amount, merchant, description);
-          if (inMemoryBudgets[category]) {
+          if (userId) {
+            syncBudgetExpenseToDB(category, amount, merchant, description, userId);
+          }
+          if (Object.prototype.hasOwnProperty.call(inMemoryBudgets, category)) {
             prevSpent = inMemoryBudgets[category].currentSpent;
             cap = inMemoryBudgets[category].monthlyCap;
             inMemoryBudgets[category].currentSpent += amount;
           }
         }
       } catch {
-        syncBudgetExpenseToDB(category, amount, merchant, description);
+        if (userId) {
+          syncBudgetExpenseToDB(category, amount, merchant, description, userId);
+        }
       }
 
       const newSpent = prevSpent + amount;
@@ -449,12 +522,17 @@ export async function executeAgentTool(name: string, rawArgs: Record<string, unk
     }
 
     case "check_budget_status": {
-      const { category } = CheckBudgetStatusSchema.parse(rawArgs);
+      const { category } = CheckBudgetStatusSchema.parse(safeArgs);
 
       try {
-        const dbCat = await prisma.budgetCategory.findFirst({
-          where: { name: { equals: category, mode: "insensitive" } },
-        });
+        const dbCat = userId
+          ? await prisma.budgetCategory.findFirst({
+              where: {
+                userId,
+                name: { equals: category, mode: "insensitive" },
+              },
+            })
+          : null;
 
         if (dbCat) {
           return {
@@ -467,6 +545,17 @@ export async function executeAgentTool(name: string, rawArgs: Record<string, unk
         }
       } catch {
         // fallback
+      }
+
+      if (Object.prototype.hasOwnProperty.call(inMemoryBudgets, category)) {
+        const item = inMemoryBudgets[category];
+        return {
+          category,
+          monthlyCap: item.monthlyCap,
+          currentSpent: item.currentSpent,
+          remaining: Math.max(0, item.monthlyCap - item.currentSpent),
+          percentUsed: item.monthlyCap > 0 ? Math.round((item.currentSpent / item.monthlyCap) * 100) : 0,
+        };
       }
 
       const target = Object.keys(inMemoryBudgets).find(
@@ -532,7 +621,7 @@ export async function executeAgentTool(name: string, rawArgs: Record<string, unk
     }
 
     case "initiate_paypal_dispute": {
-      const { transactionId, reason, disputedAmount, isConfirmed } = InitiateDisputeSchema.parse(rawArgs);
+      const { transactionId, reason, disputedAmount, isConfirmed } = InitiateDisputeSchema.parse(safeArgs);
 
       if (!isConfirmed) {
         return {
