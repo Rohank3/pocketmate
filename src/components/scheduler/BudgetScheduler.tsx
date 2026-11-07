@@ -152,17 +152,17 @@ export default function BudgetScheduler({
     return false;
   };
 
-  // Aggregate metrics for currently viewed month
+  // Aggregate metrics for currently viewed month (independent of sub-filter tabs)
   const currentMonthPrefix = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}`;
   const daysInCurrentMonth = useMemo(() => new Date(viewYear, viewMonth + 1, 0).getDate(), [viewYear, viewMonth]);
 
   const monthEvents = useMemo(() => {
-    return displayedEvents.filter((e) => {
+    return events.filter((e) => {
       if (e.date && e.date.startsWith(currentMonthPrefix)) return true;
       if (e.dayOfMonth && e.dayOfMonth <= daysInCurrentMonth) return true;
       return false;
     });
-  }, [displayedEvents, currentMonthPrefix, daysInCurrentMonth]);
+  }, [events, currentMonthPrefix, daysInCurrentMonth]);
 
   const upcomingBills = useMemo(() => {
     return monthEvents
