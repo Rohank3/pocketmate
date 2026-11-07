@@ -14,7 +14,7 @@ export interface PayPalUserProfile {
   verifiedAccount?: boolean;
 }
 
-export function getPayPalOAuthUrl(redirectUri?: string): string {
+export function getPayPalOAuthUrl(redirectUri?: string, state?: string): string {
   const clientId = process.env.PAYPAL_CLIENT_ID || "";
   const baseUrl =
     process.env.PAYPAL_ENVIRONMENT === "live"
@@ -25,9 +25,10 @@ export function getPayPalOAuthUrl(redirectUri?: string): string {
   const targetRedirect = redirectUri || `${appUrl}/api/auth/callback/paypal`;
 
   const scopes = encodeURIComponent("openid profile email");
+  const stateQuery = state ? `&state=${encodeURIComponent(state)}` : "";
   return `${baseUrl}/connect?flowEntry=static&client_id=${clientId}&response_type=code&scope=${scopes}&redirect_uri=${encodeURIComponent(
     targetRedirect
-  )}`;
+  )}${stateQuery}`;
 }
 
 export async function exchangePayPalCodeForTokens(
