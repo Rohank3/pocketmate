@@ -124,11 +124,11 @@ export default function Home() {
         setMessages((prev) => [
           ...prev,
           {
-            id: `asst_seed_${Date.now()}`,
+            id: `asst_sync_${Date.now()}`,
             role: "assistant",
             content:
-              "⚡ **Live PayPal Sandbox Transfers & Invoices Orchestrated!**\n\n• Executed live virtual funds transfer via **PayPal Payouts API** (`/v1/payments/payouts`).\n• Dispatched real itemized invoices via **PayPal Invoicing v2 API** (`/v2/invoicing/invoices`).\n• AG Grid ledger updated with live bilateral records queried directly from PayPal Developer servers.",
-            toolBadges: ["rail: paypal_payouts_api", "rail: paypal_invoicing_v2", "status: LIVE_SANDBOX"],
+              "⚡ **Live PayPal Transactions Synchronized!**\n\n• Queried live records directly from **PayPal Reporting API** (`/v1/reporting/transactions`).\n• Synced authentic invoices via **PayPal Invoicing API** (`/v2/invoicing/invoices`).\n• AG Grid ledger updated with live bilateral transaction history directly from PayPal Developer servers.",
+            toolBadges: ["rail: paypal_reporting_api", "rail: paypal_invoicing_v2", "status: LIVE_SANDBOX"],
           },
         ]);
       }
@@ -238,10 +238,25 @@ export default function Home() {
 
     void init();
 
+    // Revalidate live transactions on window focus (e.g. user returns from PayPal payment/invoice tab)
+    const onFocus = () => {
+      void loadTransactions();
+    };
+    window.addEventListener("focus", onFocus);
+
+    // Periodic background sync every 25 seconds when browser tab is active
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        void loadTransactions();
+      }
+    }, 25000);
+
     return () => {
       isSubscribed = false;
+      window.removeEventListener("focus", onFocus);
+      clearInterval(interval);
     };
-  }, [loadCategories, loadEvents]);
+  }, [loadCategories, loadEvents, loadTransactions]);
 
   const handleUserLogin = (user: UserAccount) => {
     setCurrentUser(user);
@@ -621,16 +636,10 @@ export default function Home() {
       if (cardData.recipients && cardData.recipients.length > 0) {
         cardData.recipients.forEach((r) => {
           SandboxStore.createInvoice({
-            senderId: currentUser?.id || "usr_alex",
-            senderName: currentUser?.name || "Alex Rivera",
-            senderEmail: currentUser?.email || "alex@pocketmate.sandbox",
-            recipientId: r.email.includes("dave.chen")
-              ? "usr_dave_chen"
-              : r.email.includes("dave.miller")
-              ? "usr_dave_miller"
-              : r.email.includes("sarah")
-              ? "usr_sarah"
-              : `usr_${Date.now()}`,
+            senderId: currentUser?.id || `usr_${Date.now()}`,
+            senderName: currentUser?.name || "PocketMate Host",
+            senderEmail: currentUser?.email || "host@paypal.sandbox",
+            recipientId: `usr_${r.email.replace(/[^a-z0-9]/gi, "_")}`,
             recipientName: r.name || "Recipient",
             recipientEmail: r.email,
             amount: r.amount,
@@ -1091,10 +1100,10 @@ export default function Home() {
                       onClick={handleSeedSandboxTransactions}
                       disabled={isSeedingTransactions}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 text-xs font-semibold border border-emerald-500/30 transition-all cursor-pointer disabled:opacity-50"
-                      title="Execute live bilateral transfers & invoices on PayPal Sandbox rails"
+                      title="Sync live transactions & invoices directly from PayPal Developer APIs"
                     >
                       <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>{isSeedingTransactions ? "Orchestrating..." : "Orchestrate Sandbox Transfers"}</span>
+                      <span>{isSeedingTransactions ? "Syncing..." : "Sync PayPal Activity"}</span>
                     </button>
                   </div>
                 </div>
@@ -1132,7 +1141,7 @@ export default function Home() {
                         className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white text-xs font-semibold shadow-lg shadow-blue-500/20 transition-all cursor-pointer disabled:opacity-50"
                       >
                         <Sparkles className="w-4 h-4" />
-                        <span>{isSeedingTransactions ? "Orchestrating Live Transfers..." : "Orchestrate Live Sandbox Transfers"}</span>
+                        <span>{isSeedingTransactions ? "Syncing PayPal..." : "Sync Live PayPal Transactions"}</span>
                       </button>
                     </div>
                   ) : (
