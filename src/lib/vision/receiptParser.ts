@@ -92,16 +92,32 @@ Return ONLY raw valid JSON, no markdown code fence.
       return getMockReceiptResult();
     }
 
-    const parsed = JSON.parse(textOutput) as ParsedReceiptResult;
+    const rawParsed = JSON.parse(textOutput);
+    const subtotal = Math.max(0, Number(rawParsed.subtotal) || 0);
+    const tax = Math.max(0, Number(rawParsed.tax) || 0);
+    const tip = Math.max(0, Number(rawParsed.tip) || 0);
+    const total = Math.max(0.01, Number(rawParsed.total) || (subtotal + tax + tip));
+    const confidence = Math.min(1, Math.max(0, Number(rawParsed.confidence) || 0.95));
+
+    const lineItems = Array.isArray(rawParsed.lineItems)
+      ? rawParsed.lineItems.map((item: { name?: unknown; amount?: unknown }) => ({
+          name: typeof item.name === "string" ? item.name.slice(0, 100).trim() : "Item",
+          amount: Math.max(0, Number(item.amount) || 0),
+        }))
+      : [];
+
     return {
-      merchantName: parsed.merchantName || "Bistro Lumiere",
-      date: parsed.date,
-      lineItems: parsed.lineItems || [],
-      subtotal: Number(parsed.subtotal || 0),
-      tax: Number(parsed.tax || 0),
-      tip: Number(parsed.tip || 0),
-      total: Number(parsed.total || 0),
-      confidence: Number(parsed.confidence || 0.95),
+      merchantName:
+        typeof rawParsed.merchantName === "string" && rawParsed.merchantName.trim()
+          ? rawParsed.merchantName.slice(0, 100).trim()
+          : "Bistro Lumiere",
+      date: typeof rawParsed.date === "string" ? rawParsed.date.slice(0, 30) : undefined,
+      lineItems,
+      subtotal,
+      tax,
+      tip,
+      total,
+      confidence,
     };
   } catch (error) {
     console.error("[Gemini Vision Parse Error]", error);
