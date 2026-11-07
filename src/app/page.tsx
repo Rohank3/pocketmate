@@ -426,6 +426,25 @@ export default function Home() {
     );
   };
 
+  const handleCancelSubscription = async (eventId: string, updatedCounterparty: string) => {
+    try {
+      await fetch("/api/events", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: eventId, counterparty: updatedCounterparty, status: "completed" }),
+      });
+    } catch (err) {
+      console.error(err);
+    }
+    setEvents((prev) =>
+      prev.map((e) =>
+        e.id === eventId
+          ? { ...e, counterparty: updatedCounterparty, status: "completed" }
+          : e
+      )
+    );
+  };
+
   const handlePayInvoice = (invoiceId: string) => {
     const paid = SandboxStore.settleInvoice(invoiceId);
     if (paid) {
@@ -1181,6 +1200,7 @@ export default function Home() {
                 onAddEvent={handleAddScheduledEvent}
                 onDeleteEvent={handleDeleteScheduledEvent}
                 onToggleStatus={handleToggleScheduledEventStatus}
+                onCancelSubscription={handleCancelSubscription}
               />
             )}
           </div>
