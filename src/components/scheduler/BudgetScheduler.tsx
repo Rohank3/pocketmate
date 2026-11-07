@@ -19,6 +19,10 @@ import {
   Check,
 } from "lucide-react";
 import type { CategoryItem } from "@/components/categories/CategoryControlBar";
+import {
+  extractLifecycle,
+  formatCounterpartyWithLifecycle,
+} from "@/lib/utils/subscriptionLifecycle";
 
 export interface ScheduledEvent {
   id: string;
@@ -30,6 +34,8 @@ export interface ScheduledEvent {
   category: string;
   counterparty?: string;
   status: "pending" | "scheduled" | "completed";
+  startDate?: string;
+  endDate?: string;
 }
 
 export interface BudgetSchedulerProps {
@@ -122,6 +128,8 @@ export default function BudgetScheduler({
   const [modalType, setModalType] = useState<"incoming" | "outgoing" | "milestone">("outgoing");
   const [modalCategory, setModalCategory] = useState("Dining");
   const [modalCounterparty, setModalCounterparty] = useState("");
+  const [modalStartDate, setModalStartDate] = useState("");
+  const [modalEndDate, setModalEndDate] = useState("");
 
   const handlePrevMonth = () => {
     setViewDate(new Date(viewYear, viewMonth - 1, 1));
@@ -161,6 +169,8 @@ export default function BudgetScheduler({
     setModalType("outgoing");
     setModalCategory(categories[0]?.name || "Utilities");
     setModalCounterparty("");
+    setModalStartDate(resolvedDateStr);
+    setModalEndDate("");
   };
 
   // Filtered events
@@ -176,6 +186,18 @@ export default function BudgetScheduler({
 
   // Helper to determine if a scheduled item belongs to a calendar day
   const doesEventMatchDay = (e: ScheduledEvent, cellDateStr: string, cellDay: number) => {
+    const lifecycle = extractLifecycle(e.counterparty, e.date);
+
+    // If a contract has an end date, do not display on future dates after contract end
+    if (lifecycle.endDate && cellDateStr > lifecycle.endDate) {
+      return false;
+    }
+
+    // If a contract has a start date, do not display before contract start
+    if (lifecycle.startDate && cellDateStr < lifecycle.startDate) {
+      return false;
+    }
+
     // 1. Exact date match (e.g. one-time scheduled event on this specific date)
     if (e.date === cellDateStr) return true;
 
@@ -191,6 +213,10 @@ export default function BudgetScheduler({
 
   const monthEvents = useMemo(() => {
     return events.filter((e) => {
+      const lifecycle = extractLifecycle(e.counterparty, e.date);
+      if (lifecycle.endDate && currentMonthPrefix > lifecycle.endDate.slice(0, 7)) return false;
+      if (lifecycle.startDate && currentMonthPrefix < lifecycle.startDate.slice(0, 7)) return false;
+
       if (e.date && e.date.startsWith(currentMonthPrefix)) return true;
       if (e.dayOfMonth && e.dayOfMonth <= daysInCurrentMonth) return true;
       return false;
@@ -285,6 +311,12 @@ export default function BudgetScheduler({
 
     const amt = Math.max(0, parseFloat(modalAmount) || 0);
 
+    const formattedCp = formatCounterpartyWithLifecycle(
+      modalCounterparty,
+      modalStartDate || selectedDayModal.dateStr,
+      modalEndDate
+    );
+
     const created: ScheduledEvent = {
       id: `evt_${Date.now()}`,
       title: modalTitle.trim(),
@@ -293,7 +325,9 @@ export default function BudgetScheduler({
       dayOfMonth: selectedDayModal.dayNumber,
       type: modalType,
       category: modalCategory,
-      counterparty: modalCounterparty.trim() || undefined,
+      counterparty: formattedCp || undefined,
+      startDate: modalStartDate || selectedDayModal.dateStr,
+      endDate: modalEndDate || undefined,
       status: "scheduled",
     };
 
@@ -302,6 +336,7 @@ export default function BudgetScheduler({
     setModalTitle("");
     setModalAmount("50");
     setModalCounterparty("");
+    setModalEndDate("");
   };
 
   // Selected day items for modal
@@ -683,10 +718,31 @@ export default function BudgetScheduler({
                             </span>
                           )}
                         </p>
-                        <p className="text-[11px] text-zinc-400 mt-0.5">
-                          {evt.counterparty ? `Counterparty: ${evt.counterparty} · ` : ""}
-                          Scheduled Date: <span className="text-zinc-300 font-mono">{evt.date}</span>
-                        </p>
+                        {(() => {
+                          const lifecycle = extractLifecycle(evt.counterparty, evt.date);
+                          return (
+                            <div className="text-[11px] text-zinc-400 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                              {lifecycle.cleanName && (
+                                <span>Provider: <span className="text-zinc-300">{lifecycle.cleanName}</span> ·</span>
+                              )}
+                              <span>Due: <span className="text-zinc-300 font-mono">{evt.date}</span></span>
+                              {evt.type === "outgoing" && (
+                                <>
+                                  <span>·</span>
+                                  <span
+                                    className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
+                                      lifecycle.isOngoing
+                                        ? "bg-emerald-950/60 text-emerald-400 border border-emerald-800/40"
+                                        : "bg-amber-950/60 text-amber-400 border border-amber-800/40"
+                                    }`}
+                                  >
+                                    {lifecycle.contractStatus}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
 
@@ -869,14 +925,32 @@ export default function BudgetScheduler({
                                 >
                                   {evt.title}
                                 </p>
-                                <div className="flex items-center gap-2 mt-0.5 text-[11px] text-zinc-400">
-                                  <span className="px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-300 text-[10px]">
-                                    {evt.category}
-                                  </span>
-                                  {evt.counterparty && (
-                                    <span>To/From: <span className="text-zinc-300">{evt.counterparty}</span></span>
-                                  )}
-                                </div>
+                                {(() => {
+                                  const lifecycle = extractLifecycle(evt.counterparty, evt.date);
+                                  return (
+                                    <div className="flex flex-col gap-1 mt-0.5 text-[11px] text-zinc-400">
+                                      <div className="flex items-center gap-2">
+                                        <span className="px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-300 text-[10px]">
+                                          {evt.category}
+                                        </span>
+                                        {lifecycle.cleanName && (
+                                          <span>Provider: <span className="text-zinc-300">{lifecycle.cleanName}</span></span>
+                                        )}
+                                      </div>
+                                      {evt.type === "outgoing" && (
+                                        <div className="flex items-center gap-1.5 text-[10px] text-zinc-400">
+                                          {lifecycle.startDate && (
+                                            <span>Started: <span className="text-zinc-300 font-mono">{lifecycle.startDate}</span></span>
+                                          )}
+                                          <span>·</span>
+                                          <span className={lifecycle.isOngoing ? "text-emerald-400/90" : "text-amber-400/90 font-medium"}>
+                                            {lifecycle.contractStatus}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                               </div>
                             </div>
 
@@ -1052,6 +1126,37 @@ export default function BudgetScheduler({
                         className="w-full px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 placeholder:text-zinc-600 focus:outline-hidden focus:border-blue-500"
                       />
                     </div>
+
+                    {/* Subscription & Contract Lifecycle Fields */}
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="text-[11px] font-medium text-zinc-400 block mb-1">
+                          Start Date (Optional)
+                        </label>
+                        <input
+                          type="date"
+                          value={modalStartDate}
+                          onChange={(e) => setModalStartDate(e.target.value)}
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-hidden focus:border-blue-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-medium text-zinc-400 block mb-1">
+                          End Date (Optional)
+                        </label>
+                        <input
+                          type="date"
+                          value={modalEndDate}
+                          onChange={(e) => setModalEndDate(e.target.value)}
+                          placeholder="Ongoing"
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-hidden focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-zinc-500 -mt-1">
+                      Leave End Date blank for ongoing subscriptions (e.g. Netflix, AWS), or set an End Date for fixed installment plans.
+                    </p>
 
                     <button
                       type="submit"
