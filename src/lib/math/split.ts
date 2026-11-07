@@ -55,6 +55,9 @@ export function calculateEqualSplit(
   participants: SplitParticipant[],
   memoContext?: string
 ): DeterministicSplitResult {
+  if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+    throw new Error("Total amount must be a positive finite number.");
+  }
   if (participants.length === 0) {
     throw new Error("Cannot split an expense among zero participants.");
   }
@@ -108,6 +111,17 @@ export function calculateItemizedSplit(
 ): DeterministicSplitResult {
   if (allParticipants.length === 0) {
     throw new Error("Participant list cannot be empty.");
+  }
+  if (!Number.isFinite(additionalTaxOrTip) || additionalTaxOrTip < 0) {
+    throw new Error("Tax or tip must be a non-negative finite number.");
+  }
+  if (!items || items.length === 0) {
+    throw new Error("Items list cannot be empty.");
+  }
+  for (const item of items) {
+    if (!Number.isFinite(item.amount) || item.amount < 0) {
+      throw new Error(`Invalid item amount for '${item.description}'`);
+    }
   }
 
   const participantMap = new Map<string, { participant: SplitParticipant; cents: number; items: string[] }>();
