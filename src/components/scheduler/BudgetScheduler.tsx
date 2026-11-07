@@ -10,6 +10,11 @@ import {
   ArrowUpRight,
   Sparkles,
   X,
+  ChevronLeft,
+  ChevronRight,
+  Trash2,
+  CheckCircle2,
+  Circle,
 } from "lucide-react";
 import type { CategoryItem } from "@/components/categories/CategoryControlBar";
 
@@ -31,6 +36,8 @@ export interface BudgetSchedulerProps {
   events?: ScheduledEvent[];
   onEventClick?: (eventName: string) => void;
   onAddEvent?: (event: Omit<ScheduledEvent, "id">) => void;
+  onDeleteEvent?: (eventId: string) => void;
+  onToggleStatus?: (eventId: string, newStatus: "pending" | "scheduled" | "completed") => void;
 }
 
 export default function BudgetScheduler({
@@ -39,6 +46,8 @@ export default function BudgetScheduler({
   events: propEvents,
   onEventClick,
   onAddEvent,
+  onDeleteEvent,
+  onToggleStatus,
 }: BudgetSchedulerProps) {
   const [viewMode, setViewMode] = useState<"calendar" | "agenda">("calendar");
   const [internalEvents, setInternalEvents] = useState<ScheduledEvent[]>([]);
@@ -46,6 +55,12 @@ export default function BudgetScheduler({
   const setEvents = (updater: React.SetStateAction<ScheduledEvent[]>) => {
     setInternalEvents(updater);
   };
+
+  // Dynamic Month & Year Navigation State
+  const [viewDate, setViewDate] = useState<Date>(() => new Date());
+  const viewYear = viewDate.getFullYear();
+  const viewMonth = viewDate.getMonth(); // 0-indexed
+  const monthName = viewDate.toLocaleString("en-US", { month: "long" });
 
   useEffect(() => {
     if (propEvents === undefined) {
@@ -57,16 +72,34 @@ export default function BudgetScheduler({
         .catch(() => {});
     }
   }, [propEvents]);
+
   const [filterType, setFilterType] = useState<"all" | "incoming" | "outgoing">("all");
 
   // Modal for "+ Add Scheduled Bill / Reminder"
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newAmount, setNewAmount] = useState("50");
-  const [newDate, setNewDate] = useState("2026-11-15");
+  const [newDate, setNewDate] = useState(() => {
+    const y = viewDate.getFullYear();
+    const m = String(viewDate.getMonth() + 1).padStart(2, "0");
+    const d = String(Math.min(15, new Date(y, viewDate.getMonth() + 1, 0).getDate())).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  });
   const [newType, setNewType] = useState<"incoming" | "outgoing" | "milestone">("outgoing");
   const [newCategory, setNewCategory] = useState("Dining");
   const [newCounterparty, setNewCounterparty] = useState("");
+
+  const handlePrevMonth = () => {
+    setViewDate(new Date(viewYear, viewMonth - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+    setViewDate(new Date(viewYear, viewMonth + 1, 1));
+  };
+
+  const handleJumpToToday = () => {
+    setViewDate(new Date());
+  };
 
   // Filtered events
   const displayedEvents = useMemo(() => {
@@ -79,36 +112,97 @@ export default function BudgetScheduler({
     });
   }, [events, filterType, selectedCategory]);
 
-  // Aggregate metrics
+  // Aggregate metrics for currently viewed month
+  const currentMonthPrefix = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}`;
+  const monthEvents = useMemo(() => {
+    return displayedEvents.filter(
+      (e) => !e.date || e.date.startsWith(currentMonthPrefix)
+    );
+  }, [displayedEvents, currentMonthPrefix]);
+
   const upcomingBills = useMemo(() => {
-    return events
-      .filter((e) => e.type === "outgoing")
+    return monthEvents
+      .filter((e) => e.type === "outgoing" && e.status !== "completed")
       .reduce((sum, e) => sum + e.amount, 0);
-  }, [events]);
+  }, [monthEvents]);
 
   const upcomingReceivables = useMemo(() => {
-    return events
-      .filter((e) => e.type === "incoming")
+    return monthEvents
+      .filter((e) => e.type === "incoming" && e.status !== "completed")
       .reduce((sum, e) => sum + e.amount, 0);
-  }, [events]);
+  }, [monthEvents]);
 
-  // Calendar generation for November 2026 (starts on Sunday Nov 1, 30 days)
+  // Calendar generation with dynamic day-of-week alignment and padding
   const calendarDays = useMemo(() => {
-    // Nov 1, 2026 was a Sunday (0 offset in standard Sun-Sat week)
-    const daysInMonth = 30;
-    const days = [];
-    for (let day = 1; day <= daysInMonth; day++) {
-      const dateStr = `2026-11-${day < 10 ? `0${day}` : day}`;
-      const dayEvents = displayedEvents.filter((e) => e.dayOfMonth === day);
-      days.push({
+    const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay(); // 0 = Sun..6 = Sat
+    const daysInCurrentMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const daysInPrevMonth = new Date(viewYear, viewMonth, 0).getDate();
+
+    const realToday = new Date();
+    const isCurrentMonthViewed =
+      realToday.getFullYear() === viewYear && realToday.getMonth() === viewMonth;
+    const todayDate = realToday.getDate();
+
+    const cells: Array<{
+      key: string;
+      day: number;
+      dateStr: string;
+      isCurrentMonth: boolean;
+      isToday: boolean;
+      events: ScheduledEvent[];
+    }> = [];
+
+    // Leading days from previous month
+    for (let i = firstDayOfWeek - 1; i >= 0; i--) {
+      const day = daysInPrevMonth - i;
+      const prevMonth = viewMonth === 0 ? 12 : viewMonth;
+      const prevYear = viewMonth === 0 ? viewYear - 1 : viewYear;
+      const dateStr = `${prevYear}-${String(prevMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      cells.push({
+        key: `prev-${dateStr}`,
         day,
         dateStr,
-        events: dayEvents,
-        isToday: day === 6, // Nov 6 is today per project anchor date
+        isCurrentMonth: false,
+        isToday: false,
+        events: displayedEvents.filter((e) => e.date === dateStr),
       });
     }
-    return days;
-  }, [displayedEvents]);
+
+    // Days in current month
+    for (let day = 1; day <= daysInCurrentMonth; day++) {
+      const dateStr = `${currentMonthPrefix}-${String(day).padStart(2, "0")}`;
+      const dayEvents = displayedEvents.filter(
+        (e) => e.date === dateStr || (!e.date && e.dayOfMonth === day)
+      );
+      cells.push({
+        key: `cur-${dateStr}`,
+        day,
+        dateStr,
+        isCurrentMonth: true,
+        isToday: isCurrentMonthViewed && day === todayDate,
+        events: dayEvents,
+      });
+    }
+
+    // Trailing days to round out 7 columns
+    const totalCells = Math.ceil(cells.length / 7) * 7;
+    const trailingCount = totalCells - cells.length;
+    for (let day = 1; day <= trailingCount; day++) {
+      const nextMonth = viewMonth === 11 ? 1 : viewMonth + 2;
+      const nextYear = viewMonth === 11 ? viewYear + 1 : viewYear;
+      const dateStr = `${nextYear}-${String(nextMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      cells.push({
+        key: `next-${dateStr}`,
+        day,
+        dateStr,
+        isCurrentMonth: false,
+        isToday: false,
+        events: displayedEvents.filter((e) => e.date === dateStr),
+      });
+    }
+
+    return cells;
+  }, [viewYear, viewMonth, currentMonthPrefix, displayedEvents]);
 
   const handleAddEvent = (e: React.FormEvent) => {
     e.preventDefault();
@@ -146,12 +240,41 @@ export default function BudgetScheduler({
             <CalendarIcon className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-zinc-100 flex items-center gap-2">
-              Upcoming & Due Calendar
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-300 border border-purple-500/20 font-medium">
-                November 2026
-              </span>
-            </h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-bold text-zinc-100">
+                Upcoming & Due Calendar
+              </h2>
+              {/* Dynamic Month Navigation Controls */}
+              <div className="flex items-center bg-zinc-950 border border-zinc-800 rounded-lg p-0.5">
+                <button
+                  type="button"
+                  onClick={handlePrevMonth}
+                  title="Previous Month"
+                  className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 cursor-pointer transition-colors"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+                <span className="text-[11px] font-semibold text-purple-300 px-2 min-w-[100px] text-center">
+                  {monthName} {viewYear}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleNextMonth}
+                  title="Next Month"
+                  className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 cursor-pointer transition-colors"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleJumpToToday}
+                  title="Jump to Current Month"
+                  className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 hover:bg-zinc-700 cursor-pointer transition-colors ml-0.5"
+                >
+                  Today
+                </button>
+              </div>
+            </div>
             <p className="text-xs text-zinc-400">
               Clear visual payment timeline: Expected receivables, recurring bills & budget check-ins
             </p>
@@ -174,7 +297,13 @@ export default function BudgetScheduler({
 
           {/* Add Event Button */}
           <button
-            onClick={() => setIsAddModalOpen(true)}
+            onClick={() => {
+              const y = viewDate.getFullYear();
+              const m = String(viewDate.getMonth() + 1).padStart(2, "0");
+              const d = String(Math.min(15, new Date(y, viewDate.getMonth() + 1, 0).getDate())).padStart(2, "0");
+              setNewDate(`${y}-${m}-${d}`);
+              setIsAddModalOpen(true);
+            }}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white text-xs font-semibold cursor-pointer shadow-sm transition-all focus-visible:outline-2 focus-visible:outline-blue-400"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -255,7 +384,7 @@ export default function BudgetScheduler({
       {/* Main View Container */}
       <div className="flex-1 overflow-y-auto p-3 sm:p-4">
         {viewMode === "calendar" ? (
-          /* Month Grid View */
+          /* Month Grid View with Dynamic Day Alignment */
           <div className="flex flex-col h-full min-h-[460px]">
             {/* Weekday Headers */}
             <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold text-zinc-400 pb-2 border-b border-zinc-800/80">
@@ -268,29 +397,33 @@ export default function BudgetScheduler({
               <span>SAT</span>
             </div>
 
-            {/* 30-Day Grid */}
+            {/* Dynamic Grid Cells with Leading/Trailing Padding */}
             <div className="grid grid-cols-7 gap-1.5 flex-1 pt-2">
-              {calendarDays.map((day) => (
+              {calendarDays.map((cell) => (
                 <div
-                  key={day.day}
+                  key={cell.key}
                   className={`min-h-[85px] sm:min-h-[95px] p-1.5 rounded-lg border transition-all flex flex-col justify-between ${
-                    day.isToday
+                    cell.isToday
                       ? "bg-zinc-900/90 border-blue-500/60 shadow-xs shadow-blue-500/10"
-                      : "bg-zinc-950/80 border-zinc-800/80 hover:border-zinc-700"
+                      : cell.isCurrentMonth
+                      ? "bg-zinc-950/80 border-zinc-800/80 hover:border-zinc-700"
+                      : "bg-zinc-950/40 border-zinc-900 text-zinc-600 opacity-60"
                   }`}
                 >
                   {/* Day Header */}
                   <div className="flex items-center justify-between">
                     <span
                       className={`text-xs font-mono font-semibold px-1.5 py-0.5 rounded ${
-                        day.isToday
+                        cell.isToday
                           ? "bg-blue-600 text-white"
-                          : "text-zinc-400"
+                          : cell.isCurrentMonth
+                          ? "text-zinc-400"
+                          : "text-zinc-600"
                       }`}
                     >
-                      {day.day}
+                      {cell.day}
                     </span>
-                    {day.isToday && (
+                    {cell.isToday && (
                       <span className="text-[9px] font-semibold text-blue-400 uppercase tracking-tight">
                         Today
                       </span>
@@ -299,28 +432,70 @@ export default function BudgetScheduler({
 
                   {/* Day Events Badges */}
                   <div className="flex flex-col gap-1 mt-1 overflow-hidden">
-                    {day.events.map((evt) => {
+                    {cell.events.map((evt) => {
                       const isIncoming = evt.type === "incoming";
                       const isOutgoing = evt.type === "outgoing";
+                      const isCompleted = evt.status === "completed";
 
                       return (
-                        <button
+                        <div
                           key={evt.id}
-                          onClick={() => onEventClick?.(evt.title)}
-                          className={`w-full text-left p-1 rounded text-[10px] truncate transition-all cursor-pointer font-medium border ${
-                            isIncoming
+                          className={`group relative flex items-center justify-between w-full text-left p-1 rounded text-[10px] transition-all cursor-pointer font-medium border ${
+                            isCompleted
+                              ? "bg-zinc-900/80 border-zinc-800 text-zinc-500 line-through"
+                              : isIncoming
                               ? "bg-emerald-950/70 border-emerald-800/50 text-emerald-300 hover:bg-emerald-900/80"
                               : isOutgoing
                               ? "bg-blue-950/70 border-blue-800/50 text-blue-300 hover:bg-blue-900/80"
                               : "bg-purple-950/70 border-purple-800/50 text-purple-300 hover:bg-purple-900/80"
                           }`}
-                          title={`${evt.title} - $${evt.amount.toFixed(2)}`}
+                          title={`${evt.title} - $${evt.amount.toFixed(2)} (${evt.status})`}
                         >
-                          <span className="font-bold">
-                            {evt.amount > 0 ? `$${evt.amount.toFixed(0)} ` : ""}
-                          </span>
-                          <span className="truncate">{evt.title}</span>
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => onEventClick?.(evt.title)}
+                            className="flex-1 text-left truncate flex items-center gap-1 cursor-pointer"
+                          >
+                            <span className="font-bold shrink-0">
+                              {evt.amount > 0 ? `$${evt.amount.toFixed(0)} ` : ""}
+                            </span>
+                            <span className="truncate">{evt.title}</span>
+                          </button>
+
+                          {/* Quick Actions (Complete & Delete) */}
+                          <div className="hidden group-hover:flex items-center gap-0.5 shrink-0 ml-1">
+                            {onToggleStatus && (
+                              <button
+                                type="button"
+                                title={isCompleted ? "Mark as Scheduled" : "Mark as Completed"}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onToggleStatus(evt.id, isCompleted ? "scheduled" : "completed");
+                                }}
+                                className="p-0.5 text-zinc-400 hover:text-emerald-400 rounded cursor-pointer"
+                              >
+                                {isCompleted ? (
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                ) : (
+                                  <Circle className="w-3 h-3" />
+                                )}
+                              </button>
+                            )}
+                            {onDeleteEvent && (
+                              <button
+                                type="button"
+                                title="Delete Scheduled Item"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onDeleteEvent(evt.id);
+                                }}
+                                className="p-0.5 text-zinc-400 hover:text-rose-400 rounded cursor-pointer"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       );
                     })}
                   </div>
@@ -339,17 +514,24 @@ export default function BudgetScheduler({
               {displayedEvents.map((evt) => {
                 const isIncoming = evt.type === "incoming";
                 const isOutgoing = evt.type === "outgoing";
+                const isCompleted = evt.status === "completed";
 
                 return (
                   <div
                     key={evt.id}
                     onClick={() => onEventClick?.(evt.title)}
-                    className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition-all cursor-pointer gap-2"
+                    className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl border transition-all cursor-pointer gap-2 ${
+                      isCompleted
+                        ? "bg-zinc-950/60 border-zinc-800/60 opacity-60"
+                        : "bg-zinc-900 border-zinc-800 hover:border-zinc-700"
+                    }`}
                   >
                     <div className="flex items-center gap-3">
                       <div
                         className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${
-                          isIncoming
+                          isCompleted
+                            ? "bg-zinc-800/40 border-zinc-700 text-zinc-500"
+                            : isIncoming
                             ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
                             : isOutgoing
                             ? "bg-rose-500/10 border-rose-500/20 text-rose-400"
@@ -366,11 +548,20 @@ export default function BudgetScheduler({
                       </div>
 
                       <div>
-                        <p className="text-xs font-semibold text-zinc-100 flex items-center gap-2">
+                        <p
+                          className={`text-xs font-semibold flex items-center gap-2 ${
+                            isCompleted ? "text-zinc-400 line-through" : "text-zinc-100"
+                          }`}
+                        >
                           {evt.title}
                           <span className="text-[10px] font-normal px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-300">
                             {evt.category}
                           </span>
+                          {isCompleted && (
+                            <span className="text-[9px] font-semibold text-emerald-400 uppercase">
+                              Completed
+                            </span>
+                          )}
                         </p>
                         <p className="text-[11px] text-zinc-400 mt-0.5">
                           {evt.counterparty ? `Counterparty: ${evt.counterparty} · ` : ""}
@@ -383,7 +574,9 @@ export default function BudgetScheduler({
                       <div className="text-right">
                         <span
                           className={`text-sm font-bold font-mono block ${
-                            isIncoming
+                            isCompleted
+                              ? "text-zinc-500"
+                              : isIncoming
                               ? "text-emerald-400"
                               : isOutgoing
                               ? "text-zinc-100"
@@ -397,12 +590,37 @@ export default function BudgetScheduler({
                         </span>
                       </div>
 
-                      <button
-                        type="button"
-                        className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium cursor-pointer"
-                      >
-                        Details
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        {onToggleStatus && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onToggleStatus(evt.id, isCompleted ? "scheduled" : "completed");
+                            }}
+                            className={`px-2.5 py-1 rounded text-xs font-medium cursor-pointer transition-colors ${
+                              isCompleted
+                                ? "bg-emerald-950/60 text-emerald-300 border border-emerald-800/50 hover:bg-emerald-900"
+                                : "bg-zinc-800 hover:bg-zinc-700 text-zinc-200"
+                            }`}
+                          >
+                            {isCompleted ? "Reopen" : "Mark Paid"}
+                          </button>
+                        )}
+                        {onDeleteEvent && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteEvent(evt.id);
+                            }}
+                            title="Delete Event"
+                            className="p-1.5 rounded bg-zinc-800 hover:bg-rose-950 text-zinc-400 hover:text-rose-400 transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
