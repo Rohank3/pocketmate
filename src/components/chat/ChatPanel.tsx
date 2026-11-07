@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { Bot, User, Sparkles, ArrowRight, Paperclip } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 import { ActionConfirmCard, ActionCardData } from "../cards/ActionConfirmCard";
 
 export interface ChatMessageItem {
@@ -129,7 +130,33 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                 </div>
               )}
 
-              <div className="whitespace-pre-line text-xs md:text-sm">{m.content}</div>
+              {m.role === "user" ? (
+                <div className="whitespace-pre-line text-xs md:text-sm">{m.content}</div>
+              ) : (
+                <div className="text-xs md:text-sm text-zinc-200">
+                  <ReactMarkdown
+                    components={{
+                      h1: ({ children }) => <h1 className="text-base font-bold text-zinc-100 my-2">{children}</h1>,
+                      h2: ({ children }) => <h2 className="text-sm font-bold text-zinc-100 my-1.5">{children}</h2>,
+                      h3: ({ children }) => <h3 className="text-xs md:text-sm font-bold text-emerald-400 my-1">{children}</h3>,
+                      h4: ({ children }) => <h4 className="text-xs font-semibold text-zinc-200 mt-2 mb-0.5">{children}</h4>,
+                      p: ({ children }) => <p className="mb-1.5 last:mb-0 leading-relaxed">{children}</p>,
+                      ul: ({ children }) => <ul className="list-disc pl-4 mb-2 space-y-0.5">{children}</ul>,
+                      ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 space-y-0.5">{children}</ol>,
+                      li: ({ children }) => <li className="text-zinc-300">{children}</li>,
+                      strong: ({ children }) => <strong className="font-bold text-zinc-100">{children}</strong>,
+                      hr: () => <hr className="border-zinc-800 my-2.5" />,
+                      code: ({ children }) => (
+                        <code className="bg-zinc-800/90 px-1 py-0.5 rounded text-[11px] font-mono text-emerald-300 border border-zinc-700/60">
+                          {children}
+                        </code>
+                      ),
+                    }}
+                  >
+                    {m.content}
+                  </ReactMarkdown>
+                </div>
+              )}
 
               {/* Render Action Preview Card (Layer D) if pending confirmation */}
               {m.actionCard && (
