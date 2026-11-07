@@ -61,7 +61,40 @@ export default function BudgetScheduler({
   const [viewDate, setViewDate] = useState<Date>(() => new Date());
   const viewYear = viewDate.getFullYear();
   const viewMonth = viewDate.getMonth(); // 0-indexed
-  const monthName = viewDate.toLocaleString("en-US", { month: "long" });
+
+  const MONTH_NAMES = useMemo(
+    () => [
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
+    ],
+    []
+  );
+
+  const availableYears = useMemo(() => {
+    const years: number[] = [];
+    for (let y = viewYear - 3; y <= viewYear + 4; y++) {
+      years.push(y);
+    }
+    return years;
+  }, [viewYear]);
+
+  const handleSelectMonth = (mIndex: number) => {
+    setViewDate(new Date(viewYear, mIndex, 1));
+  };
+
+  const handleSelectYear = (yr: number) => {
+    setViewDate(new Date(yr, viewMonth, 1));
+  };
 
   useEffect(() => {
     if (propEvents === undefined) {
@@ -304,8 +337,8 @@ export default function BudgetScheduler({
               <h2 className="text-sm font-bold text-zinc-100">
                 Upcoming & Due Calendar
               </h2>
-              {/* Dynamic Month Navigation Controls */}
-              <div className="flex items-center bg-zinc-950 border border-zinc-800 rounded-lg p-0.5">
+              {/* Dynamic Month Navigation Controls with Direct Month/Year Dropdowns */}
+              <div className="flex items-center bg-zinc-950 border border-zinc-800 rounded-lg p-0.5 gap-0.5">
                 <button
                   type="button"
                   onClick={handlePrevMonth}
@@ -314,9 +347,35 @@ export default function BudgetScheduler({
                 >
                   <ChevronLeft className="w-3.5 h-3.5" />
                 </button>
-                <span className="text-[11px] font-semibold text-purple-300 px-2 min-w-[100px] text-center">
-                  {monthName} {viewYear}
-                </span>
+
+                {/* Direct Month Selector Dropdown */}
+                <select
+                  aria-label="Select Calendar Month"
+                  value={viewMonth}
+                  onChange={(e) => handleSelectMonth(Number(e.target.value))}
+                  className="bg-zinc-950 text-[11px] font-semibold text-purple-300 hover:text-purple-200 focus:outline-none cursor-pointer px-1 py-0.5 rounded border border-transparent hover:border-zinc-800 transition-colors"
+                >
+                  {MONTH_NAMES.map((name, idx) => (
+                    <option key={name} value={idx} className="bg-zinc-900 text-zinc-200">
+                      {name}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Direct Year Selector Dropdown */}
+                <select
+                  aria-label="Select Calendar Year"
+                  value={viewYear}
+                  onChange={(e) => handleSelectYear(Number(e.target.value))}
+                  className="bg-zinc-950 text-[11px] font-semibold text-purple-300 hover:text-purple-200 focus:outline-none cursor-pointer px-1 py-0.5 rounded border border-transparent hover:border-zinc-800 transition-colors"
+                >
+                  {availableYears.map((yr) => (
+                    <option key={yr} value={yr} className="bg-zinc-900 text-zinc-200">
+                      {yr}
+                    </option>
+                  ))}
+                </select>
+
                 <button
                   type="button"
                   onClick={handleNextMonth}
@@ -838,13 +897,13 @@ export default function BudgetScheduler({
                               <span
                                 className={`text-[9px] uppercase font-semibold ${
                                   isCompleted
-                                    ? "text-emerald-400"
+                                    ? "text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/40"
                                     : isIncoming
                                     ? "text-emerald-400/80"
                                     : "text-zinc-500"
                                 }`}
                               >
-                                {isCompleted ? "Completed" : evt.type}
+                                {isCompleted ? "✓ Paid / Settled" : evt.type}
                               </span>
                             </div>
                           </div>
