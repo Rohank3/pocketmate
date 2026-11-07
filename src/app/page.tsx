@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo, useSyncExternalStore } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { ChatPanel, ChatMessageItem } from "@/components/chat/ChatPanel";
 import { TransactionGrid, TransactionRow } from "@/components/grid/TransactionGrid";
@@ -9,6 +9,7 @@ import { GridMutationState } from "@/types/agent";
 import { CategoryControlBar, CategoryItem } from "@/components/categories/CategoryControlBar";
 import { PayPalLoginModal } from "@/components/auth/PayPalLoginModal";
 import { InvoiceActionModal } from "@/components/cards/InvoiceActionModal";
+import { FunctionalMetricsRow } from "@/components/cards/FunctionalMetricsRow";
 import { SandboxStore } from "@/lib/sandbox/sandboxStore";
 import { UserAccount, InvoiceRecord } from "@/types/sandboxUser";
 import { ScheduledEvent } from "@/components/scheduler/BudgetScheduler";
@@ -17,12 +18,9 @@ import {
   CreditCard,
   CalendarDays,
   Sparkles,
-  Users,
-  Clock,
   DollarSign,
   ExternalLink,
   RefreshCw,
-  ShieldAlert,
   Table2,
   BarChart3,
 } from "lucide-react";
@@ -87,11 +85,6 @@ export default function Home() {
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [events, setEvents] = useState<ScheduledEvent[]>([]);
-  const isClient = useSyncExternalStore(
-    () => () => {},
-    () => true,
-    () => false
-  );
 
   // Load scheduled bills & events from database
   const loadEvents = useCallback(async () => {
@@ -714,106 +707,19 @@ export default function Home() {
     }
   };
 
-  // 1. Dynamic Spending & Budget Health (Card 1)
-  const isAllCategories = selectedCategory.toLowerCase() === "all";
-  const activeCat = !isAllCategories
-    ? categories.find((c) => c.name.toLowerCase() === selectedCategory.toLowerCase()) || null
-    : null;
-
-  const totalSpend = transactions.reduce((sum, t) => sum + t.amount, 0);
-  const totalBudgetCap = categories.reduce((sum, c) => sum + c.monthlyCap, 0);
-
-  const displaySpent = activeCat
-    ? transactions
-        .filter((t) => t.category.toLowerCase() === activeCat.name.toLowerCase())
-        .reduce((sum, t) => sum + t.amount, 0)
-    : totalSpend;
-  const displayCap = activeCat ? activeCat.monthlyCap : totalBudgetCap;
-  const isBudgetOver = displaySpent > displayCap;
-  const budgetDiff = Math.abs(displaySpent - displayCap);
-  const budgetPercentUsed = displayCap > 0 ? Math.round((displaySpent / displayCap) * 100) : 0;
-  const displayBudgetTitle = activeCat ? `${activeCat.name} Budget Cap` : "Monthly Spending Health";
-
-  // 2. Dynamic Friends Owe You / You Owe Friends (Card 2)
+  // User pending incoming bill detection for top alert banner
   const currentUserNameLower = (currentUser?.name || "").toLowerCase().trim();
   const debtorPendingTxs = transactions.filter(
     (t) => (t.status === "pending" || t.status === "disputed" || t.status === "unresolved") && t.debtor_name !== "Self"
   );
-
   const userOwedBills = currentUser
     ? debtorPendingTxs.filter((t) => {
         const d = (t.debtor_name || "").toLowerCase().trim();
         return currentUserNameLower && d.length > 0 && (d.includes(currentUserNameLower) || currentUserNameLower.includes(d));
       })
     : [];
-
   const isUserDebtor = userOwedBills.length > 0;
-  const userOwesTotal = userOwedBills.reduce((acc, t) => acc + t.amount, 0);
-  const totalFriendsOwe = debtorPendingTxs.reduce((acc, t) => acc + t.amount, 0);
-
-  const debtorSums: Record<string, number> = {};
-  debtorPendingTxs.forEach((t) => {
-    const name = t.debtor_name || "Unassigned";
-    debtorSums[name] = (debtorSums[name] || 0) + t.amount;
-  });
-
-  let largestDebtorName = "";
-  let largestDebtorAmount = 0;
-  for (const [name, amt] of Object.entries(debtorSums)) {
-    if (amt > largestDebtorAmount) {
-      largestDebtorAmount = amt;
-      largestDebtorName = name;
-    }
-  }
-
-  const isDebtorView = isUserDebtor && activeScope === "personal";
-  const isIncomingDebtor = isDebtorView;
-  const card2Title = isDebtorView ? "Pending Bills You Owe" : "Friends Owe You";
-  const card2DisplayAmount = isDebtorView ? userOwesTotal : totalFriendsOwe;
-  const card2Subtitle = isDebtorView
-    ? `${userOwedBills[0]?.merchant || "Merchant invoice"}: $${userOwedBills[0]?.amount.toFixed(2)} (${userOwedBills.length} pending bill${userOwedBills.length > 1 ? "s" : ""})`
-    : largestDebtorName
-    ? `${largestDebtorName} owes $${largestDebtorAmount.toFixed(2)} (Largest)`
-    : "All balances settled";
   const firstUnpaidBill = isUserDebtor ? userOwedBills[0] : null;
-
-  // 3. Dynamic Upcoming Bills Due in next 7 days (Card 3)
-  const { upcomingBillsAmount, billsSubtitle } = useMemo(() => {
-    if (!isClient) {
-      return { upcomingBillsAmount: 0, billsSubtitle: "Loading scheduled bills..." };
-    }
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth();
-    const currentDay = now.getDate();
-    const todayStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(currentDay).padStart(2, "0")}`;
-    const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-    const sevenDaysStr = `${sevenDaysLater.getFullYear()}-${String(sevenDaysLater.getMonth() + 1).padStart(2, "0")}-${String(sevenDaysLater.getDate()).padStart(2, "0")}`;
-
-    const upcoming7DayBills = events.filter((e) => {
-      if (e.type !== "outgoing" || e.status === "completed") return false;
-      if (e.date) {
-        return e.date >= todayStr && e.date <= sevenDaysStr;
-      }
-      const diff = e.dayOfMonth - currentDay;
-      return diff >= 0 && diff <= 7;
-    });
-
-    const amount = upcoming7DayBills.reduce((sum, e) => sum + e.amount, 0);
-    const nextBill = upcoming7DayBills[0] || events.find((e) => e.type === "outgoing" && e.status !== "completed");
-    const subtitle = nextBill
-      ? `${nextBill.counterparty || nextBill.title.split("(")[0].trim()} ($${nextBill.amount.toFixed(0)}) on ${nextBill.date || `Day ${nextBill.dayOfMonth}`}`
-      : "No scheduled bills due in next 7 days";
-
-    return { upcomingBillsAmount: amount, billsSubtitle: subtitle };
-  }, [isClient, events]);
-
-  // 4. Dynamic Action Needed / Triage (Card 4)
-  const disputedCount = transactions.filter((t) => t.status === "disputed").length;
-  const unresolvedCount = transactions.filter(
-    (t) => t.status === "unresolved" || t.debtor_name === "Unassigned" || t.category === "Uncategorized"
-  ).length;
-  const totalActionRequired = disputedCount + unresolvedCount + (isIncomingDebtor ? 1 : 0);
 
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col p-3 md:p-6 lg:p-8">
@@ -937,98 +843,29 @@ export default function Home() {
         </div>
       )}
 
-      {/* Redesigned 4 Everyday Actionable Financial Metrics Row */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mb-6">
-        {/* Card 1: Monthly Spending Health */}
-        <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800/80 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs text-zinc-400">{displayBudgetTitle}</p>
-            <p className="text-lg font-bold text-zinc-100 font-mono mt-0.5">
-              ${displaySpent.toFixed(2)} / ${displayCap.toFixed(0)}
-            </p>
-            <p
-              className={`text-[11px] mt-0.5 ${
-                isBudgetOver ? "text-rose-400 font-medium" : "text-emerald-400"
-              }`}
-            >
-              {isBudgetOver
-                ? `⚠️ $${budgetDiff.toFixed(2)} over ceiling (${budgetPercentUsed}%)`
-                : `✅ $${(displayCap - displaySpent).toFixed(2)} remaining (${budgetPercentUsed}% used)`}
-            </p>
-          </div>
-          <div
-            className={`w-10 h-10 rounded-lg border flex items-center justify-center ${
-              isBudgetOver
-                ? "bg-rose-500/10 border-rose-500/20 text-rose-400"
-                : "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-            }`}
-          >
-            <Wallet className="w-5 h-5" />
-          </div>
-        </div>
-
-        {/* Card 2: Friends Owe You or You Owe Friends */}
-        <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800/80 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs text-zinc-400">
-              {card2Title}
-            </p>
-            <p
-              className={`text-lg font-bold font-mono mt-0.5 ${
-                isDebtorView ? "text-rose-400" : "text-amber-400"
-              }`}
-            >
-              ${card2DisplayAmount.toFixed(2)}{" "}
-              {isDebtorView ? "Due" : "Owed"}
-            </p>
-            <p className="text-[11px] text-zinc-400 mt-0.5 flex items-center gap-1">
-              {card2Subtitle}
-            </p>
-          </div>
-          <div
-            className={`w-10 h-10 rounded-lg border flex items-center justify-center ${
-              isDebtorView
-                ? "bg-rose-500/10 border-rose-500/20 text-rose-400"
-                : "bg-amber-500/10 border-amber-500/20 text-amber-400"
-            }`}
-          >
-            <Users className="w-5 h-5" />
-          </div>
-        </div>
-
-        {/* Card 3: Upcoming Bills Due (Next 7 Days) */}
-        <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800/80 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs text-zinc-400">Upcoming Bills Due</p>
-            <p className="text-lg font-bold text-zinc-100 font-mono mt-0.5">
-              ${upcomingBillsAmount.toFixed(2)} Due
-            </p>
-            <p className="text-[11px] text-blue-400 mt-0.5 truncate max-w-[220px]">
-              {billsSubtitle}
-            </p>
-          </div>
-          <div className="w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
-            <Clock className="w-5 h-5" />
-          </div>
-        </div>
-
-        {/* Card 4: Action Required (Triage & Audit) */}
-        <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800/80 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs text-zinc-400">Action Required</p>
-            <p className="text-lg font-bold text-rose-400 font-mono mt-0.5">
-              {totalActionRequired} Items to Review
-            </p>
-            <p className="text-[11px] text-zinc-400 mt-0.5">
-              {disputedCount > 0 ? `⚠️ ${disputedCount} Mismatch Flag` : ""}
-              {unresolvedCount > 0 ? ` · ${unresolvedCount} Uncategorized` : ""}
-            </p>
-          </div>
-          <div className="w-10 h-10 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
-            <ShieldAlert className="w-5 h-5" />
-          </div>
-        </div>
-      </section>
+      {/* 4 Functional Everyday Actionable Financial Metrics Row with Interactive Hover Flyouts */}
+      <FunctionalMetricsRow
+        categories={categories}
+        transactions={transactions}
+        events={events}
+        currentUser={currentUser}
+        activeScope={activeScope}
+        onNavigateTab={(tab) => setActiveRightTab(tab)}
+        onFilterLedger={(debtorName, categoryName) => {
+          setActiveRightTab("transactions");
+          if (debtorName) {
+            setGridMutation({
+              filter: { debtor_name: debtorName },
+              statusMessage: `Filtered by debtor: ${debtorName}`,
+            });
+          } else if (categoryName) {
+            setSelectedCategory(categoryName);
+          }
+        }}
+        onSendChatMessage={(prompt) => {
+          void handleSendMessage(prompt);
+        }}
+      />
 
       {/* Main Split-View Workspace */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5 min-h-[580px]">
