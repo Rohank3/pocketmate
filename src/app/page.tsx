@@ -401,6 +401,30 @@ export default function Home() {
     setEvents((prev) => [...prev, { ...event, id: `evt_${Date.now()}` }]);
   };
 
+  const handleDeleteScheduledEvent = async (eventId: string) => {
+    try {
+      await fetch(`/api/events?id=${eventId}`, { method: "DELETE" });
+    } catch (err) {
+      console.error(err);
+    }
+    setEvents((prev) => prev.filter((e) => e.id !== eventId));
+  };
+
+  const handleToggleScheduledEventStatus = async (eventId: string, newStatus: "pending" | "scheduled" | "completed") => {
+    try {
+      await fetch("/api/events", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: eventId, status: newStatus }),
+      });
+    } catch (err) {
+      console.error(err);
+    }
+    setEvents((prev) =>
+      prev.map((e) => (e.id === eventId ? { ...e, status: newStatus } : e))
+    );
+  };
+
   const handlePayInvoice = (invoiceId: string) => {
     const paid = SandboxStore.settleInvoice(invoiceId);
     if (paid) {
@@ -1169,6 +1193,8 @@ export default function Home() {
                 selectedCategory={selectedCategory}
                 events={events}
                 onAddEvent={handleAddScheduledEvent}
+                onDeleteEvent={handleDeleteScheduledEvent}
+                onToggleStatus={handleToggleScheduledEventStatus}
                 onEventClick={handleSchedulerEventClick}
               />
             )}
