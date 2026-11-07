@@ -17,58 +17,10 @@ const CreateEventSchema = z.object({
 export async function GET(req: NextRequest) {
   try {
     const userId = await getUserIdFromRequest(req);
-    let events = await prisma.scheduledEvent.findMany({
+    const events = await prisma.scheduledEvent.findMany({
       where: { userId },
       orderBy: { date: "asc" },
     });
-
-    if (events.length === 0) {
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, "0");
-
-      await prisma.scheduledEvent.createMany({
-        data: [
-          {
-            userId,
-            title: "Cloud Infrastructure (AWS / Cloudflare)",
-            amount: 95.0,
-            date: `${year}-${month}-12`,
-            dayOfMonth: 12,
-            type: "outgoing",
-            category: "Utilities",
-            counterparty: "AWS",
-            status: "scheduled",
-          },
-          {
-            userId,
-            title: "Streaming & Entertainment Subscriptions",
-            amount: 24.99,
-            date: `${year}-${month}-18`,
-            dayOfMonth: 18,
-            type: "outgoing",
-            category: "Entertainment",
-            counterparty: "Digital Services",
-            status: "scheduled",
-          },
-          {
-            userId,
-            title: "Mid-Month Budget Checkpoint",
-            amount: 0.0,
-            date: `${year}-${month}-15`,
-            dayOfMonth: 15,
-            type: "milestone",
-            category: "General",
-            status: "scheduled",
-          },
-        ],
-      });
-
-      events = await prisma.scheduledEvent.findMany({
-        where: { userId },
-        orderBy: { date: "asc" },
-      });
-    }
 
     return NextResponse.json({ success: true, events });
   } catch (error) {
