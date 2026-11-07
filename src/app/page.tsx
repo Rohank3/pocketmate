@@ -79,7 +79,6 @@ export default function Home() {
   // Multi-user sandbox authentication & cross-account sync state
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
   const [activeScope, setActiveScope] = useState<"personal" | "all">("personal");
-  const [totalPlatformCount, setTotalPlatformCount] = useState<number>(0);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [activeInvoiceForAction, setActiveInvoiceForAction] = useState<InvoiceRecord | null>(null);
   const [, setInvoices] = useState<InvoiceRecord[]>([]);
@@ -98,9 +97,6 @@ export default function Home() {
       const data = await res.json();
       if (data.transactions) {
         setTransactions(data.transactions);
-        if (typeof data.totalPlatformCount === "number") {
-          setTotalPlatformCount(data.totalPlatformCount);
-        }
         if (data.activeScope) {
           setActiveScope(data.activeScope);
         }
@@ -192,9 +188,6 @@ export default function Home() {
         const txData = await txRes.json();
         if (isSubscribed && txData.transactions) {
           setTransactions(txData.transactions);
-          if (typeof txData.totalPlatformCount === "number") {
-            setTotalPlatformCount(txData.totalPlatformCount);
-          }
           if (txData.activeScope) {
             setActiveScope(txData.activeScope);
           }
@@ -694,12 +687,6 @@ export default function Home() {
     }
   };
 
-  const handleSchedulerEventClick = (eventName: string) => {
-    handleSendMessage(
-      `Review scheduled item "${eventName}". Analyze its budget impact and prepare any needed PayPal payment reminder or action.`
-    );
-  };
-
   // 1. Dynamic Spending & Budget Health (Card 1)
   const isAllCategories = selectedCategory.toLowerCase() === "all";
   const activeCat = !isAllCategories
@@ -1072,38 +1059,14 @@ export default function Home() {
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold text-zinc-300">Live PayPal Ledger</span>
 
-                    {/* Multi-User Scoped View Toggle */}
+                    {/* Multi-User Scoped View Badge */}
                     {currentUser ? (
-                      <div className="flex items-center p-0.5 rounded-lg bg-zinc-900 border border-zinc-800 text-[11px]">
-                        <button
-                          onClick={() => {
-                            setActiveScope("personal");
-                            void loadTransactions("personal");
-                          }}
-                          className={`px-2.5 py-0.5 rounded-md font-medium transition-all cursor-pointer ${
-                            activeScope === "personal"
-                              ? "bg-blue-600 text-white shadow-sm"
-                              : "text-zinc-400 hover:text-zinc-200"
-                          }`}
-                          title={`Show only activity for ${currentUser.name}`}
-                        >
-                          My Invoices ({transactions.length})
-                        </button>
-                        <button
-                          onClick={() => {
-                            setActiveScope("all");
-                            void loadTransactions("all");
-                          }}
-                          className={`px-2.5 py-0.5 rounded-md font-medium transition-all cursor-pointer ${
-                            activeScope === "all"
-                              ? "bg-zinc-800 text-zinc-200 shadow-sm"
-                              : "text-zinc-400 hover:text-zinc-200"
-                          }`}
-                          title="Show all PayPal Sandbox records across platform"
-                        >
-                          All Sandbox ({totalPlatformCount || transactions.length})
-                        </button>
-                      </div>
+                      <span
+                        className="text-[11px] font-medium px-2.5 py-0.5 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono"
+                        title={`Showing scoped activity for ${currentUser.name}`}
+                      >
+                        My Invoices ({transactions.length})
+                      </span>
                     ) : (
                       <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono">
                         {transactions.length} Sandbox Records
@@ -1158,7 +1121,7 @@ export default function Home() {
                       </h3>
                       <p className="text-xs text-zinc-400 max-w-sm mt-1 mb-4">
                         {currentUser
-                          ? `You currently have 0 pending invoices or personal charges. Try clicking "All Sandbox" above, or ask PocketMate in chat: "Split $80 dinner with friends".`
+                          ? `You currently have 0 pending invoices or personal charges. Ask PocketMate in chat: "Split $80 dinner with friends" to get started.`
                           : "Your PayPal Sandbox account currently has 0 recorded transactions. Click below to generate realistic invoices and transactions directly in PayPal Sandbox."}
                       </p>
                       <button
@@ -1195,7 +1158,6 @@ export default function Home() {
                 onAddEvent={handleAddScheduledEvent}
                 onDeleteEvent={handleDeleteScheduledEvent}
                 onToggleStatus={handleToggleScheduledEventStatus}
-                onEventClick={handleSchedulerEventClick}
               />
             )}
           </div>
