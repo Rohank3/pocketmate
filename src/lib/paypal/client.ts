@@ -650,6 +650,51 @@ class PayPalSandboxClient {
     const data = (await res.json()) as { verification_status?: string };
     return data.verification_status === "SUCCESS";
   }
+
+  /**
+   * Retrieves subscription details and lifecycle schedule from PayPal Subscriptions API.
+   * Endpoint: GET /v1/billing/subscriptions/{id}
+   */
+  async fetchSubscriptionDetails(subscriptionId: string): Promise<{
+    id: string;
+    status: string;
+    startTime: string;
+    nextBillingTime?: string;
+    finalPaymentTime?: string;
+    lastPaymentTime?: string;
+  } | null> {
+    if (!subscriptionId) return null;
+    try {
+      const token = await this.getAccessToken();
+      const res = await fetch(
+        `${this.baseUrl}/v1/billing/subscriptions/${encodeURIComponent(subscriptionId)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!res.ok) {
+        console.warn(`[PayPal Subscriptions API ${res.status}] for ${subscriptionId}`);
+        return null;
+      }
+
+      const data = await res.json();
+      return {
+        id: data.id,
+        status: data.status,
+        startTime: data.start_time,
+        nextBillingTime: data.billing_info?.next_billing_time,
+        finalPaymentTime: data.billing_info?.final_payment_time,
+        lastPaymentTime: data.billing_info?.last_payment?.time,
+      };
+    } catch (err) {
+      console.warn("[PayPal Subscription Fetch Error]", err);
+      return null;
+    }
+  }
 }
 
 export const paypalClient = new PayPalSandboxClient();
