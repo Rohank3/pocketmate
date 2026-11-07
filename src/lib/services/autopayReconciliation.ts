@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { paypalClient } from "@/lib/paypal/client";
+import { formatCounterpartyWithLifecycle } from "@/lib/utils/subscriptionLifecycle";
 
 interface SubscriptionMatcher {
   pattern: RegExp;
@@ -120,6 +121,8 @@ export async function reconcileAutopaySubscriptions(
           const yr = txDate.getFullYear() || new Date().getFullYear();
           const mo = String(txDate.getMonth() + 1).padStart(2, "0");
           const dateStr = `${yr}-${mo}-${String(dayOfMonth).padStart(2, "0")}`;
+          const startDateStr = txDate.toISOString().slice(0, 10);
+          const formattedCp = formatCounterpartyWithLifecycle(matchedProvider.name, startDateStr);
 
           await prisma.scheduledEvent.create({
             data: {
@@ -130,7 +133,7 @@ export async function reconcileAutopaySubscriptions(
               dayOfMonth,
               type: "outgoing",
               category: matchedProvider.category,
-              counterparty: matchedProvider.name,
+              counterparty: formattedCp,
               status: "completed", // Settled for this billing cycle
             },
           });
