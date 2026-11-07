@@ -82,6 +82,9 @@ export class SandboxStore {
 
   static getContactsForUser(userId: string): ContactRecord[] {
     if (!this.isBrowser()) return [];
+    if (!userId || ["__proto__", "constructor", "prototype", "toString", "valueOf"].includes(userId)) {
+      return [];
+    }
     const stored = localStorage.getItem(STORAGE_KEYS.CONTACTS);
     if (!stored) return [];
     try {
@@ -93,6 +96,9 @@ export class SandboxStore {
   }
 
   static addContactForUser(userId: string, contact: Omit<ContactRecord, "id">): ContactRecord {
+    if (!userId || ["__proto__", "constructor", "prototype", "toString", "valueOf"].includes(userId)) {
+      return { ...contact, id: `cnt_${Date.now()}` };
+    }
     const contactsMap = this.getAllContactsMap();
     const userContacts = contactsMap[userId] || [];
     const newContact: ContactRecord = {
@@ -131,7 +137,10 @@ export class SandboxStore {
     reason?: string;
   } {
     const contacts = this.getContactsForUser(userId);
-    const q = query.trim().toLowerCase();
+    const q = typeof query === "string" ? query.trim().toLowerCase() : "";
+    if (!q) {
+      return { match: null, status: "UNKNOWN", candidates: [] };
+    }
 
     // Check for exact full name match first
     const exactFull = contacts.find((c) => c.name.toLowerCase() === q);
@@ -252,6 +261,8 @@ export class SandboxStore {
     proposedAmount: number,
     reason: string
   ): InvoiceRecord | null {
+    const safeAmount = Number.isFinite(proposedAmount) && proposedAmount > 0 ? proposedAmount : 0;
+    const safeReason = typeof reason === "string" ? reason.slice(0, 255) : "Proposed revised share";
     const all = this.getInvoices();
     let updatedRecord: InvoiceRecord | null = null;
 
@@ -260,8 +271,8 @@ export class SandboxStore {
         updatedRecord = {
           ...inv,
           status: "ADJUSTMENT_REQUESTED",
-          proposedAdjustmentAmount: proposedAmount,
-          declineReason: reason,
+          proposedAdjustmentAmount: safeAmount,
+          declineReason: safeReason,
         };
         return updatedRecord;
       }

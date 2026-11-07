@@ -32,6 +32,7 @@ export const ALL_SANDBOX_ACCOUNTS: SandboxAccount[] = [
  * Resolves a loose user query or contact name against the 18 live PayPal Sandbox accounts.
  */
 export function findSandboxAccount(query: string): SandboxAccount | null {
+  if (!query || typeof query !== "string") return null;
   const q = query.trim().toLowerCase();
   if (!q) return null;
 
