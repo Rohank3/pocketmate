@@ -93,6 +93,19 @@ export default function Home() {
     () => false
   );
 
+  // Load scheduled bills & events from database
+  const loadEvents = useCallback(async () => {
+    try {
+      const evRes = await fetch("/api/events");
+      const evData = await evRes.json();
+      if (evData.events) {
+        setEvents(evData.events);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
   // Load live transactions from PayPal Sandbox (role & user-aware)
   const loadTransactions = useCallback(async (scopeOverride?: "personal" | "all") => {
     setIsLoadingTransactions(true);
@@ -105,13 +118,15 @@ export default function Home() {
         if (data.activeScope) {
           setActiveScope(data.activeScope);
         }
+        // Refresh scheduled events so newly reconciled/detected bills reflect immediately
+        void loadEvents();
       }
     } catch (err) {
       console.error(err);
     } finally {
       setIsLoadingTransactions(false);
     }
-  }, [activeScope]);
+  }, [activeScope, loadEvents]);
 
   // 1-Click orchestrate realistic PayPal Sandbox transactions & invoices
   const handleSeedSandboxTransactions = async () => {
@@ -122,13 +137,14 @@ export default function Home() {
       if (data.transactions) {
         setTransactions(data.transactions);
         await loadTransactions(activeScope);
+        await loadEvents();
         setMessages((prev) => [
           ...prev,
           {
             id: `asst_sync_${Date.now()}`,
             role: "assistant",
             content:
-              "⚡ **Live PayPal Transactions Synchronized!**\n\n• Queried live records directly from **PayPal Reporting API** (`/v1/reporting/transactions`).\n• Synced authentic invoices via **PayPal Invoicing API** (`/v2/invoicing/invoices`).\n• AG Grid ledger updated with live bilateral transaction history directly from PayPal Developer servers.",
+              "⚡ **Live PayPal Transactions Synchronized!**\n\n• Queried live records directly from **PayPal Reporting API** (`/v1/reporting/transactions`).\n• Synced authentic invoices via **PayPal Invoicing API** (`/v2/invoicing/invoices`).\n• AG Grid ledger updated with live bilateral transaction history directly from PayPal Developer servers.\n• **Autopay & Recurring Bills Reconciled**: Matching scheduled payments were automatically verified and updated.",
             toolBadges: ["rail: paypal_reporting_api", "rail: paypal_invoicing_v2", "status: LIVE_SANDBOX"],
           },
         ]);
@@ -154,19 +170,6 @@ export default function Home() {
             color: c.color || "#3b82f6",
           }))
         );
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  // Load scheduled bills & events from database
-  const loadEvents = useCallback(async () => {
-    try {
-      const evRes = await fetch("/api/events");
-      const evData = await evRes.json();
-      if (evData.events) {
-        setEvents(evData.events);
       }
     } catch {
       // ignore
