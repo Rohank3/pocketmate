@@ -677,11 +677,15 @@ export async function handleDynamicAutonomousResponse(
 
     // Smart fallback if event not found in DB
     if (!targetEvent) {
+      const now = new Date();
+      const yr = now.getFullYear();
+      const mo = String(now.getMonth() + 1).padStart(2, "0");
+
       if (p.includes("aws") || p.includes("cloud") || p.includes("infrastructure")) {
         targetEvent = {
           title: queryTitle || "Cloud Infrastructure (AWS / Cloudflare)",
           amount: 95.0,
-          date: "2026-11-12",
+          date: `${yr}-${mo}-12`,
           category: "Utilities",
           counterparty: "AWS",
           type: "outgoing",
@@ -690,7 +694,7 @@ export async function handleDynamicAutonomousResponse(
         targetEvent = {
           title: queryTitle || "Streaming & Entertainment Subscriptions",
           amount: 24.99,
-          date: "2026-11-18",
+          date: `${yr}-${mo}-18`,
           category: "Entertainment",
           counterparty: "Digital Services",
           type: "outgoing",
@@ -699,7 +703,7 @@ export async function handleDynamicAutonomousResponse(
         targetEvent = {
           title: queryTitle || "Mid-Month Budget Checkpoint",
           amount: 0.0,
-          date: "2026-11-15",
+          date: `${yr}-${mo}-15`,
           category: "General",
           counterparty: null,
           type: "milestone",
@@ -708,7 +712,7 @@ export async function handleDynamicAutonomousResponse(
         targetEvent = {
           title: queryTitle || "Scheduled Payment Item",
           amount: 50.0,
-          date: "2026-11-20",
+          date: `${yr}-${mo}-20`,
           category: "General",
           counterparty: "Vendor",
           type: "outgoing",
