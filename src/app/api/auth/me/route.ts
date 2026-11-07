@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { verifySessionCookie } from "@/lib/auth/session";
 
 export async function GET(req: NextRequest) {
   try {
@@ -8,19 +9,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ user: null });
     }
 
-    let parsed: { id?: string; email?: string; name?: string } | null = null;
-    try {
-      parsed = JSON.parse(cookie);
-    } catch {
-      return NextResponse.json({ user: null });
-    }
-
-    if (!parsed?.email) {
+    const verified = verifySessionCookie(cookie);
+    if (!verified?.email) {
       return NextResponse.json({ user: null });
     }
 
     const user = await prisma.user.findUnique({
-      where: { email: parsed.email },
+      where: { email: verified.email },
       include: {
         budgetCategories: true,
         contacts: true,
