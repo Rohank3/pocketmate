@@ -1,21 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
 import { paypalClient } from "@/lib/paypal/client";
+import { verifySessionCookie } from "@/lib/auth/session";
+
+let lastSeedTimestamp = 0;
 
 export async function POST(req: NextRequest) {
   try {
-    const userCookie = req.cookies.get("pocketmate_user")?.value;
-    let currentUser: { id?: string; email?: string; name?: string } | null = null;
-    if (userCookie) {
-      try {
-        currentUser = JSON.parse(userCookie);
-      } catch {
-        // ignore
-      }
+    if (process.env.PAYPAL_ENVIRONMENT === "live") {
+      return NextResponse.json(
+        { error: "Sandbox seeding is disabled in production live environment." },
+        { status: 403 }
+      );
     }
 
-    const rawTxs = await paypalClient.seedSandboxData(
-      currentUser ? { name: currentUser.name, email: currentUser.email } : undefined
-    );
+    const now = Date.now();
+    if (now - lastSeedTimestamp < 10000) {
+      return NextResponse.json(
+        { error: "Please wait 10 seconds before reseeding sandbox data." },
+        { status: 429 }
+      );
+    }
+    lastSeedTimestamp = now;
+
+    const userCookie = req.cookies.get("pocketmate_user")?.value;
+    const verified = verifySessionCookie(userCookie);
+
+    const sanitizedUser =
+      verified && typeof verified.email === "string" && verified.email.includes("@")
+        ? {
+            name: typeof verified.name === "string" ? verified.name.trim().slice(0, 100) : undefined,
+            email: verified.email.trim().toLowerCase().slice(0, 255),
+          }
+        : undefined;
+
+    const rawTxs = await paypalClient.seedSandboxData(sanitizedUser);
 
     // Map to TransactionRow format expected by the frontend
     const formatted = rawTxs.map((t) => {

@@ -1,14 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { paypalClient, PayPalTransaction } from "@/lib/paypal/client";
+import crypto from "crypto";
 
 export async function GET(req: NextRequest) {
   try {
-    const authHeader = req.headers.get("authorization") || "";
-    const urlSecret = req.nextUrl.searchParams.get("secret");
     const cronSecret = process.env.CRON_SECRET;
+    if (!cronSecret) {
+      return NextResponse.json(
+        { error: "Cron sweep trigger is not configured or disabled." },
+        { status: 503 }
+      );
+    }
 
-    // Check authorization if CRON_SECRET is configured
-    if (cronSecret && authHeader !== `Bearer ${cronSecret}` && urlSecret !== cronSecret) {
+    const authHeader = req.headers.get("authorization") || "";
+    const expectedHeader = `Bearer ${cronSecret}`;
+    const isValid =
+      authHeader.length === expectedHeader.length &&
+      crypto.timingSafeEqual(Buffer.from(authHeader), Buffer.from(expectedHeader));
+
+    if (!isValid) {
       return NextResponse.json({ error: "Unauthorized cron trigger." }, { status: 401 });
     }
 
