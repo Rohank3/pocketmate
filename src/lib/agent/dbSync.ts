@@ -43,15 +43,20 @@ export async function persistChatMessage(
   role: "user" | "assistant" | "system",
   content: string,
   persona: PersonaType = "GENERAL",
-  toolCalls?: unknown
+  toolCalls?: unknown,
+  userId?: string
 ) {
   try {
-    const user = await getOrCreateDefaultUser();
-    if (!user) return;
+    let targetUserId = userId;
+    if (!targetUserId) {
+      const user = await getOrCreateDefaultUser();
+      targetUserId = user?.id;
+    }
+    if (!targetUserId) return;
 
     await prisma.chatMessage.create({
       data: {
-        userId: user.id,
+        userId: targetUserId,
         role,
         content,
         persona,
@@ -70,15 +75,20 @@ export async function syncBudgetExpenseToDB(
   categoryName: string,
   amount: number,
   merchant?: string,
-  description?: string
+  description?: string,
+  userId?: string
 ) {
   try {
-    const user = await getOrCreateDefaultUser();
-    if (!user) return;
+    let targetUserId = userId;
+    if (!targetUserId) {
+      const user = await getOrCreateDefaultUser();
+      targetUserId = user?.id;
+    }
+    if (!targetUserId) return;
 
     let category = await prisma.budgetCategory.findFirst({
       where: {
-        userId: user.id,
+        userId: targetUserId,
         name: { equals: categoryName, mode: "insensitive" },
       },
     });
@@ -86,7 +96,7 @@ export async function syncBudgetExpenseToDB(
     if (!category) {
       category = await prisma.budgetCategory.create({
         data: {
-          userId: user.id,
+          userId: targetUserId,
           name: categoryName,
           monthlyCap: 350.0,
           currentSpent: 0,
