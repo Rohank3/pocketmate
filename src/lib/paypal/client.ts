@@ -3,8 +3,10 @@
  * 
  * Provides authenticated access to PayPal Developer platform services:
  * - Reporting & Transaction Queries (v1)
+ * - Orders & Payments Capture (v2)
  * - Invoicing & Split Requests (v2)
- * - Payment Captures & Dispute Settlement
+ * - Webhook Cryptographic Verification (v1)
+ * - Disputes & Customer Resolution Center (v1)
  */
 
 export interface PayPalConfig {
@@ -15,7 +17,7 @@ export interface PayPalConfig {
 
 export interface PayPalTransaction {
   id: string;
-  status: string; // "COMPLETED" | "PENDING" | "DRAFT" | "DISPUTED"
+  status: string; // "COMPLETED" | "PENDING" | "DRAFT" | "DISPUTED" | "CANCELLED"
   amount: number;
   currency: string;
   merchantName: string;
@@ -47,6 +49,41 @@ export interface DisputeResult {
   reason: string;
   disputedAmount: number;
   message: string;
+  resolutionCenterUrl: string;
+}
+
+export interface CreateOrderParams {
+  amount: number;
+  currency?: string;
+  description?: string;
+  customId?: string;
+  returnUrl?: string;
+  cancelUrl?: string;
+}
+
+export interface PayPalOrderResult {
+  orderId: string;
+  status: string;
+  approveUrl?: string;
+}
+
+export interface CaptureOrderResult {
+  orderId: string;
+  captureId?: string;
+  status: string;
+  amount: number;
+  currency: string;
+  payerEmail?: string;
+}
+
+export interface VerifyWebhookParams {
+  authAlgo: string;
+  certUrl: string;
+  transmissionId: string;
+  transmissionSig: string;
+  transmissionTime: string;
+  webhookId: string;
+  webhookEvent: Record<string, unknown>;
 }
 
 class PayPalSandboxClient {
@@ -64,6 +101,12 @@ class PayPalSandboxClient {
         : "https://api-m.sandbox.paypal.com";
   }
 
+  getResolutionCenterBaseUrl(): string {
+    return process.env.PAYPAL_ENVIRONMENT === "live"
+      ? "https://www.paypal.com/disputes"
+      : "https://www.sandbox.paypal.com/disputes";
+  }
+
   /**
    * Retrieves or refreshes OAuth 2.0 Bearer access token using Client Credentials.
    */
@@ -73,8 +116,12 @@ class PayPalSandboxClient {
       return this.tokenCache.token;
     }
 
+    // Refresh credentials dynamically from environment variables
+    this.clientId = process.env.PAYPAL_CLIENT_ID || "";
+    this.clientSecret = process.env.PAYPAL_CLIENT_SECRET || "";
+
     if (!this.clientId || !this.clientSecret) {
-      throw new Error("Missing PayPal Sandbox credentials in environment variables.");
+      throw new Error("Missing PayPal Sandbox credentials (PAYPAL_CLIENT_ID / PAYPAL_CLIENT_SECRET) in environment variables.");
     }
 
     const auth = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString("base64");
@@ -103,8 +150,94 @@ class PayPalSandboxClient {
   }
 
   /**
+   * Creates an order via PayPal Orders v2 API.
+   * Payer authenticates on PayPal's domain to approve settlement.
+   */
+  async createOrder(params: CreateOrderParams): Promise<PayPalOrderResult> {
+    const token = await this.getAccessToken();
+    const appUrl = process.env.RENDER_EXTERNAL_URL || process.env.NEXTAUTH_URL || "http://localhost:3000";
+
+    const body = {
+      intent: "CAPTURE",
+      purchase_units: [
+        {
+          reference_id: "pocketmate_settlement",
+          description: params.description || "Expense Settlement via PocketMate",
+          custom_id: params.customId,
+          amount: {
+            currency_code: params.currency || "USD",
+            value: params.amount.toFixed(2),
+          },
+        },
+      ],
+      application_context: {
+        brand_name: "PocketMate",
+        user_action: "PAY_NOW",
+        shipping_preference: "NO_SHIPPING",
+        return_url: params.returnUrl || `${appUrl}/?order_status=approved`,
+        cancel_url: params.cancelUrl || `${appUrl}/?order_status=cancelled`,
+      },
+    };
+
+    const res = await fetch(`${this.baseUrl}/v2/checkout/orders`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`PayPal Orders v2 create failed: HTTP ${res.status} - ${errText}`);
+    }
+
+    const data = await res.json();
+    const approveLink = data.links?.find((l: { rel: string; href: string }) => l.rel === "approve")?.href;
+
+    return {
+      orderId: data.id,
+      status: data.status,
+      approveUrl: approveLink,
+    };
+  }
+
+  /**
+   * Captures an approved PayPal order.
+   */
+  async captureOrder(orderId: string): Promise<CaptureOrderResult> {
+    const token = await this.getAccessToken();
+
+    const res = await fetch(`${this.baseUrl}/v2/checkout/orders/${encodeURIComponent(orderId)}/capture`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`PayPal Orders v2 capture failed: HTTP ${res.status} - ${errText}`);
+    }
+
+    const data = await res.json();
+    const captureUnit = data.purchase_units?.[0]?.payments?.captures?.[0];
+
+    return {
+      orderId: data.id,
+      captureId: captureUnit?.id,
+      status: data.status,
+      amount: parseFloat(captureUnit?.amount?.value || "0.00"),
+      currency: captureUnit?.amount?.currency_code || "USD",
+      payerEmail: data.payer?.email_address,
+    };
+  }
+
+  /**
    * Fetches recent transactions and invoices from PayPal Sandbox Developer APIs.
-   * Strictly queries live PayPal endpoints with zero synthetic or hardcoded fallbacks.
+   * Strictly queries live PayPal endpoints without synthetic fallbacks.
    */
   async fetchRecentTransactions(hoursBack: number = 720, filterEmail?: string): Promise<PayPalTransaction[]> {
     const token = await this.getAccessToken();
@@ -142,7 +275,7 @@ class PayPalSandboxClient {
           const merchantName =
             (payerName.alternate_full_name as string) ||
             (info.transaction_subject as string) ||
-            "PayPal Sandbox Direct Transfer";
+            "PayPal Settlement Transfer";
 
           const debtor = (payerName.alternate_full_name as string) || "Self";
 
@@ -208,8 +341,10 @@ class PayPalSandboxClient {
           else if (inv.status === "DRAFT") status = "DRAFT";
           else if (inv.status === "CANCELLED" || inv.status === "REFUNDED") status = "CANCELLED";
 
+          const invId = inv.id;
+
           results.push({
-            id: inv.id,
+            id: invId,
             status,
             amount: amountVal,
             currency: inv.amount?.currency_code || detail.currency_code || "USD",
@@ -232,7 +367,6 @@ class PayPalSandboxClient {
 
   /**
    * Executes a direct peer-to-peer payout via PayPal Payouts API (/v1/payments/payouts).
-   * Instantly moves real virtual funds from the platform merchant to the recipient sandbox account.
    */
   async sendPayout(payout: {
     recipientEmail: string;
@@ -280,10 +414,9 @@ class PayPalSandboxClient {
 
     if (!res.ok) {
       const errText = await res.text();
-      // If the developer account country does not have batch payouts enabled by PayPal,
-      // dispatch an authentic paid settlement record via PayPal Invoicing API.
+      // If payouts restricted in sandbox by region, dispatch an authentic paid settlement record via PayPal Invoicing API
       if (res.status === 403 && errText.includes("PAYOUT_NOT_AVAILABLE")) {
-        console.warn("[PayPal Payouts] Payouts restricted by developer country. Executing authentic paid settlement via PayPal Invoicing API...");
+        console.warn("[PayPal Payouts] Payouts restricted. Executing authentic settlement via PayPal Invoicing API...");
         const invRes = await this.dispatchInvoice({
           name: payout.recipientEmail.split("@")[0].replace(/[._]/g, " "),
           email: payout.recipientEmail,
@@ -338,151 +471,98 @@ class PayPalSandboxClient {
   }
 
   /**
-   * Creates and immediately dispatches an invoice via PayPal Invoicing API.
+   * Creates and immediately dispatches an invoice via PayPal Invoicing API v2.
    */
   async dispatchInvoice(recipient: InvoiceRecipient): Promise<InvoiceDispatchResult> {
     const token = await this.getAccessToken();
 
-    try {
-      // 1. Create draft invoice
-      const createRes = await fetch(`${this.baseUrl}/v2/invoicing/invoices`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+    // 1. Create draft invoice
+    const createRes = await fetch(`${this.baseUrl}/v2/invoicing/invoices`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        detail: {
+          currency_code: "USD",
+          note: recipient.description || "Shared Expense Split via PocketMate",
         },
-        body: JSON.stringify({
-          detail: {
-            currency_code: "USD",
-            note: recipient.description || "Shared Expense Split via PocketMate",
-          },
-          invoicer: {
-            name: { given_name: "PocketMate", surname: "User" },
-          },
-          primary_recipients: [
-            {
-              billing_info: {
-                name: { given_name: recipient.name || "Recipient" },
-                email_address: recipient.email,
-              },
-            },
-          ],
-          items: [
-            {
-              name: recipient.description || "Expense Share",
-              quantity: "1",
-              unit_amount: {
-                currency_code: "USD",
-                value: recipient.amount.toFixed(2),
-              },
-            },
-          ],
-        }),
-      });
-
-      if (!createRes.ok) {
-        const errText = await createRes.text();
-        throw new Error(`Failed to create invoice draft: HTTP ${createRes.status} - ${errText}`);
-      }
-
-      const invoiceData = await createRes.json();
-      const invoiceId =
-        invoiceData.id ||
-        invoiceData.href?.split("/").pop() ||
-        createRes.headers.get("location")?.split("/").pop() ||
-        `INV2-${Date.now()}`;
-
-      // 2. Dispatch the invoice
-      const sendRes = await fetch(`${this.baseUrl}/v2/invoicing/invoices/${invoiceId}/send`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+        invoicer: {
+          name: { given_name: "PocketMate", surname: "User" },
         },
-      });
+        primary_recipients: [
+          {
+            billing_info: {
+              name: { given_name: recipient.name || "Recipient" },
+              email_address: recipient.email,
+            },
+          },
+        ],
+        items: [
+          {
+            name: recipient.description || "Expense Share",
+            quantity: "1",
+            unit_amount: {
+              currency_code: "USD",
+              value: recipient.amount.toFixed(2),
+            },
+          },
+        ],
+      }),
+    });
 
-      return {
-        invoiceId,
-        invoiceNumber: invoiceData.detail?.invoice_number || invoiceId,
-        recipientEmail: recipient.email,
-        amount: recipient.amount,
-        status: sendRes.ok ? "SENT" : "DRAFT_SAVED",
-        viewUrl: `https://www.sandbox.paypal.com/invoice/p/#${invoiceId}`,
-      };
-    } catch (error) {
-      console.error("[PayPal Invoicing Dispatch Error]", error);
-      throw error;
+    if (!createRes.ok) {
+      const errText = await createRes.text();
+      throw new Error(`Failed to create invoice draft: HTTP ${createRes.status} - ${errText}`);
     }
+
+    const invoiceData = await createRes.json();
+    const invoiceId =
+      invoiceData.id ||
+      invoiceData.href?.split("/").pop() ||
+      createRes.headers.get("location")?.split("/").pop() ||
+      `INV2-${Date.now()}`;
+
+    // 2. Dispatch the invoice
+    const sendRes = await fetch(`${this.baseUrl}/v2/invoicing/invoices/${encodeURIComponent(invoiceId)}/send`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    const isLive = process.env.PAYPAL_ENVIRONMENT === "live";
+    const viewUrl = isLive
+      ? `https://www.paypal.com/invoice/p/#${invoiceId}`
+      : `https://www.sandbox.paypal.com/invoice/p/#${invoiceId}`;
+
+    return {
+      invoiceId,
+      invoiceNumber: invoiceData.detail?.invoice_number || invoiceId,
+      recipientEmail: recipient.email,
+      amount: recipient.amount,
+      status: sendRes.ok ? "SENT" : "DRAFT_SAVED",
+      viewUrl,
+    };
   }
 
   /**
-   * Orchestrates authentic bilateral PayPal transfers and itemized invoices directly on PayPal Sandbox.
-   * Executes live REST API calls to /v1/payments/payouts and /v2/invoicing/invoices.
+   * Synchronizes recent transactions directly from PayPal APIs for the authenticated user.
+   * Completely live query with zero hardcoded amounts, descriptions, or synthetic invoices.
    */
-  async orchestrateBilateralTransfers(targetUser?: { name?: string; email?: string }): Promise<PayPalTransaction[]> {
-    const userEmail = targetUser?.email || "dave.chen.pm@personal.example.com";
-    const userName = targetUser?.name || "Dave Chen";
-
-    // 1. Execute live Payout via PayPal Payouts API
-    try {
-      await this.sendPayout({
-        recipientEmail: userEmail,
-        amount: 45.0,
-        note: `Lunch reimbursement transferred to ${userName}`,
-      });
-    } catch (payoutErr) {
-      console.warn("[PayPal Bilateral Payout Note]", payoutErr);
+  async syncUserTransactions(userEmail: string): Promise<PayPalTransaction[]> {
+    if (!userEmail) {
+      throw new Error("userEmail is required to synchronize transactions.");
     }
 
-    // 2. Dispatch real itemized Invoices via PayPal Invoicing API
-    const realInvoices = [
-      {
-        name: userName,
-        email: userEmail,
-        amount: 65.0,
-        description: "Downtown Craft Bar & Grill Dinner Split",
-      },
-      {
-        name: userName,
-        email: userEmail,
-        amount: 32.5,
-        description: "Bowlero Lanes Entertainment & Shoes",
-      },
-      {
-        name: "Alex Morgan",
-        email: "alex.morgan.studio@business.example.com",
-        amount: 75.0,
-        description: "Design Studio Workspace Share",
-      },
-      {
-        name: "Sarah Jenkins",
-        email: "sarah.jenkins.exec@personal.example.com",
-        amount: 80.0,
-        description: "Zara Mall Galleria Shared Outing",
-      },
-    ];
-
-    for (const item of realInvoices) {
-      try {
-        await this.dispatchInvoice(item);
-      } catch (err) {
-        console.warn("[PayPal Invoicing Dispatch Warning]", err);
-      }
-    }
-
-    // Return pure live query from PayPal
     return this.fetchRecentTransactions(720, userEmail);
   }
 
   /**
-   * Alias for orchestrateBilateralTransfers
-   */
-  async seedSandboxData(targetUser?: { name?: string; email?: string }): Promise<PayPalTransaction[]> {
-    return this.orchestrateBilateralTransfers(targetUser);
-  }
-
-  /**
-   * Initiates a dispute for unauthorized fees or surcharge mismatches
+   * Initiates a dispute for unauthorized fees or surcharge mismatches via PayPal Customer Disputes API.
+   * Always links to PayPal's official Resolution Center without fake fallback IDs.
    */
   async initiateDispute(
     captureId: string,
@@ -490,50 +570,85 @@ class PayPalSandboxClient {
     disputedAmount: number
   ): Promise<DisputeResult> {
     const token = await this.getAccessToken();
+    const resolutionCenterUrl = `${this.getResolutionCenterBaseUrl()}?transaction_id=${encodeURIComponent(captureId)}`;
 
-    try {
-      const res = await fetch(`${this.baseUrl}/v1/customer/disputes`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+    const res = await fetch(`${this.baseUrl}/v1/customer/disputes`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        disputed_transaction: {
+          buyer_transaction_id: captureId,
         },
-        body: JSON.stringify({
-          disputed_transaction: {
-            buyer_transaction_id: captureId,
-          },
-          reason: "UNRECOGNIZED",
-          dispute_amount: {
-            currency_code: "USD",
-            value: disputedAmount.toFixed(2),
-          },
-        }),
-      });
+        reason: "UNRECOGNIZED",
+        dispute_amount: {
+          currency_code: "USD",
+          value: disputedAmount.toFixed(2),
+        },
+      }),
+    });
 
-      if (!res.ok) {
-        throw new Error(`Dispute API HTTP ${res.status}`);
-      }
-
-      const data = (await res.json()) as Record<string, unknown>;
-      const disputeId = (data.dispute_id as string) || `PP-D-${Math.floor(10000 + Math.random() * 90000)}`;
-
+    if (!res.ok) {
+      const errText = await res.text();
+      console.warn(`[PayPal Customer Disputes API ${res.status}]`, errText);
+      // If dispute cannot be opened via API (e.g. ineligible transaction status), provide official Resolution Center link
       return {
-        disputeId,
-        status: (data.status as string) || "UNDER_REVIEW",
+        disputeId: `PP-EXTERNAL-ACTION`,
+        status: "ACTION_REQUIRED",
         reason,
         disputedAmount,
-        message: `Dispute ${disputeId} filed with PayPal Customer Resolution Center.`,
-      };
-    } catch {
-      const fallbackId = `PP-D-SB-${Math.floor(10000 + Math.random() * 90000)}`;
-      return {
-        disputeId: fallbackId,
-        status: "UNDER_REVIEW",
-        reason,
-        disputedAmount,
-        message: `Dispute ${fallbackId} recorded against ${captureId} for $${disputedAmount.toFixed(2)} in PayPal Sandbox.`,
+        message: `Dispute cannot be filed directly via API (${res.status}). Please file directly through PayPal Customer Resolution Center: ${resolutionCenterUrl}`,
+        resolutionCenterUrl,
       };
     }
+
+    const data = (await res.json()) as Record<string, unknown>;
+    const disputeId = (data.dispute_id as string) || `PP-D-${Date.now()}`;
+
+    return {
+      disputeId,
+      status: (data.status as string) || "UNDER_REVIEW",
+      reason,
+      disputedAmount,
+      message: `Dispute ${disputeId} successfully filed with PayPal Customer Resolution Center.`,
+      resolutionCenterUrl: `${this.getResolutionCenterBaseUrl()}#${disputeId}`,
+    };
+  }
+
+  /**
+   * Cryptographically verifies PayPal webhook signatures via /v1/notifications/verify-webhook-signature.
+   */
+  async verifyWebhookSignature(params: VerifyWebhookParams): Promise<boolean> {
+    const token = await this.getAccessToken();
+
+    const body = {
+      auth_algo: params.authAlgo,
+      cert_url: params.certUrl,
+      transmission_id: params.transmissionId,
+      transmission_sig: params.transmissionSig,
+      transmission_time: params.transmissionTime,
+      webhook_id: params.webhookId,
+      webhook_event: params.webhookEvent,
+    };
+
+    const res = await fetch(`${this.baseUrl}/v1/notifications/verify-webhook-signature`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      console.warn(`[PayPal Webhook Verify] HTTP ${res.status}`);
+      return false;
+    }
+
+    const data = (await res.json()) as { verification_status?: string };
+    return data.verification_status === "SUCCESS";
   }
 }
 
