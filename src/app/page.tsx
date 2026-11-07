@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 import { ChatPanel, ChatMessageItem } from "@/components/chat/ChatPanel";
 import { TransactionGrid, TransactionRow } from "@/components/grid/TransactionGrid";
@@ -87,6 +87,11 @@ export default function Home() {
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [events, setEvents] = useState<ScheduledEvent[]>([]);
+  const isClient = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
 
   // Load live transactions from PayPal Sandbox (role & user-aware)
   const loadTransactions = useCallback(async (scopeOverride?: "personal" | "all") => {
@@ -751,12 +756,35 @@ export default function Home() {
   const firstUnpaidBill = isUserDebtor ? userOwedBills[0] : null;
 
   // 3. Dynamic Upcoming Bills Due in next 7 days (Card 3)
-  const outgoingBills = events.filter((e) => e.type === "outgoing");
-  const upcomingBillsAmount = outgoingBills.reduce((sum, e) => sum + e.amount, 0);
-  const firstUpcomingBill = outgoingBills[0];
-  const billsSubtitle = firstUpcomingBill
-    ? `${firstUpcomingBill.counterparty || firstUpcomingBill.title.split("(")[0].trim()} ($${firstUpcomingBill.amount.toFixed(0)}) on ${firstUpcomingBill.date}`
-    : "No scheduled bills due";
+  const { upcomingBillsAmount, billsSubtitle } = useMemo(() => {
+    if (!isClient) {
+      return { upcomingBillsAmount: 0, billsSubtitle: "Loading scheduled bills..." };
+    }
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    const currentDay = now.getDate();
+    const todayStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(currentDay).padStart(2, "0")}`;
+    const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const sevenDaysStr = `${sevenDaysLater.getFullYear()}-${String(sevenDaysLater.getMonth() + 1).padStart(2, "0")}-${String(sevenDaysLater.getDate()).padStart(2, "0")}`;
+
+    const upcoming7DayBills = events.filter((e) => {
+      if (e.type !== "outgoing" || e.status === "completed") return false;
+      if (e.date) {
+        return e.date >= todayStr && e.date <= sevenDaysStr;
+      }
+      const diff = e.dayOfMonth - currentDay;
+      return diff >= 0 && diff <= 7;
+    });
+
+    const amount = upcoming7DayBills.reduce((sum, e) => sum + e.amount, 0);
+    const nextBill = upcoming7DayBills[0] || events.find((e) => e.type === "outgoing" && e.status !== "completed");
+    const subtitle = nextBill
+      ? `${nextBill.counterparty || nextBill.title.split("(")[0].trim()} ($${nextBill.amount.toFixed(0)}) on ${nextBill.date || `Day ${nextBill.dayOfMonth}`}`
+      : "No scheduled bills due in next 7 days";
+
+    return { upcomingBillsAmount: amount, billsSubtitle: subtitle };
+  }, [isClient, events]);
 
   // 4. Dynamic Action Needed / Triage (Card 4)
   const disputedCount = transactions.filter((t) => t.status === "disputed").length;
