@@ -4,6 +4,7 @@ import { agentToolDeclarations, executeAgentTool } from "@/lib/agent/tools";
 import { persistChatMessage } from "@/lib/agent/dbSync";
 import { handleDynamicAutonomousResponse } from "@/lib/agent/orchestrator";
 import { getUserIdFromRequest } from "@/lib/auth/session";
+import { prisma } from "@/lib/db";
 import { z } from "zod";
 
 const StreamRequestSchema = z.object({
@@ -17,7 +18,19 @@ const StreamRequestSchema = z.object({
     .min(1)
     .max(50),
   persona: z.enum(["GENERAL", "FREELANCER", "BUSINESS"]).default("GENERAL"),
+  threadId: z.string().optional(),
 });
+
+function generateSmartThreadTitle(prompt: string): string {
+  const clean = prompt
+    .replace(/^(can you|could you|please|help me|i want to|i need to)\s+/i, "")
+    .replace(/[^\w\s$-]/g, " ")
+    .trim();
+  const words = clean.split(/\s+/).filter(Boolean).slice(0, 5);
+  if (words.length === 0) return "Conversation";
+  const title = words.map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+  return title.slice(0, 40) || "Conversation";
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -50,7 +63,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { messages, persona } = parseResult.data;
+    const { messages, persona, threadId } = parseResult.data;
     const rawUserId = await getUserIdFromRequest(req);
     const userId = rawUserId ?? undefined;
 
@@ -80,16 +93,57 @@ export async function POST(req: NextRequest) {
         };
 
         const lastUserMsg = [...messages].reverse().find((m) => m.role === "user")?.content || "";
-        if (lastUserMsg) {
-          persistChatMessage("user", lastUserMsg, persona, undefined, userId);
+        let activeThreadId = threadId;
+
+        // Auto-title thread if it's default or new
+        if (userId && lastUserMsg) {
+          if (!activeThreadId) {
+            try {
+              const newThread = await prisma.chatThread.create({
+                data: {
+                  userId,
+                  title: generateSmartThreadTitle(lastUserMsg),
+                },
+              });
+              activeThreadId = newThread.id;
+              sendEvent("thread_created", { thread: newThread });
+            } catch (err) {
+              console.warn("[Auto-Create Thread Error]", err);
+            }
+          } else {
+            try {
+              const currentThread = await prisma.chatThread.findFirst({
+                where: { id: activeThreadId, userId },
+              });
+              if (currentThread && (currentThread.title === "New Conversation" || !currentThread.title)) {
+                const smartTitle = generateSmartThreadTitle(lastUserMsg);
+                await prisma.chatThread.update({
+                  where: { id: activeThreadId },
+                  data: { title: smartTitle },
+                });
+                sendEvent("thread_renamed", { id: activeThreadId, title: smartTitle });
+              }
+            } catch (err) {
+              console.warn("[Auto-Title Thread Error]", err);
+            }
+          }
         }
+
+        if (lastUserMsg) {
+          persistChatMessage("user", lastUserMsg, persona, undefined, userId, activeThreadId);
+        }
+
+        let fallbackAccumulatedText = "";
+        let fallbackActionCard: Record<string, unknown> | null = null;
+        const fallbackBadges: string[] = [];
 
         // Helper to stream through dynamic autonomous engine with pacing
         const runDynamicFallback = async () => {
           const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-          await handleDynamicAutonomousResponse(lastUserMsg, persona, {
+          const dynResult = await handleDynamicAutonomousResponse(lastUserMsg, persona, {
             userId,
             onTextDelta: async (text: string) => {
+              fallbackAccumulatedText += text;
               for (const word of text.split(" ")) {
                 if (isClosed) break;
                 sendEvent("text_delta", { text: word + " " });
@@ -97,6 +151,7 @@ export async function POST(req: NextRequest) {
               }
             },
             onToolCall: (name, args, result) => {
+              fallbackBadges.push(name);
               sendEvent("tool_start", { name });
               sendEvent("tool_call", { name, args, result });
             },
@@ -104,13 +159,27 @@ export async function POST(req: NextRequest) {
               sendEvent("grid_mutation", mutation);
             },
             onActionCard: (card) => {
+              fallbackActionCard = card;
               sendEvent("action_card", card);
             },
             onPersonaUpdate: (newPersona) => {
               sendEvent("persona_update", { persona: newPersona });
             },
           });
-          sendEvent("done", { status: "complete" });
+
+          const finalText = fallbackAccumulatedText || dynResult?.reply || "Response completed.";
+          const finalCard = fallbackActionCard || dynResult?.actionCard || undefined;
+
+          persistChatMessage(
+            "assistant",
+            finalText,
+            persona,
+            { actionCard: finalCard, toolBadges: fallbackBadges },
+            userId,
+            activeThreadId
+          );
+
+          sendEvent("done", { status: "complete", threadId: activeThreadId });
         };
 
         // If no Gemini key configured or is placeholder, run through dynamic autonomous engine
@@ -186,6 +255,9 @@ export async function POST(req: NextRequest) {
           const decoder = new TextDecoder();
           let buffer = "";
           let hasGeneratedText = false;
+          let geminiAccumulatedText = "";
+          let geminiLastActionCard: Record<string, unknown> | null = null;
+          const geminiBadges: string[] = [];
           const liveExecutedTools: Array<{ name: string; result: Record<string, unknown> }> = [];
 
           while (true) {
@@ -206,11 +278,13 @@ export async function POST(req: NextRequest) {
                   for (const part of parts) {
                     if (part.text) {
                       hasGeneratedText = true;
+                      geminiAccumulatedText += part.text;
                       sendEvent("text_delta", { text: part.text });
                     } else if (part.functionCall) {
                       const toolName = part.functionCall.name;
                       const toolArgs = part.functionCall.args || {};
 
+                      geminiBadges.push(toolName);
                       sendEvent("tool_start", { name: toolName });
                       const toolResult = (await executeAgentTool(toolName, toolArgs, userId)) as Record<string, unknown>;
                       liveExecutedTools.push({ name: toolName, result: toolResult });
@@ -225,6 +299,7 @@ export async function POST(req: NextRequest) {
                       }
 
                       if (toolResult.requiresConfirmation) {
+                        geminiLastActionCard = toolResult;
                         sendEvent("action_card", toolResult);
                       }
                     }
@@ -236,6 +311,7 @@ export async function POST(req: NextRequest) {
             }
           }
 
+          let fallbackSummary = "";
           // If Gemini called tools without emitting final text, synthesize summary
           if (!hasGeneratedText && liveExecutedTools.length > 0) {
             const summaryParts: string[] = [];
@@ -248,11 +324,21 @@ export async function POST(req: NextRequest) {
                 summaryParts.push(`Logged $${t.result.amountLogged} to ${t.result.category}. ${(t.result.alert as string) || ""}`);
               }
             }
-            const fallbackSummary = summaryParts.join(" ") || "Tools executed successfully.";
+            fallbackSummary = summaryParts.join(" ") || "Tools executed successfully.";
             sendEvent("text_delta", { text: fallbackSummary });
           }
 
-          sendEvent("done", { status: "complete" });
+          const finalAssistantMsg = geminiAccumulatedText || fallbackSummary || "Tools executed successfully.";
+          persistChatMessage(
+            "assistant",
+            finalAssistantMsg,
+            persona,
+            { actionCard: geminiLastActionCard || undefined, toolBadges: geminiBadges },
+            userId,
+            activeThreadId
+          );
+
+          sendEvent("done", { status: "complete", threadId: activeThreadId });
           safeClose();
         } catch (err: unknown) {
           console.warn("[Stream API Fallback]", err);
