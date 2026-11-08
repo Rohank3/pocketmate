@@ -41,6 +41,7 @@ model User {
   budgetCategories BudgetCategory[]
   splitRecords     SplitRecord[]
   chatMessages     ChatMessage[]
+  chatThreads      ChatThread[]
   contacts         Contact[]
   scheduledEvents  ScheduledEvent[]
 }
@@ -100,9 +101,23 @@ model SplitItem {
   splitRecord      SplitRecord   @relation(fields: [splitRecordId], references: [id], onDelete: Cascade)
 }
 
+model ChatThread {
+  id        String        @id @default(cuid())
+  userId    String
+  title     String        @default("New Conversation")
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  ChatMessage[]
+
+  @@index([userId, updatedAt])
+}
+
 model ChatMessage {
   id            String       @id @default(cuid())
   userId        String
+  threadId      String?
   role          String       // "user" | "assistant" | "system"
   content       String       @db.Text
   toolCallsJson Json?
@@ -110,6 +125,9 @@ model ChatMessage {
   createdAt     DateTime     @default(now())
 
   user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  thread        ChatThread?  @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId, createdAt])
 }
 
 model Contact {
