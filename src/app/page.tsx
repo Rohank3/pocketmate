@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { ChatPanel, ChatMessageItem } from "@/components/chat/ChatPanel";
+import type { ChatThreadItem } from "@/types/chat";
 import { TransactionGrid, TransactionRow } from "@/components/grid/TransactionGrid";
 import { ActionCardData } from "@/components/cards/ActionConfirmCard";
 import { GridMutationState } from "@/types/agent";
@@ -55,6 +56,20 @@ const BudgetScheduler = dynamic(
   }
 );
 
+const DEFAULT_WELCOME_MESSAGE: ChatMessageItem = {
+  id: "msg_welcome",
+  role: "assistant",
+  content:
+    "Hello! I am PocketMate, your Autonomous Financial Orchestrator. Speak to me casually — I will pull your PayPal transactions, compute penny-locked splits, monitor category budget caps, and drive your AG Grid ledger in real time without manual spreadsheet upkeep.",
+};
+
+const getStorageScope = (user?: UserAccount | null) =>
+  user?.email ? user.email.toLowerCase().trim() : "guest";
+
+const getThreadsKey = (scope: string) => `pocketmate_threads_${scope}`;
+const getActiveThreadKey = (scope: string) => `pocketmate_active_thread_${scope}`;
+const getMessagesKey = (threadId: string) => `pocketmate_messages_${threadId}`;
+
 export default function Home() {
   const [activePersona, setActivePersona] = useState<"GENERAL" | "FREELANCER" | "BUSINESS">("GENERAL");
   const [activeRightTab, setActiveRightTab] = useState<"transactions" | "insights" | "upcoming">("transactions");
@@ -64,15 +79,10 @@ export default function Home() {
   const [gridMutation, setGridMutation] = useState<GridMutationState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Autonomous Chat Messages State
-  const [messages, setMessages] = useState<ChatMessageItem[]>([
-    {
-      id: "msg_welcome",
-      role: "assistant",
-      content:
-        "Hello! I am PocketMate, your Autonomous Financial Orchestrator. Speak to me casually — I will pull your PayPal transactions, compute penny-locked splits, monitor category budget caps, and drive your AG Grid ledger in real time without manual spreadsheet upkeep.",
-    },
-  ]);
+  // Multi-Thread Autonomous Chat State
+  const [threads, setThreads] = useState<ChatThreadItem[]>([]);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessageItem[]>([DEFAULT_WELCOME_MESSAGE]);
 
   // Multi-user sandbox authentication & cross-account sync state
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
@@ -251,6 +261,291 @@ export default function Home() {
       clearInterval(interval);
     };
   }, [loadCategories, loadEvents, loadTransactions]);
+
+  // Load messages for a specific thread (local cache first, then API if authenticated)
+  const loadThreadMessages = useCallback(async (threadId: string, user?: UserAccount | null) => {
+    // 1. Read from localStorage
+    try {
+      const cached = localStorage.getItem(getMessagesKey(threadId));
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setMessages(parsed.slice(-30));
+        } else {
+          setMessages([DEFAULT_WELCOME_MESSAGE]);
+        }
+      } else {
+        setMessages([DEFAULT_WELCOME_MESSAGE]);
+      }
+    } catch {
+      setMessages([DEFAULT_WELCOME_MESSAGE]);
+    }
+
+    // 2. Fetch from DB if authenticated
+    if (user?.email) {
+      try {
+        const res = await fetch(`/api/chat/messages?threadId=${threadId}`);
+        const data = await res.json();
+        if (data.success && Array.isArray(data.messages)) {
+          if (data.messages.length > 0) {
+            const capped = data.messages.slice(-30);
+            setMessages(capped);
+            try {
+              localStorage.setItem(getMessagesKey(threadId), JSON.stringify(capped));
+            } catch {}
+          } else {
+            setMessages([DEFAULT_WELCOME_MESSAGE]);
+          }
+        }
+      } catch (err) {
+        console.warn("[Load Messages Warning]", err);
+      }
+    }
+  }, []);
+
+  // Multi-thread chat hydration & synchronization effect
+  useEffect(() => {
+    let isSubscribed = true;
+
+    const hydrateThreads = async () => {
+      const scope = getStorageScope(currentUser);
+      const threadsKey = getThreadsKey(scope);
+      const activeThreadKey = getActiveThreadKey(scope);
+
+      let initialThreadId: string | null = null;
+      let initialThreads: ChatThreadItem[] = [];
+
+      // 1. Instant hydration from localStorage
+      try {
+        const storedActive = localStorage.getItem(activeThreadKey);
+        const storedThreads = localStorage.getItem(threadsKey);
+        if (storedThreads) {
+          initialThreads = JSON.parse(storedThreads);
+          if (isSubscribed) {
+            setThreads(initialThreads);
+          }
+        }
+        if (storedActive && initialThreads.some((t) => t.id === storedActive)) {
+          initialThreadId = storedActive;
+        } else if (initialThreads.length > 0) {
+          initialThreadId = initialThreads[0].id;
+        }
+
+        if (initialThreadId) {
+          if (isSubscribed) {
+            setActiveThreadId(initialThreadId);
+            void loadThreadMessages(initialThreadId, currentUser);
+          }
+        } else {
+          // Create initial default thread if none exists
+          const defaultId = `th_${Date.now()}`;
+          const defaultThread: ChatThreadItem = {
+            id: defaultId,
+            title: "New Conversation",
+            messageCount: 1,
+            updatedAt: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+          };
+          if (isSubscribed) {
+            setActiveThreadId(defaultId);
+            setThreads([defaultThread]);
+            setMessages([DEFAULT_WELCOME_MESSAGE]);
+          }
+          try {
+            localStorage.setItem(activeThreadKey, defaultId);
+            localStorage.setItem(threadsKey, JSON.stringify([defaultThread]));
+            localStorage.setItem(getMessagesKey(defaultId), JSON.stringify([DEFAULT_WELCOME_MESSAGE]));
+          } catch {
+            // ignore
+          }
+        }
+      } catch {
+        if (isSubscribed) {
+          setMessages([DEFAULT_WELCOME_MESSAGE]);
+        }
+      }
+
+      // 2. Background sync from server if authenticated
+      if (currentUser?.email) {
+        try {
+          const res = await fetch("/api/chat/threads");
+          const data = await res.json();
+          if (!isSubscribed || !data.success || !Array.isArray(data.threads)) return;
+
+          const serverThreads: ChatThreadItem[] = data.threads;
+          if (serverThreads.length > 0) {
+            if (isSubscribed) {
+              setThreads(serverThreads);
+            }
+            try {
+              localStorage.setItem(threadsKey, JSON.stringify(serverThreads));
+            } catch {
+              // ignore
+            }
+
+            let targetId = initialThreadId;
+            if (!targetId || !serverThreads.some((t) => t.id === targetId)) {
+              targetId = serverThreads[0].id;
+            }
+
+            if (isSubscribed) {
+              setActiveThreadId(targetId);
+              void loadThreadMessages(targetId, currentUser);
+            }
+            try {
+              localStorage.setItem(activeThreadKey, targetId);
+            } catch {
+              // ignore
+            }
+          }
+        } catch (err) {
+          console.warn("[Background Thread Sync Error]", err);
+        }
+      }
+    };
+
+    void hydrateThreads();
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [currentUser, loadThreadMessages]);
+
+  // Keep messages for active thread cached in localStorage (FIFO capped at 30)
+  useEffect(() => {
+    if (!activeThreadId) return;
+    try {
+      const capped = messages.slice(-30);
+      localStorage.setItem(getMessagesKey(activeThreadId), JSON.stringify(capped));
+    } catch {
+      // ignore
+    }
+  }, [messages, activeThreadId]);
+
+  const handleNewChat = useCallback(async () => {
+    const scope = getStorageScope(currentUser);
+    const newThreadId = `th_${Date.now()}`;
+    const newThread: ChatThreadItem = {
+      id: newThreadId,
+      title: "New Conversation",
+      messageCount: 1,
+      updatedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+    };
+
+    setThreads((prev) => [newThread, ...prev]);
+    setActiveThreadId(newThreadId);
+    setMessages([DEFAULT_WELCOME_MESSAGE]);
+
+    try {
+      localStorage.setItem(getActiveThreadKey(scope), newThreadId);
+      localStorage.setItem(getMessagesKey(newThreadId), JSON.stringify([DEFAULT_WELCOME_MESSAGE]));
+      const currentThreads = JSON.parse(localStorage.getItem(getThreadsKey(scope)) || "[]");
+      localStorage.setItem(getThreadsKey(scope), JSON.stringify([newThread, ...currentThreads]));
+    } catch {
+      // ignore
+    }
+
+    if (currentUser?.email) {
+      try {
+        const res = await fetch("/api/chat/threads", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: "New Conversation" }),
+        });
+        const data = await res.json();
+        if (data.success && data.thread?.id) {
+          const serverId = data.thread.id;
+          setActiveThreadId(serverId);
+          setThreads((prev) =>
+            prev.map((t) => (t.id === newThreadId ? { ...t, id: serverId } : t))
+          );
+          try {
+            localStorage.setItem(getActiveThreadKey(scope), serverId);
+            localStorage.setItem(getMessagesKey(serverId), JSON.stringify([DEFAULT_WELCOME_MESSAGE]));
+          } catch {}
+        }
+      } catch (err) {
+        console.warn("[Create Thread Server Warning]", err);
+      }
+    }
+  }, [currentUser]);
+
+  const handleSelectThread = useCallback(
+    (threadId: string) => {
+      const scope = getStorageScope(currentUser);
+      setActiveThreadId(threadId);
+      try {
+        localStorage.setItem(getActiveThreadKey(scope), threadId);
+      } catch {}
+      void loadThreadMessages(threadId, currentUser);
+    },
+    [currentUser, loadThreadMessages]
+  );
+
+  const handleRenameThread = useCallback(
+    async (threadId: string, newTitle: string) => {
+      const scope = getStorageScope(currentUser);
+      setThreads((prev) =>
+        prev.map((t) => (t.id === threadId ? { ...t, title: newTitle } : t))
+      );
+
+      try {
+        const current = JSON.parse(localStorage.getItem(getThreadsKey(scope)) || "[]");
+        const updated = current.map((t: ChatThreadItem) =>
+          t.id === threadId ? { ...t, title: newTitle } : t
+        );
+        localStorage.setItem(getThreadsKey(scope), JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+
+      if (currentUser?.email) {
+        try {
+          await fetch("/api/chat/threads", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: threadId, title: newTitle }),
+          });
+        } catch (err) {
+          console.warn("[Rename Thread Server Warning]", err);
+        }
+      }
+    },
+    [currentUser]
+  );
+
+  const handleDeleteThread = useCallback(
+    async (threadId: string) => {
+      const scope = getStorageScope(currentUser);
+      const remaining = threads.filter((t) => t.id !== threadId);
+      setThreads(remaining);
+
+      try {
+        localStorage.removeItem(getMessagesKey(threadId));
+        localStorage.setItem(getThreadsKey(scope), JSON.stringify(remaining));
+      } catch {
+        // ignore
+      }
+
+      if (threadId === activeThreadId) {
+        if (remaining.length > 0) {
+          handleSelectThread(remaining[0].id);
+        } else {
+          void handleNewChat();
+        }
+      }
+
+      if (currentUser?.email) {
+        try {
+          await fetch(`/api/chat/threads?id=${threadId}`, { method: "DELETE" });
+        } catch (err) {
+          console.warn("[Delete Thread Server Warning]", err);
+        }
+      }
+    },
+    [activeThreadId, currentUser, handleNewChat, handleSelectThread, threads]
+  );
 
   const handleUserLogin = (user: UserAccount) => {
     setCurrentUser(user);
@@ -508,6 +803,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           persona: activePersona,
+          threadId: activeThreadId || undefined,
           messages: [...messages, userMsg]
             .filter((m) => m.content && m.content.trim().length > 0)
             .map((m) => ({
@@ -541,7 +837,31 @@ export default function Home() {
             const event = eventLine.slice(7).trim();
             const data = JSON.parse(dataLine.slice(6));
 
-            if (event === "text_delta" && data.text) {
+            if (event === "thread_created" && data.thread) {
+              const newT: ChatThreadItem = data.thread;
+              setActiveThreadId(newT.id);
+              setThreads((prev) => [newT, ...prev.filter((t) => t.id !== newT.id)]);
+              const scope = getStorageScope(currentUser);
+              try {
+                localStorage.setItem(getActiveThreadKey(scope), newT.id);
+              } catch {
+                // ignore
+              }
+            } else if (event === "thread_renamed" && data.id && data.title) {
+              setThreads((prev) =>
+                prev.map((t) => (t.id === data.id ? { ...t, title: data.title } : t))
+              );
+              const scope = getStorageScope(currentUser);
+              try {
+                const cur = JSON.parse(localStorage.getItem(getThreadsKey(scope)) || "[]");
+                const upd = cur.map((t: ChatThreadItem) =>
+                  t.id === data.id ? { ...t, title: data.title } : t
+                );
+                localStorage.setItem(getThreadsKey(scope), JSON.stringify(upd));
+              } catch {
+                // ignore
+              }
+            } else if (event === "text_delta" && data.text) {
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === assistantMsgId
@@ -572,6 +892,20 @@ export default function Home() {
               );
             } else if (event === "persona_update" && data.persona) {
               setActivePersona(data.persona);
+            } else if (event === "done") {
+              if (activeThreadId) {
+                setThreads((prev) =>
+                  prev.map((t) =>
+                    t.id === activeThreadId
+                      ? {
+                          ...t,
+                          updatedAt: new Date().toISOString(),
+                          messageCount: t.messageCount + 2,
+                        }
+                      : t
+                  )
+                );
+              }
             }
           }
         }
@@ -588,7 +922,7 @@ export default function Home() {
     } finally {
       setIsLoading(false);
     }
-  }, [activePersona, messages]);
+  }, [activePersona, activeThreadId, currentUser, messages]);
 
   const handleUploadReceipt = async (file: File) => {
     setIsLoading(true);
@@ -874,9 +1208,15 @@ export default function Home() {
           <ChatPanel
             messages={messages}
             isLoading={isLoading}
+            threads={threads}
+            activeThreadId={activeThreadId}
             onSendMessage={handleSendMessage}
             onUploadReceipt={handleUploadReceipt}
             onConfirmAction={handleConfirmAction}
+            onNewChat={handleNewChat}
+            onSelectThread={handleSelectThread}
+            onRenameThread={handleRenameThread}
+            onDeleteThread={handleDeleteThread}
           />
         </div>
 
