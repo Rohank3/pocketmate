@@ -35,7 +35,8 @@ interface CategoryControlBarProps {
     categoryId: string,
     updatedCap: number,
     updatedName?: string,
-    updatedColor?: string
+    updatedColor?: string,
+    reinitialize?: boolean
   ) => void;
   onDeleteCategory: (categoryId: string) => void;
 }
@@ -75,6 +76,7 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
   const [editNameDraft, setEditNameDraft] = useState("");
   const [editCapDraft, setEditCapDraft] = useState("");
   const [editColorDraft, setEditColorDraft] = useState("");
+  const [editReinitializeDraft, setEditReinitializeDraft] = useState(false);
 
   // Pill context menu dropdown state
   const [activeMenuCatId, setActiveMenuCatId] = useState<string | null>(null);
@@ -198,12 +200,13 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
     setEditNameDraft(cat.name);
     setEditCapDraft(cat.monthlyCap.toString());
     setEditColorDraft(cat.color);
+    setEditReinitializeDraft(false);
   };
 
   const handleSaveInlineEdit = (catId: string) => {
     const cap = Math.max(0, parseFloat(editCapDraft) || 100);
     const name = editNameDraft.trim() || undefined;
-    onEditCategory(catId, cap, name, editColorDraft);
+    onEditCategory(catId, cap, name, editColorDraft, editReinitializeDraft);
     setEditingCategoryId(null);
   };
 
@@ -220,7 +223,7 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
     if (!quickEditCategory) return;
     const cap = Math.max(0, parseFloat(editCapDraft) || quickEditCategory.monthlyCap);
     const name = editNameDraft.trim() || quickEditCategory.name;
-    onEditCategory(quickEditCategory.id, cap, name, editColorDraft);
+    onEditCategory(quickEditCategory.id, cap, name, editColorDraft, editReinitializeDraft);
     setQuickEditCategory(null);
     if (selectedCategory.toLowerCase() === quickEditCategory.name.toLowerCase()) {
       onSelectCategory(name);
@@ -401,6 +404,7 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
                       setEditNameDraft(catObj.name);
                       setEditCapDraft(catObj.monthlyCap.toString());
                       setEditColorDraft(catObj.color);
+                      setEditReinitializeDraft(false);
                       setActiveMenuCatId(null);
                     }}
                     className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-800 text-left text-zinc-200 cursor-pointer"
@@ -556,6 +560,25 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
                                   />
                                 ))}
                               </div>
+                            </div>
+
+                            {/* In-form Reinitialize & Reclassify Toggle (Default OFF) */}
+                            <div className="flex items-center justify-between p-2 rounded-lg bg-zinc-950/80 border border-zinc-800">
+                              <div className="flex flex-col pr-2">
+                                <span className="text-[11px] font-medium text-zinc-200">Reinitialize & reclassify with AI</span>
+                                <span className="text-[10px] text-zinc-400 leading-tight">
+                                  Reset old rules and re-run Gemini AI over existing transactions
+                                </span>
+                              </div>
+                              <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                                <input
+                                  type="checkbox"
+                                  checked={editReinitializeDraft}
+                                  onChange={(e) => setEditReinitializeDraft(e.target.checked)}
+                                  className="sr-only peer"
+                                />
+                                <div className="w-8 h-4.5 bg-zinc-700 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-blue-600"></div>
+                              </label>
                             </div>
                           </div>
                         );
@@ -760,6 +783,25 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
                     />
                   ))}
                 </div>
+              </div>
+
+              {/* In-form Reinitialize & Reclassify Toggle (Default OFF) */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-950/80 border border-zinc-800">
+                <div className="flex flex-col pr-2">
+                  <span className="text-xs font-medium text-zinc-200">Reinitialize & reclassify with AI</span>
+                  <span className="text-[10px] text-zinc-400">
+                    Reset old rules and re-run Gemini AI over existing transactions
+                  </span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={editReinitializeDraft}
+                    onChange={(e) => setEditReinitializeDraft(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-zinc-700 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
               </div>
 
               <div className="flex items-center justify-end gap-2 mt-2 pt-3 border-t border-zinc-800">
