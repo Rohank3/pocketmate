@@ -337,7 +337,7 @@ class PayPalSandboxClient {
           }
 
           let status: "COMPLETED" | "PENDING" | "DRAFT" | "DISPUTED" | "CANCELLED" = "PENDING";
-          if (inv.status === "PAID") status = "COMPLETED";
+          if (inv.status === "PAID" || inv.status === "MARKED_AS_PAID") status = "COMPLETED";
           else if (inv.status === "DRAFT") status = "DRAFT";
           else if (inv.status === "CANCELLED" || inv.status === "REFUNDED") status = "CANCELLED";
 
