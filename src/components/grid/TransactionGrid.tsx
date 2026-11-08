@@ -91,7 +91,10 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
           Travel: "bg-amber-500/10 text-amber-400 border-amber-500/30",
         };
         const val = params.value || "Uncategorized";
-        const badgeClass = colors[val] || "bg-zinc-700/50 text-zinc-300 border-zinc-600";
+        const isUncat = val.toLowerCase() === "uncategorized";
+        const badgeClass = isUncat
+          ? "bg-amber-500/15 text-amber-300 border-amber-500/40 font-medium"
+          : colors[val] || "bg-zinc-700/50 text-zinc-300 border-zinc-600";
         return (
           <span className={`text-xs px-2 py-0.5 rounded-full border ${badgeClass}`}>
             {val}
