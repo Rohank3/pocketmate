@@ -685,8 +685,10 @@ Return ONLY valid JSON with an array of matching transaction IDs:
  */
 export async function reinitializeCategory(
   userId: string,
-  oldCategoryName: string
+  oldCategoryName: string,
+  _newCategoryName?: string
 ): Promise<{ success: boolean; rulesRemoved: number; overridesReset: number }> {
+  void _newCategoryName;
   const [delRules, delOverrides] = await Promise.all([
     prisma.merchantCategoryRule.deleteMany({
       where: {

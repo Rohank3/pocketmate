@@ -57,9 +57,9 @@ export async function resolveContact(
     }
   }
 
-  // 3. Check recent live PayPal transactions
+  // 3. Check recent live PayPal transactions (last 30 days)
   try {
-    const txs = await paypalClient.fetchRecentTransactions(168);
+    const txs = await paypalClient.fetchRecentTransactions(720);
     for (const tx of txs) {
       const debtor = (tx.debtorName || "").toLowerCase();
       const email = (tx.recipientEmail || "").toLowerCase();
