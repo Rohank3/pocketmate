@@ -3,6 +3,7 @@ import { paypalClient } from "@/lib/paypal/client";
 import { verifySessionCookie } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { reconcileAutopaySubscriptions } from "@/lib/services/autopayReconciliation";
+import { loadUserCategorizationContext, categorizeTransactionsBatch } from "@/lib/services/categorizer";
 
 let lastSeedTimestamp = 0;
 
@@ -42,6 +43,19 @@ export async function POST(req: NextRequest) {
       await reconcileAutopaySubscriptions(user.id, verified.email);
     }
 
+    let categoryMap = new Map<string, { category: string }>();
+    if (user) {
+      try {
+        const catContext = await loadUserCategorizationContext(user.id);
+        categoryMap = await categorizeTransactionsBatch(
+          rawTxs.map((t) => ({ id: t.id, merchantName: t.merchantName, amount: t.amount })),
+          catContext
+        );
+      } catch (err) {
+        console.warn("[PayPal Seed Categorizer Warning]", err);
+      }
+    }
+
     // Map to TransactionRow format expected by the frontend
     const formatted = rawTxs.map((t) => {
       const dateObj = new Date(t.timestamp);
@@ -49,17 +63,8 @@ export async function POST(req: NextRequest) {
       const timeStr = dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
       const displayDate = isToday ? `Today, ${timeStr}` : `${dateObj.toLocaleDateString([], { month: "short", day: "numeric" })}, ${timeStr}`;
 
-      let category = "General";
-      const m = t.merchantName.toLowerCase();
-      if (m.includes("bar") || m.includes("diner") || m.includes("coffee") || m.includes("bistro") || m.includes("dining")) {
-        category = "Dining";
-      } else if (m.includes("lane") || m.includes("bowling") || m.includes("movie") || m.includes("entertainment")) {
-        category = "Entertainment";
-      } else if (m.includes("zara") || m.includes("mall") || m.includes("shopping")) {
-        category = "Shopping";
-      } else if (m.includes("target") || m.includes("grocer") || m.includes("market") || m.includes("food")) {
-        category = "Groceries";
-      }
+      const catEntry = categoryMap.get(t.id);
+      const category = catEntry?.category || "Uncategorized";
 
       let rowStatus: "settled" | "pending" | "disputed" | "unresolved" = "pending";
       if (t.status === "COMPLETED") rowStatus = "settled";

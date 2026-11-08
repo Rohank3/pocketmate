@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { paypalClient } from "@/lib/paypal/client";
 import { verifySessionCookie } from "@/lib/auth/session";
+import { prisma } from "@/lib/db";
+import { loadUserCategorizationContext, categorizeTransactionsBatch } from "@/lib/services/categorizer";
 import { z } from "zod";
 
 const TransactionsQuerySchema = z.object({
@@ -66,6 +68,23 @@ export async function GET(req: NextRequest) {
 
     const scopedTxs = txs;
 
+    // Load dynamic categorization context (user categories, merchant rules, overrides)
+    const userRecord = await prisma.user.findUnique({ where: { email: userEmail } });
+    const userId = userRecord?.id || verified?.id;
+
+    let categoryMap = new Map<string, { category: string }>();
+    if (userId) {
+      try {
+        const catContext = await loadUserCategorizationContext(userId);
+        categoryMap = await categorizeTransactionsBatch(
+          scopedTxs.map((t) => ({ id: t.id, merchantName: t.merchantName, amount: t.amount })),
+          catContext
+        );
+      } catch (catErr) {
+        console.warn("[Transactions Route Categorizer Warning]", catErr);
+      }
+    }
+
     // Map to TransactionRow format expected by the frontend
     const formatted = scopedTxs.map((t) => {
       const dateObj = new Date(t.timestamp);
@@ -73,20 +92,8 @@ export async function GET(req: NextRequest) {
       const timeStr = dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
       const displayDate = isToday ? `Today, ${timeStr}` : `${dateObj.toLocaleDateString([], { month: "short", day: "numeric" })}, ${timeStr}`;
 
-      // Infer clean category
-      let category = "General";
-      const m = t.merchantName.toLowerCase();
-      if (m.includes("bar") || m.includes("diner") || m.includes("coffee") || m.includes("bistro") || m.includes("dining")) {
-        category = "Dining";
-      } else if (m.includes("lane") || m.includes("bowling") || m.includes("movie") || m.includes("entertainment")) {
-        category = "Entertainment";
-      } else if (m.includes("zara") || m.includes("mall") || m.includes("shopping")) {
-        category = "Shopping";
-      } else if (m.includes("target") || m.includes("grocer") || m.includes("market") || m.includes("food")) {
-        category = "Groceries";
-      } else if (m.includes("transit") || m.includes("metro") || m.includes("flight") || m.includes("travel")) {
-        category = "Travel";
-      }
+      const catEntry = categoryMap.get(t.id);
+      const category = catEntry?.category || "Uncategorized";
 
       let rowStatus: "settled" | "pending" | "disputed" | "unresolved" = "pending";
       if (t.status === "COMPLETED") rowStatus = "settled";

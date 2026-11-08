@@ -128,11 +128,25 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Category not found or access denied" }, { status: 404 });
     }
 
+    const newName = name && name.trim() ? name.trim() : undefined;
+    if (newName && newName.toLowerCase() !== existing.name.toLowerCase()) {
+      await Promise.all([
+        prisma.merchantCategoryRule.updateMany({
+          where: { userId, categoryName: existing.name },
+          data: { categoryName: newName },
+        }),
+        prisma.transactionCategoryOverride.updateMany({
+          where: { userId, categoryName: existing.name },
+          data: { categoryName: newName },
+        }),
+      ]);
+    }
+
     const updated = await prisma.budgetCategory.update({
       where: { id },
       data: {
         ...(monthlyCap !== undefined ? { monthlyCap } : {}),
-        ...(name !== undefined ? { name } : {}),
+        ...(newName !== undefined ? { name: newName } : {}),
         ...(color !== undefined ? { color } : {}),
       },
     });
@@ -167,8 +181,19 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: "Category not found or access denied" }, { status: 404 });
     }
 
+    // Invalidate learned merchant rules and reset overrides associated with this deleted category
+    await Promise.all([
+      prisma.merchantCategoryRule.deleteMany({
+        where: { userId, categoryName: existing.name },
+      }),
+      prisma.transactionCategoryOverride.updateMany({
+        where: { userId, categoryName: existing.name },
+        data: { categoryName: "Uncategorized" },
+      }),
+    ]);
+
     await prisma.budgetCategory.delete({ where: { id } });
-    return NextResponse.json({ success: true, message: "Category deleted" });
+    return NextResponse.json({ success: true, message: "Category deleted and associated rules invalidated" });
   } catch (error) {
     console.error("[Categories DELETE Error]", error);
     return NextResponse.json({ success: false, error: "Failed to delete category" }, { status: 500 });

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { paypalClient, PayPalTransaction } from "@/lib/paypal/client";
+import { prisma } from "@/lib/db";
+import { loadUserCategorizationContext, categorizeTransactionsBatch } from "@/lib/services/categorizer";
 import crypto from "crypto";
 
 export async function GET(req: NextRequest) {
@@ -26,6 +28,17 @@ export async function GET(req: NextRequest) {
     const transactions = await paypalClient.fetchRecentTransactions(24);
 
     // Identify untagged or ambiguous transactions
+    const firstUser = await prisma.user.findFirst({ select: { id: true } });
+    const userId = firstUser?.id || "demo_user";
+
+    const catContext = await loadUserCategorizationContext(userId);
+    const categoryMap = await categorizeTransactionsBatch(
+      transactions.map((t) => ({ id: t.id, merchantName: t.merchantName, amount: t.amount })),
+      catContext
+    );
+
+    const availableCatNames = (catContext.activeCategories ?? []).map((c) => c.name);
+
     const ambiguousTransactions: Array<{
       transaction: PayPalTransaction;
       reason: string;
@@ -34,17 +47,21 @@ export async function GET(req: NextRequest) {
     }> = [];
 
     for (const tx of transactions) {
-      const name = tx.merchantName.toLowerCase();
-      // Heuristic detection of ambiguous merchant codes or unclassified entries
-      if (name.includes("sq*") || name.includes("urban blend") || tx.amount === 34.2) {
+      const res = categoryMap.get(tx.id);
+      const isUncategorized = !res || res.category === "Uncategorized" || res.confidence < 0.8;
+
+      if (isUncategorized) {
         ambiguousTransactions.push({
           transaction: tx,
-          reason: "Point-of-sale merchant code missing itemized receipt or explicit memo.",
-          confidence: 0.65, // < 0.85 threshold triggers triage
-          suggestedCategories: ["Dining", "Work Supplies", "Group Split"],
+          reason: "No matching category in active budgets, or ambiguous vendor name.",
+          confidence: res?.confidence || 0.5,
+          suggestedCategories: availableCatNames.length > 0 ? availableCatNames.slice(0, 3) : ["Dining", "Shopping", "General"],
         });
       }
     }
+
+    const firstAmbiguous = ambiguousTransactions[0];
+    const catOptionsStr = firstAmbiguous?.suggestedCategories.join(", ") || "Dining, Shopping, or General";
 
     return NextResponse.json({
       success: true,
@@ -55,10 +72,12 @@ export async function GET(req: NextRequest) {
       ambiguousTransactions,
       triagePrompt:
         ambiguousTransactions.length > 0
-          ? `I reconciled ${transactions.length} transactions today, but have one I'm unsure about:\n\n• $${ambiguousTransactions[0].transaction.amount.toFixed(
+          ? `I reconciled ${transactions.length} transactions today, but found ${
+              ambiguousTransactions.length
+            } requiring category tagging:\n\n• $${firstAmbiguous.transaction.amount.toFixed(
               2
-            )} at '${ambiguousTransactions[0].transaction.merchantName}' — No note attached.\n\nWas this Dining, Work Supplies, or a Split with someone?`
-          : "All end-of-day transactions reconciled with high confidence.",
+            )} at '${firstAmbiguous.transaction.merchantName}' — No category matched.\n\nShould this be logged under ${catOptionsStr}, or should I create a new category for it? (Reply and I'll remember it for next time!)`
+          : "All end-of-day transactions reconciled with high confidence across your active budgets.",
     });
   } catch (error: unknown) {
     if (typeof error === "object" && error !== null && "digest" in error) {
