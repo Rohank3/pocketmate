@@ -352,15 +352,15 @@ async function runPhase2Seeding(): Promise<void> {
   // 1. Grand Vista Hotel ($480.00, 2 days ago) — THE UNSPLIT TEST TARGET!
   console.log("  • Seeding $480 Grand Vista Hotel charge for Dave Chen (Unsplit test target)...");
   const hotelId = await createPaidInvoice({
-    invoicerName: "Grand Vista Hotel",
+    invoicerName: "Grand Vista Hotel & Suites",
     invoicerEmail: "billing@grandvistahotel.com",
     recipientName: "Dave Chen",
     recipientEmail: "dave.chen.pm@personal.example.com",
     amount: 480.00,
-    note: "Grand Vista Hotel - 2 Nights Deluxe Suite Lodging",
+    note: "", // Real hotel card debits have no custom user note
     daysAgo: 2,
     items: [
-      { name: "Deluxe Suite Lodging (2 Nights)", quantity: "1", unitPrice: 480.00 },
+      { name: "Room Folio #89124", quantity: "1", unitPrice: 480.00 },
     ],
   });
   console.log(`    ✓ Grand Vista Hotel ($480.00) seeded [ID: ${hotelId}] — Zero split invoices created.`);
@@ -375,7 +375,7 @@ async function runPhase2Seeding(): Promise<void> {
     recipientName: "Dave Chen",
     recipientEmail: "dave.chen.pm@personal.example.com",
     amount: 115.00,
-    note: "Dinner at Antoine Moreau Cafe",
+    note: "", // Real restaurant card debits have no user note
     daysAgo: 4,
     items: [
       { name: "Chef's Artisanal Dinner Entree", quantity: "2", unitPrice: 35.00 }, // $70.00
@@ -388,84 +388,84 @@ async function runPhase2Seeding(): Promise<void> {
   totalInjected++;
   await sleep(300);
 
-  // 3. Bidirectional P2P Contact Graph for Dave Chen
-  console.log("  • Seeding bidirectional P2P transfers for Dynamic Contact Graph...");
+  // 3. Bidirectional P2P Contact Graph for Dave Chen (Realistic Casual / Shorthand / Blank Notes)
+  console.log("  • Seeding bidirectional P2P transfers for Dynamic Contact Graph (real casual notes)...");
   const p2pTransfers: SeedPayoutPayload[] = [
     {
       recipientEmail: "mark.spencer.pm@personal.example.com",
       amount: 35.00,
-      note: "Concert ticket advance reimbursement",
+      note: "concert tix",
       senderName: "Dave Chen",
       daysAgo: 24,
     },
     {
       recipientEmail: "dave.chen.pm@personal.example.com",
       amount: 22.50,
-      note: "Pizza & drinks share",
+      note: "🍕🍻",
       senderName: "Mark Spencer",
       daysAgo: 18,
     },
     {
       recipientEmail: "oliver.wright.us@personal.example.com",
       amount: 42.00,
-      note: "Road trip gas & toll fees",
+      note: "gas",
       senderName: "Dave Chen",
       daysAgo: 15,
     },
     {
       recipientEmail: "dave.chen.pm@personal.example.com",
       amount: 18.00,
-      note: "Cinema IMAX ticket",
+      note: "", // Left blank as people often do in real life
       senderName: "Oliver Wright",
       daysAgo: 10,
     },
     {
       recipientEmail: "dave.chen.pm@personal.example.com",
       amount: 15.00,
-      note: "Campus coffee & study snacks",
+      note: "coffee ☕",
       senderName: "Leo Vance",
       daysAgo: 8,
     },
     {
       recipientEmail: "sofia.martinez.food@personal.example.com",
       amount: 28.00,
-      note: "Farmers market fresh produce split",
+      note: "groceries",
       senderName: "Dave Chen",
       daysAgo: 5,
     },
   ];
 
   for (const p of p2pTransfers) {
-    const id = await dispatchP2PTransfer(p);
-    console.log(`    ✓ P2P: ${p.senderName} -> ${p.recipientEmail} ($${p.amount.toFixed(2)}) [${id}]`);
+    await dispatchP2PTransfer(p);
+    console.log(`    ✓ P2P: ${p.senderName} -> ${p.recipientEmail} ($${p.amount.toFixed(2)}) [note: "${p.note}"]`);
     totalInjected++;
     await sleep(250);
   }
 
-  // 4. Recurring Subscriptions for Dave Chen (Autopay Signals)
-  console.log("  • Seeding recurring subscriptions for Dave Chen (Upcoming Bills signals)...");
+  // 4. Recurring Subscriptions for Dave Chen (Standard Merchant Descriptors, No Notes)
+  console.log("  • Seeding recurring subscriptions for Dave Chen (raw descriptors, empty notes)...");
   const daveSubscriptions = [
-    { name: "Netflix Premium", invoicer: "Netflix Streaming", amount: 19.99, daysList: [3, 33, 63] },
-    { name: "Spotify Family", invoicer: "Spotify AB", amount: 16.99, daysList: [12, 42, 72] },
-    { name: "Google One Cloud 2TB", invoicer: "Google Storage", amount: 9.99, daysList: [20, 50] },
-    { name: "Equinox Fitness Club", invoicer: "Equinox Holdings", amount: 45.00, daysList: [7, 37] },
+    { name: "Netflix.com", invoicer: "Netflix.com", amount: 19.99, daysList: [3, 33, 63] },
+    { name: "Spotify USA", invoicer: "Spotify USA", amount: 16.99, daysList: [12, 42, 72] },
+    { name: "Google *Cloud Storage", invoicer: "Google *Cloud Storage", amount: 9.99, daysList: [20, 50] },
+    { name: "Equinox Fitness", invoicer: "Equinox Fitness", amount: 45.00, daysList: [7, 37] },
   ];
 
   for (const sub of daveSubscriptions) {
     for (const d of sub.daysList) {
       await createPaidInvoice({
         invoicerName: sub.invoicer,
-        invoicerEmail: `${sub.invoicer.toLowerCase().replace(/[^a-z]/g, "")}@service.example.com`,
+        invoicerEmail: `${sub.invoicer.toLowerCase().replace(/[^a-z]/g, "")}@billing.sandbox`,
         recipientName: "Dave Chen",
         recipientEmail: "dave.chen.pm@personal.example.com",
         amount: sub.amount,
-        note: `${sub.name} - Monthly Subscription`,
+        note: "", // Card processors do not write notes on subscription debits
         daysAgo: d,
       });
       totalInjected++;
       await sleep(150);
     }
-    console.log(`    ✓ Recurring plan: ${sub.name} ($${sub.amount.toFixed(2)}/mo) — ${sub.daysList.length} billing cycles.`);
+    console.log(`    ✓ Recurring: ${sub.name} ($${sub.amount.toFixed(2)}/mo) — ${sub.daysList.length} billing cycles.`);
   }
 
   // ---------------------------------------------------------------------------
@@ -512,19 +512,19 @@ async function runPhase2Seeding(): Promise<void> {
 
   // Lukas Becker Developer Subscriptions
   const devSubs = [
-    { name: "GitHub Copilot", amount: 10.00, daysList: [5, 35] },
-    { name: "OpenAI ChatGPT Plus", amount: 20.00, daysList: [10, 40] },
-    { name: "AWS Cloud Infrastructure", amount: 85.00, daysList: [15, 45] },
+    { name: "GitHub", amount: 10.00, daysList: [5, 35] },
+    { name: "OpenAI", amount: 20.00, daysList: [10, 40] },
+    { name: "Amazon Web Services", amount: 85.00, daysList: [15, 45] },
   ];
   for (const s of devSubs) {
     for (const d of s.daysList) {
       await createPaidInvoice({
         invoicerName: s.name,
-        invoicerEmail: "billing@devservices.example.com",
+        invoicerEmail: `${s.name.toLowerCase().replace(/[^a-z]/g, "")}@billing.sandbox`,
         recipientName: "Lukas Becker",
         recipientEmail: "lukas.becker.dev@personal.example.com",
         amount: s.amount,
-        note: `${s.name} - Developer Cloud Subscription`,
+        note: "", // Automated recurring debit
         daysAgo: d,
       });
       totalInjected++;
@@ -540,16 +540,16 @@ async function runPhase2Seeding(): Promise<void> {
     recipientName: "Elena Weber Tech",
     recipientEmail: "elena.weber.tech@business.example.com",
     amount: 450.00,
-    note: "AWS Enterprise Cloud Compute & Database",
+    note: "", // Standard cloud bill
     daysAgo: 10,
   });
   await createPaidInvoice({
-    invoicerName: "Cloudflare Enterprise",
+    invoicerName: "Cloudflare",
     invoicerEmail: "billing@cloudflare.example.com",
     recipientName: "Elena Weber Tech",
     recipientEmail: "elena.weber.tech@business.example.com",
     amount: 200.00,
-    note: "Cloudflare Business Security & Edge CDN",
+    note: "",
     daysAgo: 12,
   });
   console.log("    ✓ Elena Weber Tech (AWS $450 & Cloudflare $200 SaaS).");
@@ -568,7 +568,7 @@ async function runPhase2Seeding(): Promise<void> {
     recipientName: "Sarah Jenkins",
     recipientEmail: "sarah.jenkins.exec@personal.example.com",
     amount: 1450.00,
-    note: "Executive Workstation: 4K Displays & Laptop Setup",
+    note: "",
     daysAgo: 6,
   });
   await createPaidInvoice({
@@ -577,7 +577,7 @@ async function runPhase2Seeding(): Promise<void> {
     recipientName: "Sarah Jenkins",
     recipientEmail: "sarah.jenkins.exec@personal.example.com",
     amount: 850.00,
-    note: "First Class Roundtrip NYC -> SFO",
+    note: "",
     daysAgo: 18,
   });
   console.log("    ✓ Sarah Jenkins (Executive spend: Nexus Hardware $1,450 & Flight $850).");
@@ -591,7 +591,7 @@ async function runPhase2Seeding(): Promise<void> {
     recipientName: "Daan Vandijk Logistics",
     recipientEmail: "daan.vandijk.logistics@business.example.com",
     amount: 2300.00,
-    note: "Fleet Telematics & Barcode Scanner Hardware",
+    note: "",
     daysAgo: 8,
   });
   await createPaidInvoice({
@@ -600,7 +600,7 @@ async function runPhase2Seeding(): Promise<void> {
     recipientName: "Daan Vandijk Logistics",
     recipientEmail: "daan.vandijk.logistics@business.example.com",
     amount: 620.00,
-    note: "Fleet Diesel Wholesale Refueling",
+    note: "",
     daysAgo: 14,
   });
   console.log("    ✓ Daan Vandijk Logistics (Nexus Hardware $2,300 & Fleet Fuel $620).");
@@ -619,7 +619,7 @@ async function runPhase2Seeding(): Promise<void> {
     recipientName: "Camille Laurent",
     recipientEmail: "camille.laurent.art@personal.example.com",
     amount: 1850.00,
-    note: "Contemporary Bronze Sculpture Acquisition",
+    note: "",
     daysAgo: 15,
   });
   console.log("    ✓ Camille Laurent (Art Gallery Purchase $1,850).");
@@ -632,7 +632,7 @@ async function runPhase2Seeding(): Promise<void> {
     recipientName: "Liam Wilson",
     recipientEmail: "liam.wilson.music@personal.example.com",
     amount: 180.00,
-    note: "Tube Amp Recapping & Setup",
+    note: "",
     daysAgo: 11,
   });
   console.log("    ✓ Liam Wilson (Music gear repair $180).");
@@ -640,12 +640,12 @@ async function runPhase2Seeding(): Promise<void> {
 
   // Kenji Sato
   await createPaidInvoice({
-    invoicerName: "Discord Nitro",
+    invoicerName: "Discord",
     invoicerEmail: "billing@discord.example.com",
     recipientName: "Kenji Sato",
     recipientEmail: "kenji.sato.gaming@personal.example.com",
     amount: 9.99,
-    note: "Discord Nitro Yearly/Monthly Plan",
+    note: "",
     daysAgo: 8,
   });
   await createPaidInvoice({
@@ -654,7 +654,7 @@ async function runPhase2Seeding(): Promise<void> {
     recipientName: "Kenji Sato",
     recipientEmail: "kenji.sato.gaming@personal.example.com",
     amount: 69.99,
-    note: "Cyberpunk Action RPG Deluxe Edition",
+    note: "",
     daysAgo: 12,
   });
   console.log("    ✓ Kenji Sato (Gaming & Discord subscriptions).");
@@ -662,21 +662,21 @@ async function runPhase2Seeding(): Promise<void> {
 
   // Marco Rossi
   await createPaidInvoice({
-    invoicerName: "Eurostar International",
+    invoicerName: "Eurostar",
     invoicerEmail: "tickets@eurostar.example.com",
     recipientName: "Marco Rossi",
     recipientEmail: "marco.rossi.travel@personal.example.com",
     amount: 220.00,
-    note: "London St Pancras to Paris Gare du Nord Train",
+    note: "",
     daysAgo: 9,
   });
   await createPaidInvoice({
-    invoicerName: "Airalo eSIM",
+    invoicerName: "Airalo",
     invoicerEmail: "billing@airalo.example.com",
     recipientName: "Marco Rossi",
     recipientEmail: "marco.rossi.travel@personal.example.com",
     amount: 35.00,
-    note: "Eurolink 10GB Global Roaming eSIM",
+    note: "",
     daysAgo: 14,
   });
   console.log("    ✓ Marco Rossi (Eurostar $220 & eSIM $35).");
