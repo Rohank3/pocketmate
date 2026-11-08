@@ -628,6 +628,59 @@ export async function handleDynamicAutonomousResponse(
   else if (p.includes("sweep") || p.includes("triage") || p.includes("untagged") || p.includes("eod")) {
     reply = "End-of-day audit complete. I identified 1 unassigned charge requiring your attention:\n\n• **$34.20** at 'SQ* Urban Blend' (Yesterday, 4:15 PM)\n\nWas this Dining, Work Supplies, or a Group Split with someone? Tell me and I will tag it and update your budget ledger.";
   }
+  // 8. Auto-Categorize Ledger Transactions
+  else if (p.includes("categorize") || p.includes("category tagging") || p.includes("assign categories") || p.includes("auto-categorize")) {
+    const autoArgs = { hoursBack: 720 };
+    const autoResult = (await executeAgentTool("auto_categorize_transactions", autoArgs, handlers.userId)) as {
+      success: boolean;
+      categorizedCount: number;
+      uncategorizedRemaining: number;
+      scannedCount: number;
+      message: string;
+      categorized?: Array<{ id: string; merchant: string; category: string }>;
+    };
+
+    executedTools.push({ name: "auto_categorize_transactions", args: autoArgs, result: autoResult });
+    handlers.onToolCall?.("auto_categorize_transactions", autoArgs, autoResult);
+
+    gridMutation = {
+      statusMessage: autoResult.message,
+    };
+    handlers.onGridMutation?.(gridMutation);
+
+    const catList = autoResult.categorized || [];
+    const detailList = catList.slice(0, 4).map((c) => `• **${c.merchant}** ➔ **${c.category}**`).join("\n");
+    const remainingText = autoResult.uncategorizedRemaining > 0
+      ? `\n\n📌 **${autoResult.uncategorizedRemaining} transaction(s)** remain in **Uncategorized** for your review.`
+      : "\n\n✨ All scanned transactions are now fully categorized across your active budgets.";
+
+    reply = `🧠 **AI Auto-Categorization Complete**\n\n${autoResult.message}${detailList ? `\n\n${detailList}` : ""}${remainingText}`;
+  }
+  // 9. Learned Merchant Rule or Transaction Category Assignment
+  else if (
+    (p.includes("always") || p.includes("rule") || p.includes("mark") || p.includes("tag")) &&
+    (p.includes(" as ") || p.includes(" to ") || p.includes(" under ")) &&
+    !p.includes("invoice")
+  ) {
+    const ruleMatch = prompt.match(/(?:always\s+)?(?:mark|tag|categorize|set)\s+['"]?([^'"]+?)['"]?\s+(?:as|to|under)\s+['"]?([A-Za-z\s&]+)['"]?/i);
+    if (ruleMatch) {
+      const merchantTarget = ruleMatch[1].trim();
+      const categoryTarget = ruleMatch[2].trim();
+
+      const ruleArgs = { merchantPattern: merchantTarget, category: categoryTarget };
+      const ruleResult = (await executeAgentTool("set_merchant_category_rule", ruleArgs, handlers.userId)) as Record<string, unknown>;
+      executedTools.push({ name: "set_merchant_category_rule", args: ruleArgs, result: ruleResult });
+      handlers.onToolCall?.("set_merchant_category_rule", ruleArgs, ruleResult);
+
+      gridMutation = {
+        filter: { category: categoryTarget },
+        statusMessage: `Rule Saved: ${merchantTarget} ➔ ${categoryTarget}`,
+      };
+      handlers.onGridMutation?.(gridMutation);
+
+      reply = `✅ **Learned Merchant Rule Saved!**\n\nI've recorded a persistent rule: any past and future transactions from **${merchantTarget}** will now automatically categorize into **${categoryTarget}**.\n\nYour ledger has been filtered to show your updated **${categoryTarget}** items.`;
+    }
+  }
   // 8. Scheduled Item Analysis & Payment Reminders
   else if (
     p.includes("scheduled") ||

@@ -3,6 +3,11 @@ import { paypalClient } from "../paypal/client";
 import { calculateEqualSplit, SplitParticipant } from "../math/split";
 import { syncBudgetExpenseToDB } from "./dbSync";
 import { prisma } from "../db";
+import {
+  loadUserCategorizationContext,
+  categorizeTransactionsBatch,
+  normalizeMerchant,
+} from "../services/categorizer";
 
 // ============================================================================
 // Parameter Validation Schemas (Layer B: Validation Middleware)
@@ -132,6 +137,22 @@ export const InitiateDisputeSchema = z.object({
   reason: z.string().trim().min(1).max(255),
   disputedAmount: z.number().finite().positive().max(50000),
   isConfirmed: z.boolean().default(false),
+});
+
+export const AutoCategorizeTransactionsSchema = z.object({
+  hoursBack: z.number().finite().positive().max(720).default(720).optional(),
+});
+
+export const SetMerchantCategoryRuleSchema = z.object({
+  merchantPattern: z.string().trim().min(2).max(100),
+  category: z.string().trim().min(1).max(50),
+});
+
+export const SetTransactionCategorySchema = z.object({
+  transactionId: z.string().trim().min(1).max(100),
+  category: z.string().trim().min(1).max(50),
+  rememberForMerchant: z.boolean().default(false).optional(),
+  merchantName: z.string().trim().max(100).optional(),
 });
 
 // ============================================================================
@@ -321,6 +342,42 @@ export const agentToolDeclarations = [
         isConfirmed: { type: "BOOLEAN" },
       },
       required: ["transactionId", "reason", "disputedAmount"],
+    },
+  },
+  {
+    name: "auto_categorize_transactions",
+    description: "Runs the intelligent hybrid categorizer across all recent transactions, applying learned merchant rules and AI inference against the user's active categories.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        hoursBack: { type: "NUMBER", description: "Hours of transaction history to scan (default: 720)." },
+      },
+    },
+  },
+  {
+    name: "set_merchant_category_rule",
+    description: "Saves a persistent merchant rule so any future transaction from this merchant is automatically categorized without prompting the user.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        merchantPattern: { type: "STRING", description: "Normalized merchant name or keyword, e.g. 'Starbucks' or 'Spotify'." },
+        category: { type: "STRING", description: "Target category name from the user's budget categories." },
+      },
+      required: ["merchantPattern", "category"],
+    },
+  },
+  {
+    name: "set_transaction_category",
+    description: "Assigns a category to a specific transaction in the ledger, with an option to persist a rule for the merchant.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        transactionId: { type: "STRING", description: "PayPal transaction ID." },
+        category: { type: "STRING", description: "Category name." },
+        rememberForMerchant: { type: "BOOLEAN", description: "Whether to always categorize this merchant into this category in the future." },
+        merchantName: { type: "STRING", description: "Merchant name if rememberForMerchant is true." },
+      },
+      required: ["transactionId", "category"],
     },
   },
 ];
@@ -642,6 +699,139 @@ export async function executeAgentTool(
       return {
         success: true,
         ...disputeResult,
+      };
+    }
+
+    case "auto_categorize_transactions": {
+      const { hoursBack } = AutoCategorizeTransactionsSchema.parse(safeArgs);
+      const effectiveUserId = userId || "demo_user";
+
+      const txs = await paypalClient.fetchRecentTransactions(hoursBack || 720);
+      const catContext = await loadUserCategorizationContext(effectiveUserId);
+      const categoryMap = await categorizeTransactionsBatch(
+        txs.map((t) => ({ id: t.id, merchantName: t.merchantName, amount: t.amount })),
+        catContext
+      );
+
+      const categorizedList: Array<{
+        id: string;
+        merchant: string;
+        amount: number;
+        category: string;
+        confidence: number;
+        source: string;
+      }> = [];
+
+      let uncategorizedCount = 0;
+      for (const t of txs) {
+        const res = categoryMap.get(t.id);
+        const cat = res?.category || "Uncategorized";
+        if (cat === "Uncategorized") {
+          uncategorizedCount++;
+        } else {
+          categorizedList.push({
+            id: t.id,
+            merchant: t.merchantName,
+            amount: t.amount,
+            category: cat,
+            confidence: res?.confidence || 0.85,
+            source: res?.source || "gemini_ai",
+          });
+        }
+      }
+
+      return {
+        success: true,
+        scannedCount: txs.length,
+        categorizedCount: categorizedList.length,
+        uncategorizedRemaining: uncategorizedCount,
+        categorized: categorizedList,
+        message: `Categorized ${categorizedList.length} of ${txs.length} transactions across your active categories. ${uncategorizedCount} transactions remain unclassified.`,
+      };
+    }
+
+    case "set_merchant_category_rule": {
+      const { merchantPattern, category } = SetMerchantCategoryRuleSchema.parse(safeArgs);
+      const effectiveUserId = userId || "demo_user";
+      const normalizedPattern = normalizeMerchant(merchantPattern);
+
+      const rule = await prisma.merchantCategoryRule.upsert({
+        where: {
+          userId_merchantPattern: {
+            userId: effectiveUserId,
+            merchantPattern: normalizedPattern,
+          },
+        },
+        update: {
+          categoryName: category,
+          isAutoLearned: false,
+        },
+        create: {
+          userId: effectiveUserId,
+          merchantPattern: normalizedPattern,
+          categoryName: category,
+          isAutoLearned: false,
+        },
+      });
+
+      return {
+        success: true,
+        ruleId: rule.id,
+        merchantPattern: normalizedPattern,
+        category,
+        message: `Persistent rule saved: All past and future transactions for '${merchantPattern}' will be automatically mapped to '${category}'.`,
+      };
+    }
+
+    case "set_transaction_category": {
+      const { transactionId, category, rememberForMerchant, merchantName } =
+        SetTransactionCategorySchema.parse(safeArgs);
+      const effectiveUserId = userId || "demo_user";
+
+      const override = await prisma.transactionCategoryOverride.upsert({
+        where: {
+          userId_transactionId: {
+            userId: effectiveUserId,
+            transactionId,
+          },
+        },
+        update: { categoryName: category },
+        create: {
+          userId: effectiveUserId,
+          transactionId,
+          categoryName: category,
+        },
+      });
+
+      let ruleResult = null;
+      if (rememberForMerchant && merchantName) {
+        const norm = normalizeMerchant(merchantName);
+        ruleResult = await prisma.merchantCategoryRule.upsert({
+          where: {
+            userId_merchantPattern: {
+              userId: effectiveUserId,
+              merchantPattern: norm,
+            },
+          },
+          update: { categoryName: category, isAutoLearned: false },
+          create: {
+            userId: effectiveUserId,
+            merchantPattern: norm,
+            categoryName: category,
+            isAutoLearned: false,
+          },
+        });
+      }
+
+      return {
+        success: true,
+        overrideId: override.id,
+        transactionId,
+        category,
+        rememberedMerchant: Boolean(ruleResult),
+        message: `Transaction ${transactionId} assigned to '${category}'${
+          ruleResult ? ` and saved persistent rule for '${merchantName}'.` : "."
+        }`,
       };
     }
 
