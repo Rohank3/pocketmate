@@ -610,13 +610,20 @@ export default function Home() {
     categoryId: string,
     updatedCap: number,
     updatedName?: string,
-    updatedColor?: string
+    updatedColor?: string,
+    reinitialize?: boolean
   ) => {
     try {
       await fetch("/api/categories", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: categoryId, monthlyCap: updatedCap, name: updatedName, color: updatedColor }),
+        body: JSON.stringify({
+          id: categoryId,
+          monthlyCap: updatedCap,
+          name: updatedName,
+          color: updatedColor,
+          reinitialize,
+        }),
       });
     } catch {
       // fallback
@@ -649,6 +656,47 @@ export default function Home() {
         return c;
       })
     );
+
+    if (reinitialize) {
+      void loadTransactions();
+    }
+  };
+
+  const handleReclassifyTransaction = async (
+    transactionId: string,
+    merchantName: string,
+    targetCategory: string,
+    scope: "single" | "merchant" | "similar"
+  ) => {
+    try {
+      const res = await fetch("/api/transactions/reclassify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transactionId,
+          merchantName,
+          targetCategory,
+          scope,
+          allTransactions: transactions.map((t) => ({
+            id: t.id,
+            merchantName: t.merchant,
+            amount: t.amount,
+          })),
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success && Array.isArray(data.updatedTransactionIds)) {
+        const idSet = new Set(data.updatedTransactionIds);
+        setTransactions((prev) =>
+          prev.map((t) => (idSet.has(t.id) ? { ...t, category: targetCategory } : t))
+        );
+      }
+      return data;
+    } catch (err) {
+      console.error("[Reclassify Transaction Error]", err);
+      throw err;
+    }
   };
 
   const handleDeleteCategory = async (categoryId: string) => {
@@ -1357,6 +1405,8 @@ export default function Home() {
                       rowData={transactions}
                       gridMutation={gridMutation}
                       selectedCategory={selectedCategory}
+                      categories={categories}
+                      onReclassifyTransaction={handleReclassifyTransaction}
                     />
                   )}
                 </div>

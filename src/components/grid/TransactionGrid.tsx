@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { AgGridReact } from "ag-grid-react";
 import {
   ColDef,
@@ -10,8 +10,22 @@ import {
   themeQuartz,
   colorSchemeDark,
 } from "ag-grid-community";
-import { DollarSign, ShieldAlert, CheckCircle2, Clock, Sparkles } from "lucide-react";
+import {
+  DollarSign,
+  ShieldAlert,
+  CheckCircle2,
+  Clock,
+  Sparkles,
+  Edit3,
+  Layers,
+  Store,
+  Tag,
+  X,
+  AlertCircle,
+  Loader2,
+} from "lucide-react";
 import { GridMutationState } from "@/types/agent";
+import type { CategoryItem } from "@/components/categories/CategoryControlBar";
 
 // Register all community features (RowSelection, Pagination, ColumnFilter, NumberFilter, Validation)
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -36,18 +50,77 @@ export interface TransactionRow {
   invoiceStatus?: string;
 }
 
+export type ReclassifyScope = "single" | "merchant" | "similar";
+
 interface TransactionGridProps {
   rowData: TransactionRow[];
   gridMutation?: GridMutationState | null;
   selectedCategory?: string;
+  categories?: CategoryItem[];
   onSelectRow?: (row: TransactionRow) => void;
+  onReclassifyTransaction?: (
+    transactionId: string,
+    merchantName: string,
+    targetCategory: string,
+    scope: ReclassifyScope
+  ) => Promise<{ success: boolean; message: string; updatedTransactionIds: string[] }>;
 }
 
 export const TransactionGrid: React.FC<TransactionGridProps> = ({
   rowData,
   gridMutation,
   selectedCategory,
+  categories = [],
+  onSelectRow,
+  onReclassifyTransaction,
 }) => {
+  // Reclassification modal state
+  const [activeTxForEdit, setActiveTxForEdit] = useState<TransactionRow | null>(null);
+  const [selectedNewCategory, setSelectedNewCategory] = useState<string>("");
+  const [selectedScope, setSelectedScope] = useState<ReclassifyScope | null>(null); // No default!
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [actionFeedback, setActionFeedback] = useState<string | null>(null);
+
+  const handleOpenReclassify = (tx: TransactionRow) => {
+    setActiveTxForEdit(tx);
+    setSelectedNewCategory(tx.category || "");
+    setSelectedScope(null); // Explicitly require user choice
+    setActionFeedback(null);
+  };
+
+  const handleCloseModal = () => {
+    if (isSubmitting) return;
+    setActiveTxForEdit(null);
+    setSelectedNewCategory("");
+    setSelectedScope(null);
+    setActionFeedback(null);
+  };
+
+  const handleConfirmReclassification = async () => {
+    if (!activeTxForEdit || !selectedNewCategory || !selectedScope || !onReclassifyTransaction) return;
+
+    try {
+      setIsSubmitting(true);
+      setActionFeedback(null);
+
+      const res = await onReclassifyTransaction(
+        activeTxForEdit.id,
+        activeTxForEdit.merchant,
+        selectedNewCategory,
+        selectedScope
+      );
+
+      setActionFeedback(res.message || "Category updated successfully!");
+      setTimeout(() => {
+        setIsSubmitting(false);
+        setActiveTxForEdit(null);
+      }, 700);
+    } catch {
+      setIsSubmitting(false);
+      setActionFeedback("Failed to update category. Please try again.");
+    }
+  };
+
   const columnDefs = useMemo<ColDef<TransactionRow>[]>(() => [
     {
       field: "date",
@@ -80,7 +153,7 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
     {
       field: "category",
       headerName: "Category",
-      width: 120,
+      width: 140,
       filter: true,
       cellRenderer: (params: ICellRendererParams<TransactionRow, string>) => {
         const colors: Record<string, string> = {
@@ -95,10 +168,22 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
         const badgeClass = isUncat
           ? "bg-amber-500/15 text-amber-300 border-amber-500/40 font-medium"
           : colors[val] || "bg-zinc-700/50 text-zinc-300 border-zinc-600";
+
         return (
-          <span className={`text-xs px-2 py-0.5 rounded-full border ${badgeClass}`}>
-            {val}
-          </span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (params.data) {
+                handleOpenReclassify(params.data);
+              }
+            }}
+            title="Click to change category"
+            className={`group inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full border ${badgeClass} hover:ring-1 hover:ring-zinc-400/50 hover:brightness-110 active:scale-95 transition-all cursor-pointer`}
+          >
+            <span>{val}</span>
+            <Edit3 className="w-2.5 h-2.5 opacity-40 group-hover:opacity-100 transition-opacity" />
+          </button>
         );
       },
     },
@@ -128,50 +213,49 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
     {
       field: "status",
       headerName: "Settlement Status",
-      width: 140,
+      width: 130,
+      filter: true,
       cellRenderer: (params: ICellRendererParams<TransactionRow, string>) => {
-        const s = params.value;
-        if (s === "settled") {
+        const val = params.value;
+        if (val === "settled") {
           return (
-            <span className="flex items-center gap-1 text-emerald-400 text-xs">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Settled
+            <span className="flex items-center gap-1.5 text-emerald-400 text-xs font-medium">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Settled
             </span>
           );
         }
-        if (s === "pending") {
+        if (val === "disputed") {
           return (
-            <span className="flex items-center gap-1 text-amber-400 text-xs">
-              <Clock className="w-3.5 h-3.5" /> Pending Invoice
+            <span className="flex items-center gap-1.5 text-amber-400 text-xs font-medium">
+              <ShieldAlert className="w-3.5 h-3.5" />
+              Disputed
             </span>
           );
         }
-        if (s === "disputed") {
-          return (
-            <span className="flex items-center gap-1 text-rose-400 text-xs font-semibold">
-              <ShieldAlert className="w-3.5 h-3.5" /> Discrepancy
-            </span>
-          );
-        }
-        return <span className="text-zinc-400 text-xs">Unresolved</span>;
+        return (
+          <span className="flex items-center gap-1.5 text-zinc-400 text-xs font-medium">
+            <Clock className="w-3.5 h-3.5" />
+            Pending
+          </span>
+        );
       },
     },
   ], []);
 
-  const defaultColDef = useMemo<ColDef>(() => ({
+  const defaultColDef = useMemo(() => ({
     resizable: true,
     sortable: true,
   }), []);
 
-  // Filter by selected category (from CategoryControlBar) and/or agent grid mutation
+  // Filter based on selected category pill from CategoryControlBar and AG Grid mutations
   const filteredData = useMemo(() => {
     let data = rowData;
 
     if (selectedCategory && selectedCategory.toLowerCase() !== "all") {
-      const target = selectedCategory.toLowerCase();
-      data = data.filter((row) => {
-        const cat = row.category.toLowerCase();
-        return cat === target || cat.includes(target) || target.includes(cat);
-      });
+      data = data.filter(
+        (row) => row.category.toLowerCase() === selectedCategory.toLowerCase()
+      );
     }
 
     if (!gridMutation?.filter) return data;
@@ -192,7 +276,7 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
   }, [rowData, gridMutation, selectedCategory]);
 
   return (
-    <div className="flex flex-col h-full bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-2xl">
+    <div className="flex flex-col h-full bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-2xl relative">
       {/* Top Banner / Reactive Agent Feedback */}
       <div className="px-4 py-2.5 bg-zinc-900/90 border-b border-zinc-800 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -228,8 +312,188 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
           pagination={true}
           paginationPageSize={10}
           paginationPageSizeSelector={[10, 20, 50]}
+          onRowClicked={(event) => {
+            if (event.data && onSelectRow) {
+              onSelectRow(event.data);
+            }
+          }}
         />
       </div>
+
+      {/* ========================================================================= */}
+      {/* Reclassify Transaction Modal (3-Way Scope Choice with No Default)        */}
+      {/* ========================================================================= */}
+      {activeTxForEdit && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800 bg-zinc-900/90">
+              <div className="flex items-center gap-2">
+                <Tag className="w-4 h-4 text-blue-400" />
+                <div>
+                  <h3 className="text-sm font-semibold text-zinc-100">Change Category</h3>
+                  <p className="text-[11px] text-zinc-400">
+                    {activeTxForEdit.merchant} • ${activeTxForEdit.amount.toFixed(2)}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseModal}
+                disabled={isSubmitting}
+                className="text-zinc-400 hover:text-zinc-200 p-1 rounded-lg hover:bg-zinc-800 cursor-pointer disabled:opacity-50"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 space-y-4">
+              {/* Category Selector */}
+              <div>
+                <label className="text-xs font-medium text-zinc-300 block mb-1.5">
+                  Select Target Category
+                </label>
+                <select
+                  value={selectedNewCategory}
+                  onChange={(e) => setSelectedNewCategory(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-700 text-xs text-zinc-100 font-medium focus:outline-hidden focus:border-blue-500 transition-colors cursor-pointer"
+                >
+                  <option value="" disabled>Choose a category...</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.name}>
+                      {c.name} (${c.monthlyCap}/mo)
+                    </option>
+                  ))}
+                  <option value="Uncategorized">Uncategorized</option>
+                </select>
+              </div>
+
+              {/* 3 Scope Options (No Default Pre-selected) */}
+              <div>
+                <label className="text-xs font-medium text-zinc-300 block mb-2">
+                  Choose Application Scope <span className="text-amber-400">*</span>
+                </label>
+                <div className="space-y-2">
+                  {/* Scope 1: Single */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedScope("single")}
+                    className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer flex items-start gap-3 ${
+                      selectedScope === "single"
+                        ? "bg-blue-950/40 border-blue-500 ring-1 ring-blue-500"
+                        : "bg-zinc-950/60 border-zinc-800 hover:border-zinc-700"
+                    }`}
+                  >
+                    <div className="p-1.5 rounded-lg bg-blue-500/10 text-blue-400 shrink-0 mt-0.5">
+                      <Tag className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-zinc-100">Only this one transaction</span>
+                        {selectedScope === "single" && (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                        )}
+                      </div>
+                      <p className="text-[11px] text-zinc-400 mt-0.5 leading-snug">
+                        Overrides just this specific receipt (${activeTxForEdit.amount.toFixed(2)}). Leaves future transactions from {activeTxForEdit.merchant} untouched.
+                      </p>
+                    </div>
+                  </button>
+
+                  {/* Scope 2: Merchant */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedScope("merchant")}
+                    className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer flex items-start gap-3 ${
+                      selectedScope === "merchant"
+                        ? "bg-emerald-950/40 border-emerald-500 ring-1 ring-emerald-500"
+                        : "bg-zinc-950/60 border-zinc-800 hover:border-zinc-700"
+                    }`}
+                  >
+                    <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 shrink-0 mt-0.5">
+                      <Store className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-zinc-100">
+                          All &apos;{activeTxForEdit.merchant}&apos; transactions
+                        </span>
+                        {selectedScope === "merchant" && (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        )}
+                      </div>
+                      <p className="text-[11px] text-zinc-400 mt-0.5 leading-snug">
+                        Saves a persistent rule. Automatically reclassifies all past and future purchases from {activeTxForEdit.merchant}.
+                      </p>
+                    </div>
+                  </button>
+
+                  {/* Scope 3: Similar */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedScope("similar")}
+                    className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer flex items-start gap-3 ${
+                      selectedScope === "similar"
+                        ? "bg-purple-950/40 border-purple-500 ring-1 ring-purple-500"
+                        : "bg-zinc-950/60 border-zinc-800 hover:border-zinc-700"
+                    }`}
+                  >
+                    <div className="p-1.5 rounded-lg bg-purple-500/10 text-purple-400 shrink-0 mt-0.5">
+                      <Layers className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-zinc-100">All similar kind of transactions</span>
+                        {selectedScope === "similar" && (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                        )}
+                      </div>
+                      <p className="text-[11px] text-zinc-400 mt-0.5 leading-snug">
+                        Prompts Gemini AI to scan the ledger and reclassify all other transactions that share similar vendor semantics.
+                      </p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Feedback Alert */}
+              {actionFeedback && (
+                <div className="p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs text-blue-300 flex items-center gap-2">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{actionFeedback}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-between px-5 py-3 border-t border-zinc-800 bg-zinc-900/90">
+              <span className="text-[11px] text-zinc-500">
+                {!selectedScope ? "Select a scope to proceed" : "Ready to apply"}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCloseModal}
+                  disabled={isSubmitting}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-400 hover:bg-zinc-800 cursor-pointer disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmReclassification}
+                  disabled={!selectedNewCategory || !selectedScope || isSubmitting}
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white text-xs font-semibold shadow-md disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all"
+                >
+                  {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{isSubmitting ? "Applying..." : "Save & Apply"}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
