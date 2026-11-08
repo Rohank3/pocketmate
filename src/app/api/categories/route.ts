@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthenticatedUser, getUserIdFromRequest } from "@/lib/auth/session";
+import { reinitializeCategory } from "@/lib/services/categorizer";
 import { z } from "zod";
 
 const CreateCategorySchema = z.object({
@@ -14,6 +15,7 @@ const UpdateCategorySchema = z.object({
   monthlyCap: z.number().finite().nonnegative().max(1000000).optional(),
   name: z.string().trim().min(1).max(50).optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  reinitialize: z.boolean().default(false).optional(),
 });
 
 export async function GET(req: NextRequest) {
@@ -118,7 +120,7 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    const { id, monthlyCap, name, color } = parseResult.data;
+    const { id, monthlyCap, name, color, reinitialize } = parseResult.data;
 
     const existing = await prisma.budgetCategory.findFirst({
       where: { id, userId },
@@ -130,16 +132,22 @@ export async function PATCH(req: NextRequest) {
 
     const newName = name && name.trim() ? name.trim() : undefined;
     if (newName && newName.toLowerCase() !== existing.name.toLowerCase()) {
-      await Promise.all([
-        prisma.merchantCategoryRule.updateMany({
-          where: { userId, categoryName: existing.name },
-          data: { categoryName: newName },
-        }),
-        prisma.transactionCategoryOverride.updateMany({
-          where: { userId, categoryName: existing.name },
-          data: { categoryName: newName },
-        }),
-      ]);
+      if (reinitialize) {
+        // User explicitly chose to reinitialize: reset stale rules and overrides to allow fresh AI reclassification
+        await reinitializeCategory(userId, existing.name, newName);
+      } else {
+        // Default 'Just Rename': maintain continuity by updating existing rules and overrides to the new name
+        await Promise.all([
+          prisma.merchantCategoryRule.updateMany({
+            where: { userId, categoryName: existing.name },
+            data: { categoryName: newName },
+          }),
+          prisma.transactionCategoryOverride.updateMany({
+            where: { userId, categoryName: existing.name },
+            data: { categoryName: newName },
+          }),
+        ]);
+      }
     }
 
     const updated = await prisma.budgetCategory.update({

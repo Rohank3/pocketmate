@@ -428,3 +428,284 @@ async function persistLearnedRules(
     }
   }
 }
+
+export type ReclassifyScope = "single" | "merchant" | "similar";
+
+export interface ReclassifyTransactionParams {
+  userId: string;
+  transactionId: string;
+  merchantName: string;
+  targetCategory: string;
+  scope: ReclassifyScope;
+  allTransactions?: Array<{ id: string; merchantName: string; amount: number }>;
+}
+
+export interface ReclassificationResult {
+  scope: ReclassifyScope;
+  updatedTransactionIds: string[];
+  ruleCreated?: { pattern: string; category: string };
+  similarCount?: number;
+  message: string;
+}
+
+/**
+ * Executes a scoped reclassification according to user selection:
+ * 1. 'single': Only this specific transaction
+ * 2. 'merchant': All transactions for this particular merchant
+ * 3. 'similar': All semantically similar vendor transactions via Gemini AI
+ */
+export async function reclassifyTransactionWithScope(
+  params: ReclassifyTransactionParams
+): Promise<ReclassificationResult> {
+  const { userId, transactionId, merchantName, targetCategory, scope, allTransactions = [] } = params;
+  const normMerchant = normalizeMerchant(merchantName);
+
+  if (scope === "single") {
+    await prisma.transactionCategoryOverride.upsert({
+      where: {
+        userId_transactionId: {
+          userId,
+          transactionId,
+        },
+      },
+      update: { categoryName: targetCategory },
+      create: {
+        userId,
+        transactionId,
+        categoryName: targetCategory,
+      },
+    });
+
+    return {
+      scope: "single",
+      updatedTransactionIds: [transactionId],
+      message: `Categorized transaction as '${targetCategory}'.`,
+    };
+  }
+
+  if (scope === "merchant") {
+    const rule = await prisma.merchantCategoryRule.upsert({
+      where: {
+        userId_merchantPattern: {
+          userId,
+          merchantPattern: normMerchant,
+        },
+      },
+      update: {
+        categoryName: targetCategory,
+        isAutoLearned: false,
+      },
+      create: {
+        userId,
+        merchantPattern: normMerchant,
+        categoryName: targetCategory,
+        isAutoLearned: false,
+      },
+    });
+
+    // Also update any individual overrides for this transaction to match
+    await prisma.transactionCategoryOverride.upsert({
+      where: {
+        userId_transactionId: {
+          userId,
+          transactionId,
+        },
+      },
+      update: { categoryName: targetCategory },
+      create: {
+        userId,
+        transactionId,
+        categoryName: targetCategory,
+      },
+    });
+
+    // Find all matching transactions from the provided ledger
+    const matchingTxIds = allTransactions
+      .filter((t) => {
+        const norm = normalizeMerchant(t.merchantName);
+        return norm === normMerchant || norm.includes(normMerchant) || normMerchant.includes(norm);
+      })
+      .map((t) => t.id);
+
+    if (!matchingTxIds.includes(transactionId)) {
+      matchingTxIds.push(transactionId);
+    }
+
+    return {
+      scope: "merchant",
+      updatedTransactionIds: matchingTxIds,
+      ruleCreated: { pattern: normMerchant, category: targetCategory },
+      message: `Rule saved: All past & future transactions from '${merchantName}' are now categorized as '${targetCategory}'.`,
+    };
+  }
+
+  // scope === 'similar' (AI Semantic Similarity)
+  // 1. Establish the merchant rule for this primary merchant first
+  await prisma.merchantCategoryRule.upsert({
+    where: {
+      userId_merchantPattern: {
+        userId,
+        merchantPattern: normMerchant,
+      },
+    },
+    update: {
+      categoryName: targetCategory,
+      isAutoLearned: false,
+    },
+    create: {
+      userId,
+      merchantPattern: normMerchant,
+      categoryName: targetCategory,
+      isAutoLearned: false,
+    },
+  });
+
+  const updatedIds: string[] = [transactionId];
+
+  // 2. Identify candidate transactions from the ledger that might be semantically similar
+  const otherTxs = allTransactions.filter((t) => t.id !== transactionId);
+
+  if (otherTxs.length > 0) {
+    const similarTxIds = await findSemanticallySimilarTransactionsWithGemini(
+      merchantName,
+      targetCategory,
+      otherTxs
+    );
+
+    for (const simId of similarTxIds) {
+      updatedIds.push(simId);
+      const txObj = otherTxs.find((t) => t.id === simId);
+      if (txObj) {
+        // Persist override for similar transaction
+        await prisma.transactionCategoryOverride.upsert({
+          where: {
+            userId_transactionId: {
+              userId,
+              transactionId: simId,
+            },
+          },
+          update: { categoryName: targetCategory },
+          create: {
+            userId,
+            transactionId: simId,
+            categoryName: targetCategory,
+          },
+        });
+      }
+    }
+  }
+
+  return {
+    scope: "similar",
+    updatedTransactionIds: updatedIds,
+    similarCount: updatedIds.length - 1,
+    ruleCreated: { pattern: normMerchant, category: targetCategory },
+    message: `Applied '${targetCategory}' to '${merchantName}' and reclassified ${
+      updatedIds.length - 1
+    } semantically similar transactions across your ledger.`,
+  };
+}
+
+/**
+ * Prompts Gemini AI to find semantically similar vendor transactions in the active ledger.
+ */
+async function findSemanticallySimilarTransactionsWithGemini(
+  anchorMerchant: string,
+  targetCategory: string,
+  candidateTransactions: Array<{ id: string; merchantName: string; amount: number }>
+): Promise<string[]> {
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY_SECONDARY;
+  if (!apiKey || apiKey === "your-gemini-api-key") {
+    // Basic root word heuristic fallback
+    const root = normalizeMerchant(anchorMerchant).split(" ")[0];
+    if (root.length >= 4) {
+      return candidateTransactions
+        .filter((t) => normalizeMerchant(t.merchantName).includes(root))
+        .map((t) => t.id);
+    }
+    return [];
+  }
+
+  const prompt = `
+You are PocketMate's Financial Classification Engine.
+The user just categorized merchant "${anchorMerchant}" into category "${targetCategory}".
+Review the following candidate transactions from their ledger:
+
+${JSON.stringify(
+  candidateTransactions.map((t) => ({ id: t.id, merchant: t.merchantName })),
+  null,
+  2
+)}
+
+TASK:
+Identify which of these candidate transactions are SEMANTICALLY SIMILAR in vendor nature (e.g., other coffee shops, other food delivery/dining, other streaming services, other retail stores, or branches of the same brand) and should ALSO belong to "${targetCategory}".
+
+OUTPUT SCHEMA:
+Return ONLY valid JSON with an array of matching transaction IDs:
+{
+  "similarTransactionIds": ["id1", "id2"]
+}
+`;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.1,
+          responseMimeType: "application/json",
+        },
+      }),
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) return [];
+    const data = await res.json();
+    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!rawText) return [];
+
+    const parsed = JSON.parse(rawText) as { similarTransactionIds?: string[] };
+    return Array.isArray(parsed.similarTransactionIds) ? parsed.similarTransactionIds : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Reinitializes a category by removing stale merchant rules and overrides,
+ * triggering a clean AI re-evaluation for affected transactions.
+ */
+export async function reinitializeCategory(
+  userId: string,
+  oldCategoryName: string,
+  newCategoryName: string
+): Promise<{ success: boolean; rulesRemoved: number; overridesReset: number }> {
+  const [delRules, delOverrides] = await Promise.all([
+    prisma.merchantCategoryRule.deleteMany({
+      where: {
+        userId,
+        categoryName: { equals: oldCategoryName, mode: "insensitive" },
+      },
+    }),
+    prisma.transactionCategoryOverride.deleteMany({
+      where: {
+        userId,
+        categoryName: { equals: oldCategoryName, mode: "insensitive" },
+      },
+    }),
+  ]);
+
+  return {
+    success: true,
+    rulesRemoved: delRules.count,
+    overridesReset: delOverrides.count,
+  };
+}
