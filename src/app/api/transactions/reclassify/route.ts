@@ -4,6 +4,7 @@ import {
   reclassifyTransactionWithScope,
   loadUserCategorizationContext,
   categorizeTransactionsBatch,
+  normalizeMerchant,
   ReclassifyScope,
 } from "@/lib/services/categorizer";
 import { z } from "zod";
@@ -19,6 +20,7 @@ const ReclassifyRequestSchema = z.object({
         id: z.string(),
         merchantName: z.string(),
         amount: z.number(),
+        category: z.string().optional(),
       })
     )
     .optional(),
@@ -54,9 +56,28 @@ export async function POST(req: NextRequest) {
       allTransactions,
     });
 
-    // Dynamically evaluate the next unclassified transaction with Gemini AI
+    // Load fresh categorization context including updated rules and overrides
+    const catContext = await loadUserCategorizationContext(userId);
     const updatedIdsSet = new Set(result.updatedTransactionIds);
-    const remaining = allTransactions.filter((t) => !updatedIdsSet.has(t.id));
+    const overrideMap = new Map(catContext.overrides?.map((o) => [o.transactionId, o.categoryName]) || []);
+    const ruleMap = new Map(
+      catContext.merchantRules?.map((r) => [r.merchantPattern.toLowerCase(), r.categoryName]) || []
+    );
+
+    // Filter strictly for GENUINELY unclassified transactions (never repeat already-decided items)
+    const remaining = allTransactions.filter((t) => {
+      if (updatedIdsSet.has(t.id)) return false;
+      if (overrideMap.has(t.id)) return false;
+      const norm = normalizeMerchant(t.merchantName);
+      if (ruleMap.has(norm)) return false;
+      for (const [pattern] of ruleMap.entries()) {
+        if (norm.includes(pattern) || pattern.includes(norm)) return false;
+      }
+      if (t.category && t.category.toLowerCase() !== "uncategorized" && t.category !== "—") {
+        return false;
+      }
+      return true;
+    });
 
     let nextSuggestion: {
       transactionId: string;
@@ -71,7 +92,6 @@ export async function POST(req: NextRequest) {
     if (remaining.length > 0) {
       const nextTx = remaining[0];
       try {
-        const catContext = await loadUserCategorizationContext(userId);
         const aiResults = await categorizeTransactionsBatch(
           [{ id: nextTx.id, merchantName: nextTx.merchantName, amount: nextTx.amount }],
           catContext

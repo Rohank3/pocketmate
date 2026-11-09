@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import { ChatPanel, ChatMessageItem } from "@/components/chat/ChatPanel";
 import type { ChatThreadItem } from "@/types/chat";
@@ -73,6 +73,10 @@ export default function Home() {
   const [activePersona, setActivePersona] = useState<"GENERAL" | "FREELANCER" | "BUSINESS">("GENERAL");
   const [activeRightTab, setActiveRightTab] = useState<"transactions" | "insights" | "upcoming">("transactions");
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
+  const transactionsRef = useRef<TransactionRow[]>([]);
+  useEffect(() => {
+    transactionsRef.current = transactions;
+  }, [transactions]);
   const [isLoadingTransactions, setIsLoadingTransactions] = useState(true);
   const [isSeedingTransactions, setIsSeedingTransactions] = useState(false);
   const [gridMutation, setGridMutation] = useState<GridMutationState | null>(null);
@@ -730,6 +734,7 @@ export default function Home() {
     scope: "single" | "merchant" | "similar"
   ) => {
     try {
+      const currentTransactions: TransactionRow[] = transactionsRef.current;
       const res = await fetch("/api/transactions/reclassify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -738,10 +743,11 @@ export default function Home() {
           merchantName,
           targetCategory,
           scope,
-          allTransactions: transactions.map((t) => ({
+          allTransactions: currentTransactions.map((t) => ({
             id: t.id,
             merchantName: t.merchant,
             amount: t.amount,
+            category: t.category,
           })),
         }),
       });
@@ -749,9 +755,10 @@ export default function Home() {
       const data = await res.json();
       if (data.success && Array.isArray(data.updatedTransactionIds)) {
         const idSet = new Set(data.updatedTransactionIds);
-        const updatedTxs = transactions.map((t) =>
+        const updatedTxs = currentTransactions.map((t) =>
           idSet.has(t.id) ? { ...t, category: targetCategory } : t
         );
+        transactionsRef.current = updatedTxs;
         setTransactions(updatedTxs);
         void loadCategories();
 
