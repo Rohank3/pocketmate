@@ -217,9 +217,9 @@ export default function FinancialStudio({
   }, [categoryAnalytics]);
 
   return (
-    <div className="h-full w-full flex flex-col bg-zinc-950 rounded-xl border border-zinc-800 overflow-y-auto p-4 md:p-5 gap-4">
+    <div className="h-full w-full flex flex-col glass-panel rounded-2xl overflow-y-auto p-4 md:p-5 gap-4 shadow-2xl">
       {/* Top Banner: Budget Health Summary */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-zinc-900 border border-zinc-800">
+      <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl glass-subitem border-white/10">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
             <TrendingUp className="w-5 h-5" />
@@ -266,7 +266,7 @@ export default function FinancialStudio({
       {/* 2-Column Grid of 3 Core Visual Insights */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Insight 1: Budget Caps vs Actual Spend (7 Columns) */}
-        <div className="lg:col-span-7 bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col justify-between">
+        <div className="lg:col-span-7 glass-subitem border-white/10 rounded-2xl p-4 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -353,7 +353,7 @@ export default function FinancialStudio({
         </div>
 
         {/* Insight 2: Category Spending Share Donut (5 Columns) */}
-        <div className="lg:col-span-5 bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col justify-between">
+        <div className="lg:col-span-5 glass-subitem border-white/10 rounded-2xl p-4 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -453,7 +453,7 @@ export default function FinancialStudio({
         </div>
 
         {/* Insight 3: Split Balances & Counterparty Receivables (Full 12 Columns) */}
-        <div className="lg:col-span-12 bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+        <div className="lg:col-span-12 glass-subitem border-white/10 rounded-2xl p-4">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
             <div className="flex items-center gap-2">
               <Users className="w-4 h-4 text-purple-400" />

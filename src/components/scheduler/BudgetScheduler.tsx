@@ -382,9 +382,9 @@ export default function BudgetScheduler({
   }, [selectedDayEvents]);
 
   return (
-    <div className="h-full w-full flex flex-col bg-zinc-950 rounded-xl border border-zinc-800 overflow-hidden shadow-xl">
+    <div className="h-full w-full flex flex-col glass-panel rounded-2xl overflow-hidden shadow-2xl">
       {/* Top Header & Metrics Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-zinc-900 border-b border-zinc-800">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-zinc-950/70 border-b border-white/10 backdrop-blur-md">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
             <CalendarIcon className="w-5 h-5" />

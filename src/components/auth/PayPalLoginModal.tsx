@@ -92,11 +92,11 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
       onClick={isBlocking ? undefined : onClose}
     >
       <div
-        className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150 flex flex-col"
+        className="glass-dropdown rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150 flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800 bg-zinc-950">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 bg-zinc-950/80 backdrop-blur-md">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-[#0070ba]/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
               <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24" aria-hidden="true">
@@ -297,7 +297,7 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="px-5 py-3 bg-zinc-950 border-t border-zinc-800 flex items-center justify-between text-[11px] text-zinc-500">
+        <div className="px-5 py-3 bg-zinc-950/80 border-t border-white/10 flex items-center justify-between text-[11px] text-zinc-500 backdrop-blur-md">
           <span className="flex items-center gap-1.5">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
             PayPal Sandbox OAuth 2.0

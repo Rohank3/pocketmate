@@ -254,8 +254,8 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
 
   // Standard Dispatch / Payout Card Layout
   return (
-    <div className="my-3 p-4 bg-zinc-900 border border-zinc-700/80 rounded-xl shadow-xl transition-all">
-      <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+    <div className="my-3 p-4 glass-subitem border-white/10 rounded-2xl shadow-xl transition-all">
+      <div className="flex items-center justify-between pb-3 border-b border-white/10">
         <div className="flex items-center gap-2">
           <div
             className={`w-2 h-2 rounded-full animate-pulse ${
@@ -263,9 +263,7 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
             }`}
           />
           <h4 className="text-xs font-semibold text-zinc-100 uppercase tracking-wider">
-            {isPayout
-              ? "Ready for Transfer (PayPal Payouts API)"
-              : "Ready for Dispatch (PayPal Invoicing v2)"}
+            {isPayout ? "Ready for Transfer" : "Ready for Dispatch"}
           </h4>
         </div>
         <span

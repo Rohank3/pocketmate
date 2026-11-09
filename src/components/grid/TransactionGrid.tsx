@@ -33,12 +33,12 @@ import type { CategoryItem } from "@/components/categories/CategoryControlBar";
 ModuleRegistry.registerModules([AllCommunityModule]);
 
 const darkTheme = themeQuartz.withPart(colorSchemeDark).withParams({
-  backgroundColor: "#09090b",
-  headerBackgroundColor: "#18181b",
-  borderColor: "#27272a",
+  backgroundColor: "rgba(9, 9, 11, 0.6)",
+  headerBackgroundColor: "rgba(18, 18, 22, 0.85)",
+  borderColor: "rgba(255, 255, 255, 0.08)",
   foregroundColor: "#f4f4f5",
   accentColor: "#3b82f6",
-  rowHoverColor: "#1e293b",
+  rowHoverColor: "rgba(255, 255, 255, 0.05)",
 });
 
 export interface TransactionRow {
@@ -365,9 +365,9 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
   }, [filteredData]);
 
   return (
-    <div className="flex flex-col h-full bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-2xl relative">
+    <div className="flex flex-col h-full glass-panel overflow-hidden relative shadow-2xl">
       {/* Top Banner / Reactive Agent Feedback */}
-      <div className="px-4 py-2.5 bg-zinc-900/90 border-b border-zinc-800 flex items-center justify-between">
+      <div className="px-4 py-2.5 bg-zinc-950/70 border-b border-white/10 flex items-center justify-between backdrop-blur-md">
         <div className="flex items-center gap-2">
           <DollarSign className="w-4 h-4 text-emerald-400" />
           <h2 className="text-sm font-semibold text-zinc-100">Live Financial Ledger</h2>
@@ -457,10 +457,10 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
       {/* Reclassify Transaction Modal (3-Way Scope Choice with No Default)        */}
       {/* ========================================================================= */}
       {activeTxForEdit && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="glass-dropdown rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800 bg-zinc-900/90">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 bg-zinc-950/80">
               <div className="flex items-center gap-2">
                 <Tag className="w-4 h-4 text-blue-400" />
                 <div>

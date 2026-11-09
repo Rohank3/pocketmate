@@ -97,10 +97,10 @@ export const UncategorizedReviewModal: React.FC<UncategorizedReviewModalProps> =
   const completedCount = Object.keys(recentlyCategorized).length;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div className="glass-dropdown rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-950">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-zinc-950/80 backdrop-blur-md">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
               <Tag className="w-4 h-4" />
@@ -108,7 +108,7 @@ export const UncategorizedReviewModal: React.FC<UncategorizedReviewModalProps> =
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-bold text-zinc-100">
-                  Review & Triage Uncategorized Transactions
+                  Triage Uncategorized Records
                 </h3>
                 {uncategorizedItems.length > 0 && (
                   <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">
@@ -117,7 +117,7 @@ export const UncategorizedReviewModal: React.FC<UncategorizedReviewModalProps> =
                 )}
               </div>
               <p className="text-xs text-zinc-400">
-                Single-tap to assign categories or accept AI smart suggestions.
+                Assign categories or accept merchant recommendations.
               </p>
             </div>
           </div>
@@ -133,19 +133,19 @@ export const UncategorizedReviewModal: React.FC<UncategorizedReviewModalProps> =
 
         {/* Batch Actions Bar */}
         {uncategorizedItems.length > 0 && (
-          <div className="flex items-center justify-between px-6 py-2.5 bg-zinc-950/60 border-b border-zinc-800/80 text-xs">
+          <div className="flex items-center justify-between px-6 py-2.5 bg-zinc-950/60 border-b border-white/10 text-xs">
             <span className="text-zinc-400">
               {completedCount > 0 && (
                 <span className="text-emerald-400 font-medium mr-2">
                   ✓ {completedCount} categorized
                 </span>
               )}
-              Assigning saves persistent rules for each merchant.
+              Assigning updates persistent merchant rules.
             </span>
             <button
               onClick={handleApplyAllSuggestions}
               disabled={isBatchApplying}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-semibold shadow-md shadow-blue-500/20 transition-all cursor-pointer disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md shadow-blue-500/20 transition-all cursor-pointer disabled:opacity-50"
             >
               {isBatchApplying ? (
                 <>
@@ -155,7 +155,7 @@ export const UncategorizedReviewModal: React.FC<UncategorizedReviewModalProps> =
               ) : (
                 <>
                   <Sparkles className="w-3.5 h-3.5" />
-                  <span>⚡ Apply All AI Suggestions ({uncategorizedItems.length})</span>
+                  <span>Apply All Suggestions ({uncategorizedItems.length})</span>
                 </>
               )}
             </button>
@@ -190,7 +190,7 @@ export const UncategorizedReviewModal: React.FC<UncategorizedReviewModalProps> =
               return (
                 <div
                   key={item.id}
-                  className="p-3.5 rounded-xl bg-zinc-950/70 border border-zinc-800 hover:border-zinc-700 transition-all flex flex-col gap-2.5"
+                  className="p-3.5 rounded-xl glass-subitem hover:border-white/20 transition-all flex flex-col gap-2.5"
                 >
                   {/* Top row: Merchant, Memo, Date & Amount */}
                   <div className="flex items-start justify-between gap-3">
