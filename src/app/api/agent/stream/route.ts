@@ -301,7 +301,7 @@ export async function POST(req: NextRequest) {
             const reader = geminiRes.body.getReader();
             const decoder = new TextDecoder();
             let buffer = "";
-            const currentTurnFunctionCalls: Array<{ name: string; args: Record<string, unknown>; id?: string }> = [];
+            const currentTurnFunctionCalls: Array<{ name: string; args: Record<string, unknown>; id?: string; thoughtSignature?: string }> = [];
             const currentTurnFunctionResponses: Array<{ name: string; response: Record<string, unknown> }> = [];
 
             while (true) {
@@ -328,8 +328,14 @@ export async function POST(req: NextRequest) {
                         const toolName = part.functionCall.name;
                         const toolArgs = (part.functionCall.args || {}) as Record<string, unknown>;
                         const toolCallId = part.functionCall.id as string | undefined;
+                        const thoughtSig = (part.thoughtSignature || part.thought_signature) as string | undefined;
 
-                        currentTurnFunctionCalls.push({ name: toolName, args: toolArgs, id: toolCallId });
+                        currentTurnFunctionCalls.push({
+                          name: toolName,
+                          args: toolArgs,
+                          id: toolCallId,
+                          thoughtSignature: thoughtSig,
+                        });
                         geminiBadges.push(toolName);
                         sendEvent("tool_start", { name: toolName });
                         const toolResult = (await executeAgentTool(toolName, toolArgs, userId)) as Record<string, unknown>;
@@ -368,6 +374,7 @@ export async function POST(req: NextRequest) {
                     args: fc.args,
                     ...(fc.id ? { id: fc.id } : {}),
                   },
+                  ...(fc.thoughtSignature ? { thoughtSignature: fc.thoughtSignature } : {}),
                 })),
               });
 

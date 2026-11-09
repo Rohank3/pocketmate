@@ -1116,15 +1116,21 @@ ${optionsLines}
     if (looksLikeTransactionRef) {
       try {
         const liveTxs = await paypalClient.fetchRecentTransactions(720);
-        // Find best matching transaction in ledger
+        // Find best matching transaction in ledger with fuzzy spacing and token matching
         for (const tx of liveTxs) {
-          const m = tx.merchantName.toLowerCase();
-          const memo = (tx.memo || "").toLowerCase();
-          const tokens = m.split(/[\s-_]+/).filter((w) => w.length > 2);
+          const mClean = tx.merchantName.toLowerCase().replace(/[^a-z0-9]/g, "");
+          const memoClean = (tx.memo || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+          const pClean = p.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+          const mWords = tx.merchantName
+            .toLowerCase()
+            .split(/[\s-_]+/)
+            .filter((w) => w.length > 2 && !["the", "bill", "hotel", "cafe", "bistro", "split", "charge", "transfer", "settlement"].includes(w));
+
           if (
-            p.includes(m) ||
-            tokens.some((t) => p.includes(t)) ||
-            (memo && memo.length > 2 && p.includes(memo))
+            (mClean && pClean.includes(mClean)) ||
+            (mWords.length > 0 && mWords.some((w) => p.toLowerCase().includes(w))) ||
+            (memoClean && memoClean.length > 3 && pClean.includes(memoClean))
           ) {
             matchedTransaction = tx;
             break;
@@ -1180,7 +1186,9 @@ ${optionsLines}
     const disambiguationNotes: string[] = [];
 
     // 1. Check for group clause introduced by among / with / between / across
-    const groupClauseMatch = prompt.match(/(?:among|with|between|across)\s+([^.]+?)(?:\.|\s*,\s*(?:where|cuz|leo|only)|\s+only|\s+where|\s+cuz|\s+and\s+split|\s+split|\s+to|$)/i);
+    const groupClauseMatch = prompt.match(
+      /(?:among|with|between|across)\s+([^.]+?)(?:\.|\?|!|\s*,\s*(?:where|cuz|only|leo)|\s+only\b|\s+where\b|\s+cuz\b|\s+and\s+split\b|$)/i
+    );
     if (groupClauseMatch) {
       const rawGroup = groupClauseMatch[1]
         .replace(/and\s+/gi, ",")

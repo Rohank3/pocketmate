@@ -61,10 +61,25 @@ export async function resolveContact(
   try {
     const txs = await paypalClient.fetchRecentTransactions(720);
     for (const tx of txs) {
-      const debtor = (tx.debtorName || "").toLowerCase();
-      const email = (tx.recipientEmail || "").toLowerCase();
+      const debtor = (tx.debtorName || "").toLowerCase().trim();
+      const email = (tx.recipientEmail || "").toLowerCase().trim();
 
-      if (debtor.includes(q) || q.includes(debtor) || (email && email.includes(q))) {
+      // Skip generic placeholder labels or self references
+      if (
+        !debtor ||
+        debtor === "100% self" ||
+        debtor === "self" ||
+        debtor === "shared split" ||
+        debtor.includes("self")
+      ) {
+        continue;
+      }
+
+      if (
+        debtor === q ||
+        debtor.split(/\s+/).includes(q) ||
+        (email && email.split("@")[0].split(/[._]/).includes(q))
+      ) {
         if (tx.recipientEmail) {
           return {
             name: tx.debtorName || query,
