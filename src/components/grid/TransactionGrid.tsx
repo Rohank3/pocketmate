@@ -69,6 +69,7 @@ interface TransactionGridProps {
     scope: ReclassifyScope
   ) => Promise<{ success: boolean; message: string; updatedTransactionIds: string[] }>;
   onOpenReviewModal?: () => void;
+  onClearMutation?: () => void;
 }
 
 export const TransactionGrid: React.FC<TransactionGridProps> = ({
@@ -79,7 +80,17 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
   onSelectRow,
   onReclassifyTransaction,
   onOpenReviewModal,
+  onClearMutation,
 }) => {
+  // Filter dismissal state to prevent user from being trapped in triage/search filter
+  const [isFilterDismissed, setIsFilterDismissed] = useState<boolean>(false);
+  const [lastMutationState, setLastMutationState] = useState<GridMutationState | null | undefined>(gridMutation);
+
+  // If a new mutation is applied from agent, re-enable filter
+  if (gridMutation !== lastMutationState) {
+    setLastMutationState(gridMutation);
+    setIsFilterDismissed(false);
+  }
   // Reclassification modal state
   const [activeTxForEdit, setActiveTxForEdit] = useState<TransactionRow | null>(null);
   const [selectedNewCategory, setSelectedNewCategory] = useState<string>("");
@@ -312,7 +323,7 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
       );
     }
 
-    if (!gridMutation?.filter) return data;
+    if (!gridMutation?.filter || isFilterDismissed) return data;
 
     return data.filter((row) => {
       for (const [key, val] of Object.entries(gridMutation.filter!)) {
@@ -327,7 +338,7 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
       }
       return true;
     });
-  }, [rowData, gridMutation, selectedCategory]);
+  }, [rowData, gridMutation, selectedCategory, isFilterDismissed]);
 
   return (
     <div className="flex flex-col h-full bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-2xl relative">
@@ -343,6 +354,20 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
             <span className="text-[11px] px-2 py-0.5 rounded bg-blue-950/70 text-blue-300 border border-blue-800/60 font-medium">
               Category: {selectedCategory}
             </span>
+          )}
+          {(Boolean(gridMutation?.filter) && !isFilterDismissed) && (
+            <button
+              type="button"
+              onClick={() => {
+                setIsFilterDismissed(true);
+                onClearMutation?.();
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 text-xs font-semibold shadow-sm transition-all cursor-pointer hover:scale-105 active:scale-95"
+              title="Exit triage mode and restore all transactions"
+            >
+              <X className="w-3.5 h-3.5 text-amber-300" />
+              <span>Exit Triage / Show All</span>
+            </button>
           )}
         </div>
 

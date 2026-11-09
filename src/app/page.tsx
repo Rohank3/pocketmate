@@ -1498,6 +1498,7 @@ export default function Home() {
                       categories={categories}
                       onReclassifyTransaction={handleReclassifyTransaction}
                       onOpenReviewModal={() => setIsReviewModalOpen(true)}
+                      onClearMutation={() => setGridMutation(null)}
                     />
                   )}
                 </div>
