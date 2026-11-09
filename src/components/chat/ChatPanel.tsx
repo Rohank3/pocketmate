@@ -16,6 +16,7 @@ import {
   MessageSquare,
   Clock,
   ChevronDown,
+  Mic,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { ActionConfirmCard, ActionCardData } from "../cards/ActionConfirmCard";
@@ -66,11 +67,81 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
   const [showScrollBottomButton, setShowScrollBottomButton] = useState(false);
 
+  // Web Speech API Voice Recognition State
+  const [isListening, setIsListening] = useState(false);
+  const [speechSupported] = useState(() => {
+    if (typeof window === "undefined") return false;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null);
+
   const feedContainerRef = useRef<HTMLDivElement>(null);
   const isUserScrolledUp = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
+
+  // Initialize Speech Recognition on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = "en-US";
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        recognition.onresult = (event: any) => {
+          let transcript = "";
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            transcript += event.results[i][0].transcript;
+          }
+          if (transcript.trim()) {
+            setInputText((prev) => {
+              const prefix = prev.trim() ? `${prev.trim()} ` : "";
+              return `${prefix}${transcript.trim()}`;
+            });
+          }
+        };
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        recognition.onerror = (event: any) => {
+          console.warn("[Speech Recognition Error]", event?.error);
+          setIsListening(false);
+        };
+
+        recognition.onend = () => {
+          setIsListening(false);
+        };
+
+        recognitionRef.current = recognition;
+      }
+    }
+  }, []);
+
+  const toggleVoiceInput = () => {
+    if (!speechSupported || !recognitionRef.current) {
+      alert("Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari.");
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    } else {
+      try {
+        recognitionRef.current.start();
+        setIsListening(true);
+      } catch (err) {
+        console.warn("[Voice Start Error]", err);
+        setIsListening(false);
+      }
+    }
+  };
 
   const handleFeedScroll = () => {
     if (!feedContainerRef.current) return;
@@ -587,11 +658,43 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             value={inputText}
             maxLength={2000}
             onChange={(e) => setInputText(e.target.value)}
-            placeholder="Type a financial request (e.g. 'split dinner $120 with Dave and Sam', 'did I overspend on dining?')..."
-            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-4 pr-24 py-3 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 transition-all"
+            placeholder={
+              isListening
+                ? "🎙️ Listening... speak your request (tap mic again to pause & review before sending)..."
+                : "Type or speak a request (e.g. 'split ₹2000 dinner with Alex', 'add rent $1200 due on 1st')..."
+            }
+            className={`w-full bg-zinc-950 border rounded-xl pl-4 pr-32 py-3 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none transition-all ${
+              isListening
+                ? "border-rose-500/70 ring-2 ring-rose-500/30 animate-pulse bg-rose-950/10 placeholder-rose-400/80"
+                : "border-zinc-800 focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500"
+            }`}
           />
 
           <div className="absolute right-2 flex items-center gap-1.5">
+            {/* Voice Input (Web Speech API) */}
+            <button
+              type="button"
+              title={
+                !speechSupported
+                  ? "Speech recognition is not supported in this browser"
+                  : isListening
+                  ? "Stop listening & review message"
+                  : "Voice input: speak your expense or request"
+              }
+              onClick={toggleVoiceInput}
+              disabled={!speechSupported}
+              className={`p-1.5 rounded-lg transition-all cursor-pointer relative focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                isListening
+                  ? "bg-rose-500/20 text-rose-400 border border-rose-500/50 shadow-md shadow-rose-500/20"
+                  : "text-zinc-400 hover:text-emerald-400 hover:bg-zinc-800 active:bg-zinc-700 disabled:opacity-40"
+              }`}
+            >
+              {isListening && (
+                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+              )}
+              <Mic className={`w-4 h-4 ${isListening ? "animate-pulse text-rose-400" : ""}`} />
+            </button>
+
             {/* Upload Receipt / Document Image */}
             <button
               type="button"

@@ -377,6 +377,8 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
   // 4. CARD 4: ACTION REQUIRED (TRIAGE LIST)
   // ==========================================
   const actionItems = useMemo<ActionQueueItem[]>(() => {
+    if (!isClient) return [];
+
     const queue: ActionQueueItem[] = [];
 
     // A. Disputed transactions / split mismatches
@@ -480,7 +482,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
     });
 
     return queue;
-  }, [transactions, categoryBars, personalDebtBills, events]);
+  }, [transactions, categoryBars, personalDebtBills, events, isClient]);
 
   return (
     <div ref={containerRef} className="relative mb-6">
