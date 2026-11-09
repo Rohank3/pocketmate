@@ -12,8 +12,9 @@ export interface CategorizedTransactionResult {
   id: string;
   category: string;
   confidence: number;
-  source: "override" | "merchant_rule" | "industry_rule" | "subscription_match" | "gemini_ai" | "fallback_heuristic" | "uncategorized";
+  source: "override" | "merchant_rule" | "gemini_ai" | "uncategorized";
   matchedRuleId?: string;
+  suggestedCategory?: string;
   reasoning?: string;
 }
 
@@ -25,51 +26,6 @@ export interface CategorizationContext {
   merchantRules?: Array<{ id: string; merchantPattern: string; categoryName: string }>;
   overrides?: Array<{ id: string; transactionId: string; categoryName: string }>;
 }
-
-export const INDUSTRY_TAXONOMY_RULES: Record<string, Array<{ pattern: RegExp; category: string }>> = {
-  TECH_SAAS: [
-    { pattern: /aws|google cloud|azure|vercel|github|datadog|mongodb|render|cloudflare|digitalocean/i, category: "Cloud Infrastructure" },
-    { pattern: /openai|anthropic|stripe|twilio|sendgrid|postman|sentry/i, category: "API & Dev Services" },
-    { pattern: /slack|zoom|notion|linear|jira|atlassian|figma/i, category: "Software & SaaS Tools" },
-  ],
-  ECOMMERCE_RETAIL: [
-    { pattern: /ups|fedex|usps|dhl|shipstation|packing|shipping/i, category: "Shipping & Fulfillment" },
-    { pattern: /shopify|stripe|klarna|square|paypal|woocommerce/i, category: "Payment Processing Fees" },
-    { pattern: /warehouse|storage|inventory|supplier|packaging/i, category: "Cost of Goods Sold" },
-  ],
-  HOSPITALITY_FOOD: [
-    { pattern: /wholefoods|trader|us foods|sysco|restaurant depot|meat|produce|baking|coffee|dairy/i, category: "Kitchen Inventory & COGS" },
-    { pattern: /square|toast|clover|pos|linens|dishwashing|cutlery/i, category: "Restaurant Operating Costs" },
-    { pattern: /inspection|liquor|food safety|permit/i, category: "Compliance & Licensing" },
-  ],
-  CREATIVE_STUDIO: [
-    { pattern: /adobe|figma|canva|envato|shutterstock|midjourney|sketch/i, category: "Design Tools & Assets" },
-    { pattern: /b&h|adorama|camera|lens|lighting|audio|microphone/i, category: "Equipment & Production" },
-    { pattern: /dropbox|frame\.io|vimeo|wetransfer/i, category: "Client Deliverables & Storage" },
-  ],
-  CONSULTING_SERVICES: [
-    { pattern: /uber|lyft|airline|delta|united|hotel|marriott|hilton|travel/i, category: "Client Travel & Lodging" },
-    { pattern: /zoom|calendly|docusign|linkedin|research/i, category: "Professional Subscriptions" },
-  ],
-  HEALTHCARE: [
-    { pattern: /medical|pharmacy|supplies|lab|quest|sterilization/i, category: "Medical Supplies" },
-    { pattern: /hipaa|epic|ehr|emr|practice/i, category: "Clinical Software" },
-  ],
-};
-
-const KNOWN_SUBSCRIPTION_KEYWORDS: Array<{ pattern: RegExp; canonicalCategory: string }> = [
-  { pattern: /aws|amazon web services/i, canonicalCategory: "Utilities" },
-  { pattern: /cloudflare/i, canonicalCategory: "Utilities" },
-  { pattern: /netflix/i, canonicalCategory: "Entertainment" },
-  { pattern: /spotify/i, canonicalCategory: "Entertainment" },
-  { pattern: /digital services|streaming/i, canonicalCategory: "Entertainment" },
-  { pattern: /openai|chatgpt/i, canonicalCategory: "Services" },
-  { pattern: /github/i, canonicalCategory: "Services" },
-  { pattern: /google|workspace/i, canonicalCategory: "Services" },
-  { pattern: /adobe/i, canonicalCategory: "Software" },
-  { pattern: /apple/i, canonicalCategory: "Entertainment" },
-  { pattern: /hulu|disney/i, canonicalCategory: "Entertainment" },
-];
 
 export function normalizeMerchant(name: string): string {
   return name
@@ -192,67 +148,11 @@ export async function categorizeTransactionsBatch(
       }
     }
 
-    // 2.5. Industry-Specific Taxonomy Rule matching (if business account has registered industry)
-    if (context.industry && INDUSTRY_TAXONOMY_RULES[context.industry]) {
-      const industryRules = INDUSTRY_TAXONOMY_RULES[context.industry];
-      let matchedIndustryCat: string | null = null;
-      for (const ir of industryRules) {
-        if (ir.pattern.test(tx.merchantName) || (tx.note && ir.pattern.test(tx.note))) {
-          const found = categoryNames.find(
-            (c) =>
-              c.toLowerCase() === ir.category.toLowerCase() ||
-              c.toLowerCase().includes(ir.category.toLowerCase().split(" ")[0])
-          );
-          matchedIndustryCat = found || ir.category;
-          break;
-        }
-      }
-
-      if (matchedIndustryCat) {
-        results.set(tx.id, {
-          id: tx.id,
-          category: matchedIndustryCat,
-          confidence: 0.96,
-          source: "industry_rule",
-          reasoning: `Matched registered ${context.industry} industry taxonomy rule.`,
-        });
-        continue;
-      }
-    }
-
-    // 3. Known subscription provider matching
-    let subscriptionCategory: string | null = null;
-    for (const sub of KNOWN_SUBSCRIPTION_KEYWORDS) {
-      if (sub.pattern.test(tx.merchantName)) {
-        // Find if user has a corresponding category
-        const directMatch = categoryNames.find(
-          (c) =>
-            c.toLowerCase() === sub.canonicalCategory.toLowerCase() ||
-            c.toLowerCase().includes("subscri") ||
-            c.toLowerCase().includes("util")
-        );
-        if (directMatch) {
-          subscriptionCategory = directMatch;
-          break;
-        }
-      }
-    }
-
-    if (subscriptionCategory) {
-      results.set(tx.id, {
-        id: tx.id,
-        category: subscriptionCategory,
-        confidence: 0.95,
-        source: "subscription_match",
-      });
-      continue;
-    }
-
     // Queue for Gemini AI zero-shot classification
     unclassifiedForAI.push(tx);
   }
 
-  // 4. Gemini Zero-Shot AI Classification
+  // 3. Gemini Zero-Shot AI Classification
   if (unclassifiedForAI.length > 0 && categoryNames.length > 0) {
     try {
       const aiResults = await classifyWithGeminiZeroShot(
@@ -266,19 +166,20 @@ export async function categorizeTransactionsBatch(
         results.set(txId, res);
       }
     } catch (err) {
-      console.warn("[Categorizer] Gemini AI batch classification failed, invoking resilient fallback:", err);
+      console.warn("[Categorizer] Gemini AI batch classification failed:", err);
     }
   }
 
-  // 5. Fallback for any transactions still unclassified
+  // 4. Default unclassified transactions to Uncategorized with 0 confidence (no hardcoded guesses)
   for (const tx of transactions) {
     if (!results.has(tx.id)) {
-      const fallbackCat = heuristicCategoryMatch(tx, categoryNames);
       results.set(tx.id, {
         id: tx.id,
-        category: fallbackCat || "Uncategorized",
-        confidence: fallbackCat ? 0.75 : 0.0,
-        source: fallbackCat ? "fallback_heuristic" : "uncategorized",
+        category: "Uncategorized",
+        confidence: 0.0,
+        source: "uncategorized",
+        suggestedCategory: "Uncategorized",
+        reasoning: "Awaiting user category assignment.",
       });
     }
   }
@@ -312,9 +213,9 @@ AVAILABLE CATEGORIES:
 [${categoryListStr}]
 
 RULES:
-1. Note Precedence: If the user provided a "note", prioritize the note over the merchant name (e.g. Merchant "Target" with note "team lunch" belongs in a food/dining category).
-2. Entity Understanding: Use real-world vendor understanding (e.g., Chipotle/Starbucks -> Dining, Shell/Chevron -> Travel/Gas, Zara/H&M -> Shopping).
-3. Missing Fit: If NO category in the Available Categories list is a genuine fit, or confidence is under 0.80, categorize as "Uncategorized".
+1. Note Precedence: If the user provided a "note", prioritize the note over the merchant name.
+2. Entity Understanding: Use real-world vendor understanding to classify transactions accurately into the available categories.
+3. Missing Fit: If NO category in the Available Categories list is a genuine fit, categorize as "Uncategorized".
 4. Output Schema: Return ONLY valid JSON array with objects formatted as:
 [
   {
@@ -322,7 +223,7 @@ RULES:
     "category": "exact category name from list or 'Uncategorized'",
     "confidence": 0.0 to 1.0,
     "reasoning": "brief explanation",
-    "isAutoLearnable": boolean (true if merchant has a definitive single-purpose identity, without specific one-off notes)
+    "isAutoLearnable": boolean (true if merchant has a definitive single-purpose identity)
   }
 ]
 
@@ -384,7 +285,8 @@ ${JSON.stringify(
       results.set(item.id, {
         id: item.id,
         category: finalCategory,
-        confidence: item.confidence ?? (isHighConfidence ? 0.85 : 0.0),
+        suggestedCategory: matchedName || item.category || "Uncategorized",
+        confidence: item.confidence ?? (isHighConfidence ? 0.9 : 0.0),
         source: "gemini_ai",
         reasoning: item.reasoning,
       });
@@ -419,112 +321,6 @@ ${JSON.stringify(
     console.warn("[Categorizer] Gemini network call error or timeout:", error);
     return results;
   }
-}
-
-/**
- * Heuristic fallback matching for common merchant keywords against user's categories.
- */
-function heuristicCategoryMatch(
-  tx: TransactionForCategorization,
-  availableCategories: string[]
-): string | null {
-  const m = tx.merchantName.toLowerCase();
-  const lowerCats = availableCategories.map((c) => ({ name: c, lower: c.toLowerCase() }));
-
-  const findCat = (keywords: string[]): string | null => {
-    const matched = lowerCats.find((c) => keywords.some((kw) => c.lower.includes(kw)));
-    return matched ? matched.name : null;
-  };
-
-  if (
-    m.includes("bar") ||
-    m.includes("diner") ||
-    m.includes("coffee") ||
-    m.includes("bistro") ||
-    m.includes("restaurant") ||
-    m.includes("cafe") ||
-    m.includes("chipotle") ||
-    m.includes("starbucks") ||
-    m.includes("taco") ||
-    m.includes("pizza") ||
-    m.includes("lunch") ||
-    m.includes("dinner") ||
-    m.includes("moreau")
-  ) {
-    return findCat(["dining", "food", "restaurant", "meal"]);
-  }
-  if (
-    m.includes("hotel") ||
-    m.includes("inn") ||
-    m.includes("resort") ||
-    m.includes("lodging") ||
-    m.includes("grand vista") ||
-    m.includes("roma") ||
-    m.includes("transit") ||
-    m.includes("metro") ||
-    m.includes("uber") ||
-    m.includes("lyft") ||
-    m.includes("flight") ||
-    m.includes("airline") ||
-    m.includes("shell") ||
-    m.includes("oil") ||
-    m.includes("gas") ||
-    m.includes("eurostar") ||
-    m.includes("airalo")
-  ) {
-    return findCat(["travel", "transport", "transit", "commute", "lodging"]) || findCat(["utilities", "living"]);
-  }
-  if (
-    m.includes("whole foods") ||
-    m.includes("trader joe") ||
-    m.includes("grocer") ||
-    m.includes("market") ||
-    m.includes("safeway") ||
-    m.includes("kroger")
-  ) {
-    return findCat(["grocer", "food", "market", "shopping"]);
-  }
-  if (
-    m.includes("target") ||
-    m.includes("amazon") ||
-    m.includes("zara") ||
-    m.includes("h&m") ||
-    m.includes("clothing") ||
-    m.includes("mall") ||
-    m.includes("shop")
-  ) {
-    return findCat(["shopping", "retail", "clothing"]) || findCat(["groceries", "living"]);
-  }
-  if (
-    m.includes("netflix") ||
-    m.includes("spotify") ||
-    m.includes("lane") ||
-    m.includes("bowling") ||
-    m.includes("bowlero") ||
-    m.includes("movie") ||
-    m.includes("cinema") ||
-    m.includes("amc") ||
-    m.includes("theatre") ||
-    m.includes("gaming") ||
-    m.includes("playstation") ||
-    m.includes("steam") ||
-    m.includes("equinox") ||
-    m.includes("fitness") ||
-    m.includes("gym")
-  ) {
-    return findCat(["entertain", "fun", "leisure", "social"]) || findCat(["subscriptions", "wellness", "health"]);
-  }
-  if (
-    m.includes("google cloud") ||
-    m.includes("storage") ||
-    m.includes("aws") ||
-    m.includes("github") ||
-    m.includes("hosting")
-  ) {
-    return findCat(["utilities", "subscription", "work", "tech"]) || findCat(["shopping"]);
-  }
-
-  return null;
 }
 
 /**

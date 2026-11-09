@@ -35,13 +35,20 @@ export const CategoryTriageCard: React.FC<CategoryTriageCardProps> = ({
 }) => {
   const [loadingScope, setLoadingScope] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [targetCategory, setTargetCategory] = useState<string>(cardData.suggestedCategory || "General");
+  const defaultCat =
+    cardData.suggestedCategory && cardData.suggestedCategory !== "Uncategorized"
+      ? cardData.suggestedCategory
+      : categories[0]?.name || "Uncategorized";
+  const [targetCategory, setTargetCategory] = useState<string>(defaultCat);
   const [isCustom, setIsCustom] = useState<boolean>(false);
   const [customCategory, setCustomCategory] = useState<string>("");
 
   const handleScopeSelect = async (scope: "single" | "merchant" | "similar") => {
     if (!onAssignCategory) return;
-    const effectiveCategory = (isCustom && customCategory.trim()) ? customCategory.trim() : (targetCategory || "General");
+    const effectiveCategory =
+      isCustom && customCategory.trim()
+        ? customCategory.trim()
+        : targetCategory || defaultCat;
     setLoadingScope(scope);
 
     try {
@@ -129,9 +136,11 @@ export const CategoryTriageCard: React.FC<CategoryTriageCardProps> = ({
                 className="bg-zinc-950 border border-zinc-700 hover:border-zinc-500 text-emerald-300 font-semibold px-2.5 py-1 rounded-lg focus:outline-none focus:border-emerald-500 cursor-pointer text-xs transition-colors"
                 aria-label="Select target category"
               >
-                <option value={cardData.suggestedCategory}>
-                  {cardData.suggestedCategory} (Suggested)
-                </option>
+                {cardData.suggestedCategory && cardData.suggestedCategory !== "Uncategorized" && (
+                  <option value={cardData.suggestedCategory}>
+                    {cardData.suggestedCategory} (Suggested)
+                  </option>
+                )}
                 {categories
                   .filter((c) => c.name.toLowerCase() !== (cardData.suggestedCategory || "").toLowerCase())
                   .map((c) => (

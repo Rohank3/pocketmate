@@ -58,25 +58,12 @@ export const UncategorizedReviewModal: React.FC<UncategorizedReviewModalProps> =
           { id: "c5", name: "Travel", color: "#f59e0b" },
         ];
 
-  // Smart heuristic suggestion based on merchant/memo keywords
+  // Dynamically resolve category from active user categories without hardcoded merchant heuristics
   const getSmartSuggestion = (t: UncategorizedTx): string => {
-    const text = `${t.merchant} ${t.memo || ""}`.toLowerCase();
-    if (text.includes("hotel") || text.includes("vista") || text.includes("uber") || text.includes("flight") || text.includes("travel")) {
-      return "Travel";
+    if (t.category && t.category.toLowerCase() !== "uncategorized" && t.category !== "—") {
+      return t.category;
     }
-    if (text.includes("bistro") || text.includes("cafe") || text.includes("starbucks") || text.includes("chipotle") || text.includes("tacos") || text.includes("dining") || text.includes("restaurant") || text.includes("coffee") || text.includes("lunch")) {
-      return "Dining";
-    }
-    if (text.includes("wholefoods") || text.includes("trader") || text.includes("market") || text.includes("grocery") || text.includes("food")) {
-      return "Groceries";
-    }
-    if (text.includes("netflix") || text.includes("spotify") || text.includes("bowlero") || text.includes("amc") || text.includes("theatre") || text.includes("cinema") || text.includes("game")) {
-      return "Entertainment";
-    }
-    if (text.includes("target") || text.includes("amazon") || text.includes("store") || text.includes("mall") || text.includes("shoes") || text.includes("apparel")) {
-      return "Shopping";
-    }
-    return activeCategoryList[0]?.name || "Dining";
+    return activeCategoryList[0]?.name || "Uncategorized";
   };
 
   const handleSelectCategory = async (tx: UncategorizedTx, categoryName: string) => {

@@ -82,7 +82,7 @@ const TRANSFER_PURPOSES = [
   "Rent",
   "Utilities",
   "Services",
-  "General",
+  "Miscellaneous",
 ] as const;
 
 export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
@@ -155,7 +155,10 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
           transactionId: cardData.transactionId || cardData.invoiceId || "",
           merchantName: cardData.merchantName || cardData.merchant || "Merchant",
           amount: cardData.amount || cardData.totalAmount,
-          suggestedCategory: cardData.suggestedCategory || cardData.category || "General",
+          suggestedCategory:
+            cardData.suggestedCategory ||
+            cardData.category ||
+            (categories.length > 0 ? categories[0].name : "Uncategorized"),
           confidence: cardData.confidence,
           reasoning: cardData.reasoning || cardData.note,
         }}

@@ -77,20 +77,18 @@ export async function POST(req: NextRequest) {
           catContext
         );
         const aiItem = aiResults.get(nextTx.id);
-        const suggested =
-          aiItem?.category && aiItem.category.toLowerCase() !== "uncategorized"
-            ? aiItem.category
-            : catContext.activeCategories?.[0]?.name || "General";
 
         nextSuggestion = {
           transactionId: nextTx.id,
           merchantName: nextTx.merchantName,
           amount: nextTx.amount,
-          suggestedCategory: suggested,
-          confidence: aiItem?.confidence ?? 0.85,
-          reasoning:
-            aiItem?.reasoning ||
-            `Categorized by Gemini AI based on merchant profile and budget taxonomy.`,
+          suggestedCategory:
+            aiItem?.suggestedCategory ||
+            (aiItem?.category && aiItem.category !== "Uncategorized"
+              ? aiItem.category
+              : catContext.activeCategories?.[0]?.name || "Uncategorized"),
+          confidence: aiItem?.confidence ?? 0,
+          reasoning: aiItem?.reasoning || "",
           remainingCount: remaining.length,
         };
       } catch (aiErr) {
@@ -99,9 +97,9 @@ export async function POST(req: NextRequest) {
           transactionId: nextTx.id,
           merchantName: nextTx.merchantName,
           amount: nextTx.amount,
-          suggestedCategory: "General",
-          confidence: 0.7,
-          reasoning: `Found ${remaining.length} unclassified transactions. Review '${nextTx.merchantName}' to assign scope.`,
+          suggestedCategory: "Uncategorized",
+          confidence: 0,
+          reasoning: "",
           remainingCount: remaining.length,
         };
       }
