@@ -2,19 +2,27 @@
 
 import React, { useState } from "react";
 import { Send, CheckCircle, XCircle, Loader2, CreditCard, Users, ShieldAlert } from "lucide-react";
+import { InteractiveSplitCard } from "./InteractiveSplitCard";
+import { CategoryTriageCard } from "./CategoryTriageCard";
 
 export interface ActionCardData {
-  action?: "DISPATCH_INVOICES" | "DISPATCH_PAYOUT" | "CREATE_SPLIT" | string;
+  action?: "DISPATCH_INVOICES" | "DISPATCH_PAYOUT" | "CREATE_SPLIT" | "PROPOSE_SPLIT_BREAKDOWN" | "CATEGORY_TRIAGE" | string;
   type?: string;
   category?: string;
   invoiceId?: string;
+  transactionId?: string;
   merchant?: string;
+  merchantName?: string;
   totalRecipients?: number;
   totalAmount?: number;
   recipientName?: string;
   recipientEmail?: string;
   amount?: number;
   note?: string;
+  memo?: string;
+  suggestedCategory?: string;
+  confidence?: number;
+  reasoning?: string;
   requiresConfirmation?: boolean;
   actions?: Array<{
     label: string;
@@ -27,12 +35,26 @@ export interface ActionCardData {
     amount: number;
     description: string;
   }>;
+  participants?: Array<{
+    name: string;
+    email?: string;
+    amount: number;
+    isHost?: boolean;
+    isLocked?: boolean;
+    note?: string;
+  }>;
 }
 
 interface ActionConfirmCardProps {
   cardData: ActionCardData;
   onConfirm: (cardData: ActionCardData) => Promise<void>;
   onCancel: () => void;
+  onAssignCategory?: (
+    transactionId: string,
+    merchantName: string,
+    targetCategory: string,
+    scope: "single" | "merchant" | "similar"
+  ) => Promise<{ success: boolean; message: string; updatedTransactionIds?: string[] }>;
 }
 
 const TRANSFER_PURPOSES = [
@@ -50,6 +72,7 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
   cardData,
   onConfirm,
   onCancel,
+  onAssignCategory,
 }) => {
   const [loading, setLoading] = useState(false);
   const [completed, setCompleted] = useState<string | false>(false);
@@ -103,6 +126,36 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
           <span className="text-zinc-500">No funds transferred or invoices dispatched.</span>
         </div>
       </div>
+    );
+  }
+
+  // Interactive Split Breakdown Card (Gemini differential bill splitting)
+  if (cardData.action === "PROPOSE_SPLIT_BREAKDOWN" || cardData.type === "split_breakdown") {
+    return (
+      <InteractiveSplitCard
+        cardData={cardData}
+        onConfirm={onConfirm}
+        onCancel={handleCancel}
+      />
+    );
+  }
+
+  // Interactive Categorization Triage Card (3-scope one-tap selection)
+  if (cardData.action === "CATEGORY_TRIAGE" || cardData.type === "category_triage") {
+    return (
+      <CategoryTriageCard
+        cardData={{
+          action: "CATEGORY_TRIAGE",
+          transactionId: cardData.transactionId || cardData.invoiceId || "",
+          merchantName: cardData.merchantName || cardData.merchant || "Merchant",
+          amount: cardData.amount || cardData.totalAmount,
+          suggestedCategory: cardData.suggestedCategory || cardData.category || "General",
+          confidence: cardData.confidence,
+          reasoning: cardData.reasoning || cardData.note,
+        }}
+        onAssignCategory={onAssignCategory}
+        onCancel={handleCancel}
+      />
     );
   }
 

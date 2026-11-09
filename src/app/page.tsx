@@ -1351,6 +1351,7 @@ export default function Home() {
             onUploadReceipt={handleUploadReceipt}
             onConfirmAction={handleConfirmAction}
             onCancelAction={handleCancelAction}
+            onAssignCategory={handleReclassifyTransaction}
             onNewChat={handleNewChat}
             onSelectThread={handleSelectThread}
             onRenameThread={handleRenameThread}

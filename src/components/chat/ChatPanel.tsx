@@ -40,6 +40,12 @@ interface ChatPanelProps {
   onUploadReceipt: (file: File) => void;
   onConfirmAction: (cardData: ActionCardData) => Promise<void>;
   onCancelAction?: (messageId: string) => void;
+  onAssignCategory?: (
+    transactionId: string,
+    merchantName: string,
+    targetCategory: string,
+    scope: "single" | "merchant" | "similar"
+  ) => Promise<{ success: boolean; message: string; updatedTransactionIds?: string[] }>;
   onNewChat?: () => void;
   onSelectThread?: (threadId: string) => void;
   onRenameThread?: (threadId: string, newTitle: string) => Promise<void> | void;
@@ -55,6 +61,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   onUploadReceipt,
   onConfirmAction,
   onCancelAction,
+  onAssignCategory,
   onNewChat,
   onSelectThread,
   onRenameThread,
@@ -604,6 +611,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                   cardData={m.actionCard}
                   onConfirm={onConfirmAction}
                   onCancel={() => onCancelAction?.(m.id)}
+                  onAssignCategory={onAssignCategory}
                 />
               )}
             </div>
