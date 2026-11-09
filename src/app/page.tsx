@@ -20,8 +20,6 @@ import {
   CreditCard,
   CalendarDays,
   Sparkles,
-  DollarSign,
-  ExternalLink,
   RefreshCw,
   Table2,
   BarChart3,
@@ -1173,23 +1171,6 @@ export default function Home() {
     );
   };
 
-  // User pending incoming bill detection for top alert banner
-  const currentUserNameLower = (currentUser?.name || "").toLowerCase().trim();
-  const debtorPendingTxs = transactions.filter(
-    (t) =>
-      (t.status === "pending" || t.status === "disputed" || t.status === "unresolved") &&
-      (t.id.startsWith("INV2-") || (t.debtor_name && !t.debtor_name.toLowerCase().includes("self")))
-  );
-  const userOwedBills = currentUser
-    ? debtorPendingTxs.filter((t) => {
-        if (t.id.startsWith("INV2-") && t.status === "pending") return true;
-        const d = (t.debtor_name || "").toLowerCase().trim();
-        return currentUserNameLower && d.length > 0 && (d.includes(currentUserNameLower) || currentUserNameLower.includes(d));
-      })
-    : [];
-  const isUserDebtor = userOwedBills.length > 0;
-  const firstUnpaidBill = isUserDebtor ? userOwedBills[0] : null;
-
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col p-3 md:p-6 lg:p-8">
       {/* Top Bar / Branding */}
@@ -1276,41 +1257,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Incoming Invoice Alert Banner (Shown when active user has a pending bill) */}
-      {firstUnpaidBill && activeScope === "personal" && (
-        <div className="mb-6 p-4 rounded-xl bg-blue-950/40 border border-blue-500/40 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-lg shadow-blue-950/50">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
-              <DollarSign className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h4 className="text-xs font-bold text-zinc-100">
-                  Incoming PayPal Sandbox Invoice: {firstUnpaidBill.id}
-                </h4>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium">
-                  Payment Due
-                </span>
-              </div>
-              <p className="text-xs text-zinc-400 mt-0.5">
-                <span className="text-zinc-200 font-semibold">{firstUnpaidBill.merchant}</span> &mdash; Pending allocation of <span className="text-emerald-400 font-mono font-bold">${firstUnpaidBill.amount.toFixed(2)} USD</span> for {currentUser?.name || "Dave Chen"}.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2.5 self-end sm:self-auto shrink-0">
-            <button
-              onClick={() => {
-                handleSendMessage(`Review incoming invoice ${firstUnpaidBill.id} for $${firstUnpaidBill.amount.toFixed(2)} from ${firstUnpaidBill.merchant}`);
-              }}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md shadow-blue-600/30 cursor-pointer transition-all"
-            >
-              <span>Review in Chat</span>
-              <ExternalLink className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* 4 Functional Everyday Actionable Financial Metrics Row with Interactive Hover Flyouts */}
       <FunctionalMetricsRow

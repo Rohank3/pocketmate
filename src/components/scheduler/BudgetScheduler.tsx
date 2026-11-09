@@ -53,7 +53,6 @@ export interface BudgetSchedulerProps {
 
 export default function BudgetScheduler({
   categories = [],
-  selectedCategory = "all",
   events: propEvents,
   onAddEvent,
   onDeleteEvent,
@@ -62,6 +61,7 @@ export default function BudgetScheduler({
 }: BudgetSchedulerProps) {
   const [viewMode, setViewMode] = useState<"calendar" | "agenda">("calendar");
   const [internalEvents, setInternalEvents] = useState<ScheduledEvent[]>([]);
+  const [calendarCategory, setCalendarCategory] = useState<string>("all");
   const events = propEvents !== undefined ? propEvents : internalEvents;
   const setEvents = (updater: React.SetStateAction<ScheduledEvent[]>) => {
     setInternalEvents(updater);
@@ -177,16 +177,16 @@ export default function BudgetScheduler({
     setModalEndDate("");
   };
 
-  // Filtered events
+  // Filtered events (decoupled from global ledger selection so all subscriptions are visible by default)
   const displayedEvents = useMemo(() => {
     return events.filter((e) => {
       const matchType = filterType === "all" || e.type === filterType;
       const matchCat =
-        selectedCategory.toLowerCase() === "all" ||
-        e.category.toLowerCase() === selectedCategory.toLowerCase();
+        calendarCategory.toLowerCase() === "all" ||
+        e.category.toLowerCase() === calendarCategory.toLowerCase();
       return matchType && matchCat;
     });
-  }, [events, filterType, selectedCategory]);
+  }, [events, filterType, calendarCategory]);
 
   // Current date string for strict future completion prevention
   const todayDateStr = useMemo(() => {
@@ -516,8 +516,8 @@ export default function BudgetScheduler({
           </button>
         </div>
 
-        {/* Directional Type Filters */}
-        <div className="flex items-center gap-1.5 text-xs">
+        {/* Directional Type Filters & In-Calendar Category Filter */}
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
           <span className="text-zinc-500 text-[11px] hidden sm:inline">Filter:</span>
           <button
             onClick={() => setFilterType("all")}
@@ -553,6 +553,30 @@ export default function BudgetScheduler({
             <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
             Bills (Money Out)
           </button>
+
+          {/* In-Calendar Category Dropdown */}
+          <select
+            value={calendarCategory}
+            onChange={(e) => setCalendarCategory(e.target.value)}
+            className="bg-zinc-950 border border-zinc-800 text-[11px] text-zinc-300 rounded-md px-2 py-1 font-medium focus:outline-none focus:border-zinc-700 cursor-pointer ml-1"
+            aria-label="Filter calendar events by category"
+          >
+            <option value="all">All Categories</option>
+            {categories.map((c) => (
+              <option key={c.id || c.name} value={c.name}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+
+          {calendarCategory !== "all" && (
+            <button
+              onClick={() => setCalendarCategory("all")}
+              className="text-[10px] text-blue-400 hover:text-blue-300 underline font-medium cursor-pointer"
+            >
+              Reset
+            </button>
+          )}
         </div>
       </div>
 
