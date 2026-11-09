@@ -49,10 +49,10 @@ export async function GET(req: NextRequest) {
     if (catCount === 0) {
       await prisma.budgetCategory.createMany({
         data: [
-          { userId: user.id, name: "Groceries", monthlyCap: 400.0, currentSpent: 0.0, color: "#10b981" },
-          { userId: user.id, name: "Dining", monthlyCap: 250.0, currentSpent: 0.0, color: "#3b82f6" },
-          { userId: user.id, name: "Shopping", monthlyCap: 300.0, currentSpent: 0.0, color: "#ec4899" },
-          { userId: user.id, name: "Entertainment", monthlyCap: 200.0, currentSpent: 0.0, color: "#8b5cf6" },
+          { userId: user.id, name: "Groceries", monthlyCap: 400.0, currentSpent: 0.0, color: "#10b981", alertThreshold: 0.80, softCap: 320.0 },
+          { userId: user.id, name: "Dining", monthlyCap: 250.0, currentSpent: 0.0, color: "#3b82f6", alertThreshold: 0.80, softCap: 200.0 },
+          { userId: user.id, name: "Shopping", monthlyCap: 300.0, currentSpent: 0.0, color: "#ec4899", alertThreshold: 0.80, softCap: 240.0 },
+          { userId: user.id, name: "Entertainment", monthlyCap: 200.0, currentSpent: 0.0, color: "#8b5cf6", alertThreshold: 0.80, softCap: 160.0 },
         ],
       });
     }

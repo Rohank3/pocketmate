@@ -69,6 +69,21 @@ export async function POST(req: NextRequest) {
 
     const { title, amount, date, dayOfMonth, type, category, counterparty, status } = parseResult.data;
 
+    const titleLower = title.toLowerCase();
+    if (
+      titleLower.includes("alert") ||
+      titleLower.includes("soft cap") ||
+      titleLower.includes("threshold")
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Budget threshold alerts and soft caps must be configured on budget categories, not scheduled as payment events.",
+        },
+        { status: 400 }
+      );
+    }
+
     const created = await prisma.scheduledEvent.create({
       data: {
         userId,

@@ -8,6 +8,8 @@ const CreateCategorySchema = z.object({
   name: z.string().trim().min(1, "Category name is required").max(50, "Name must be 50 characters or less"),
   monthlyCap: z.number().finite().nonnegative("Monthly cap must be non-negative").max(1000000),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Must be a valid hex color code").default("#3b82f6"),
+  alertThreshold: z.number().min(0.01).max(1.0).default(0.80).optional(),
+  softCap: z.number().nonnegative().max(1000000).optional(),
 });
 
 const UpdateCategorySchema = z.object({
@@ -15,6 +17,8 @@ const UpdateCategorySchema = z.object({
   monthlyCap: z.number().finite().nonnegative().max(1000000).optional(),
   name: z.string().trim().min(1).max(50).optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  alertThreshold: z.number().min(0.01).max(1.0).optional(),
+  softCap: z.number().nonnegative().max(1000000).optional(),
   reinitialize: z.boolean().default(false).optional(),
 });
 
@@ -32,10 +36,10 @@ export async function GET(req: NextRequest) {
     if (categories.length === 0) {
       await prisma.budgetCategory.createMany({
         data: [
-          { userId, name: "Groceries", monthlyCap: 400.0, currentSpent: 0.0, color: "#10b981" },
-          { userId, name: "Dining", monthlyCap: 250.0, currentSpent: 0.0, color: "#3b82f6" },
-          { userId, name: "Shopping", monthlyCap: 300.0, currentSpent: 0.0, color: "#ec4899" },
-          { userId, name: "Entertainment", monthlyCap: 200.0, currentSpent: 0.0, color: "#8b5cf6" },
+          { userId, name: "Groceries", monthlyCap: 400.0, currentSpent: 0.0, color: "#10b981", alertThreshold: 0.80, softCap: 320.0 },
+          { userId, name: "Dining", monthlyCap: 250.0, currentSpent: 0.0, color: "#3b82f6", alertThreshold: 0.80, softCap: 200.0 },
+          { userId, name: "Shopping", monthlyCap: 300.0, currentSpent: 0.0, color: "#ec4899", alertThreshold: 0.80, softCap: 240.0 },
+          { userId, name: "Entertainment", monthlyCap: 200.0, currentSpent: 0.0, color: "#8b5cf6", alertThreshold: 0.80, softCap: 160.0 },
         ],
       });
       categories = await prisma.budgetCategory.findMany({
@@ -71,7 +75,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { name, monthlyCap, color } = parseResult.data;
+    const { name, monthlyCap, color, alertThreshold, softCap } = parseResult.data;
+    const computedSoftCap = softCap ?? (monthlyCap * (alertThreshold ?? 0.80));
 
     const created = await prisma.budgetCategory.upsert({
       where: {
@@ -83,6 +88,8 @@ export async function POST(req: NextRequest) {
       update: {
         monthlyCap,
         color,
+        ...(alertThreshold !== undefined ? { alertThreshold } : {}),
+        softCap: computedSoftCap,
       },
       create: {
         userId,
@@ -90,6 +97,8 @@ export async function POST(req: NextRequest) {
         monthlyCap,
         color,
         currentSpent: 0,
+        alertThreshold: alertThreshold ?? 0.80,
+        softCap: computedSoftCap,
       },
     });
 
@@ -120,7 +129,7 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    const { id, monthlyCap, name, color, reinitialize } = parseResult.data;
+    const { id, monthlyCap, name, color, alertThreshold, softCap, reinitialize } = parseResult.data;
 
     const existing = await prisma.budgetCategory.findFirst({
       where: { id, userId },
@@ -129,6 +138,10 @@ export async function PATCH(req: NextRequest) {
     if (!existing) {
       return NextResponse.json({ error: "Category not found or access denied" }, { status: 404 });
     }
+
+    const newCap = monthlyCap !== undefined ? monthlyCap : existing.monthlyCap;
+    const newThreshold = alertThreshold !== undefined ? alertThreshold : (existing.alertThreshold ?? 0.80);
+    const newSoftCap = softCap !== undefined ? softCap : (newCap * newThreshold);
 
     const newName = name && name.trim() ? name.trim() : undefined;
     if (newName && newName.toLowerCase() !== existing.name.toLowerCase()) {
@@ -156,6 +169,8 @@ export async function PATCH(req: NextRequest) {
         ...(monthlyCap !== undefined ? { monthlyCap } : {}),
         ...(newName !== undefined ? { name: newName } : {}),
         ...(color !== undefined ? { color } : {}),
+        ...(alertThreshold !== undefined ? { alertThreshold } : {}),
+        softCap: newSoftCap,
       },
     });
 
