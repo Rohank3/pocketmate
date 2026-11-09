@@ -122,6 +122,17 @@ export const CheckBudgetStatusSchema = z.object({
     .refine((val) => !PROTOTYPE_POLLUTION_KEYS.has(val), "Invalid category name."),
 });
 
+export const ConfigureBudgetAlertSchema = z.object({
+  categoryName: z
+    .string()
+    .trim()
+    .min(1)
+    .max(50)
+    .refine((val) => !PROTOTYPE_POLLUTION_KEYS.has(val), "Invalid category name."),
+  thresholdPercent: z.number().min(1).max(100).default(80).optional(),
+  softCapAmount: z.number().positive().max(1000000).optional(),
+});
+
 const SAFE_FILTER_KEYS = new Set([
   "id",
   "date",
@@ -405,6 +416,19 @@ export const agentToolDeclarations = [
         category: { type: "STRING" },
       },
       required: ["category"],
+    },
+  },
+  {
+    name: "configure_budget_alert",
+    description: "Configures a proactive budget threshold warning or soft-cap alert for a category (e.g. alert me at 80% or $120 spent on Entertainment). Never creates a scheduled bill or debt.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        categoryName: { type: "STRING", description: "Target category name, e.g. Entertainment, Groceries, Dining." },
+        thresholdPercent: { type: "NUMBER", description: "Spending threshold percentage to trigger alert (e.g. 80 for 80%). Default is 80." },
+        softCapAmount: { type: "NUMBER", description: "Optional dollar amount threshold to trigger alert (e.g. 120.00)." },
+      },
+      required: ["categoryName"],
     },
   },
   {
@@ -868,6 +892,18 @@ export async function executeAgentTool(
       const { title, amount, date, dayOfMonth, type, category, counterparty } =
         AddScheduledEventSchema.parse(safeArgs);
 
+      const titleLower = title.toLowerCase();
+      if (
+        titleLower.includes("alert") ||
+        titleLower.includes("soft cap") ||
+        titleLower.includes("threshold")
+      ) {
+        return {
+          success: false,
+          error: "Budget threshold alerts and soft caps must be configured using 'configure_budget_alert', not 'add_scheduled_event'. Scheduled events are strictly reserved for actual calendar payment commitments.",
+        };
+      }
+
       const today = new Date();
       let eventDate = date;
       const targetDay = dayOfMonth ?? (date ? parseInt(date.slice(8, 10), 10) : today.getDate());
@@ -1046,6 +1082,56 @@ export async function executeAgentTool(
       };
     }
 
+    case "configure_budget_alert": {
+      const { categoryName, thresholdPercent, softCapAmount } =
+        ConfigureBudgetAlertSchema.parse(safeArgs);
+
+      let updatedCategory = null;
+      let targetMonthlyCap = 150;
+      let pct = thresholdPercent ?? 80;
+
+      if (userId) {
+        try {
+          const userCategories = await prisma.budgetCategory.findMany({
+            where: { userId },
+          });
+          const match = userCategories.find(
+            (c) => c.name.toLowerCase() === categoryName.toLowerCase()
+          );
+          if (match) {
+            targetMonthlyCap = match.monthlyCap;
+            let computedSoftCap: number;
+            if (softCapAmount !== undefined) {
+              computedSoftCap = softCapAmount;
+              pct = Math.round((softCapAmount / match.monthlyCap) * 100);
+            } else {
+              computedSoftCap = match.monthlyCap * (pct / 100);
+            }
+            updatedCategory = await prisma.budgetCategory.update({
+              where: { id: match.id },
+              data: {
+                alertThreshold: pct / 100,
+                softCap: computedSoftCap,
+              },
+            });
+          }
+        } catch (dbErr) {
+          console.warn("[ConfigureBudgetAlert DB Warning]", dbErr);
+        }
+      }
+
+      const effectiveSoftCap = softCapAmount ?? (targetMonthlyCap * (pct / 100));
+
+      return {
+        success: true,
+        category: updatedCategory?.name || categoryName,
+        monthlyCap: updatedCategory?.monthlyCap || targetMonthlyCap,
+        thresholdPercent: pct,
+        softCap: updatedCategory?.softCap || effectiveSoftCap,
+        message: `Proactive budget threshold alert configured for ${updatedCategory?.name || categoryName} at ${pct}% ($${effectiveSoftCap.toFixed(2)} of $${targetMonthlyCap.toFixed(2)} monthly ceiling). You will be notified before any overrun occurs without generating any scheduled bills.`,
+      };
+    }
+
     case "mutate_ag_grid": {
       const mutation = MutateAGGridSchema.parse(rawArgs);
       return {
@@ -1196,7 +1282,11 @@ export async function executeAgentTool(
       if (uncategorizedCount > 0) {
         const firstUncat = txs.find((t) => (categoryMap.get(t.id)?.category || "Uncategorized") === "Uncategorized");
         if (firstUncat) {
-          const fallbackCat = catContext.activeCategories?.[0]?.name || "Services";
+          const res = categoryMap.get(firstUncat.id);
+          const suggested =
+            res?.suggestedCategory && res.suggestedCategory.toLowerCase() !== "uncategorized"
+              ? res.suggestedCategory
+              : (catContext.activeCategories?.[0]?.name || "Uncategorized");
           return {
             success: true,
             scannedCount: txs.length,
@@ -1211,10 +1301,12 @@ export async function executeAgentTool(
             merchant: firstUncat.merchantName,
             amount: firstUncat.amount,
             totalAmount: firstUncat.amount,
-            suggestedCategory: fallbackCat,
-            category: fallbackCat,
-            confidence: 0.75,
-            reasoning: `Found ${uncategorizedCount} unclassified transactions. Review '${firstUncat.merchantName}' to assign scope.`,
+            suggestedCategory: suggested,
+            category: suggested,
+            confidence: res?.confidence || 0,
+            reasoning:
+              res?.reasoning ||
+              `Found ${uncategorizedCount} unclassified transactions. Review '${firstUncat.merchantName}' to assign scope.`,
             message: `Categorized ${categorizedList.length} of ${txs.length} transactions. ${uncategorizedCount} remain unclassified—tap a scope below to classify '${firstUncat.merchantName}'.`,
           };
         }
@@ -1369,7 +1461,7 @@ export async function executeAgentTool(
         totalAmount: parsed.amount,
         suggestedCategory: parsed.suggestedCategory,
         category: parsed.suggestedCategory,
-        confidence: parsed.confidence ?? 0.85,
+        confidence: parsed.confidence ?? 0,
         reasoning: parsed.reasoning || `Suggested category based on merchant '${parsed.merchantName}' and budget allocations.`,
         message: `Proposed category '${parsed.suggestedCategory}' for ${parsed.merchantName}. Tap a scope to apply.`,
       };
