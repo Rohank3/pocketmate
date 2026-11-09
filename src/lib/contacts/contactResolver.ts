@@ -32,8 +32,14 @@ export async function resolveContact(
   // 2. Query Prisma database contacts if authenticated
   if (userId) {
     try {
+      let resolvedUserId = userId;
+      if (userId.includes("@")) {
+        const u = await prisma.user.findUnique({ where: { email: userId } });
+        if (u) resolvedUserId = u.id;
+      }
+
       const contacts = await prisma.contact.findMany({
-        where: { userId },
+        where: { userId: resolvedUserId },
       });
 
       // Match by exact email
@@ -43,6 +49,12 @@ export async function resolveContact(
       // Match by full name
       const byName = contacts.find((c) => c.name.toLowerCase() === q);
       if (byName) return { name: byName.name, email: byName.email, source: "database_contact" };
+
+      // Match first name or token
+      const byFirstName = contacts.find(
+        (c) => c.name.toLowerCase().split(/\s+/)[0] === q
+      );
+      if (byFirstName) return { name: byFirstName.name, email: byFirstName.email, source: "database_contact" };
 
       // Substring match in name or handle
       const bySub = contacts.find(
@@ -95,3 +107,59 @@ export async function resolveContact(
 
   return null;
 }
+
+/**
+ * Persists or updates a contact in Prisma, strictly scoped to the active user.
+ * Ensures the model permanently remembers PayPal IDs/emails defined by the user.
+ */
+export async function saveOrUpdateContact(
+  userId: string,
+  name: string,
+  email: string,
+  paypalHandle?: string
+): Promise<{ id: string; name: string; email: string } | null> {
+  const cleanEmail = (email || "").trim().toLowerCase();
+  const cleanName = (name || "").trim();
+  if (!cleanEmail || !cleanEmail.includes("@") || !cleanName) return null;
+
+  try {
+    let resolvedUserId = userId;
+    if (userId.includes("@")) {
+      const u = await prisma.user.findUnique({ where: { email: userId } });
+      if (u) resolvedUserId = u.id;
+    } else {
+      const u = await prisma.user.findUnique({ where: { id: userId } });
+      if (!u) {
+        const firstUser = await prisma.user.findFirst();
+        if (firstUser) resolvedUserId = firstUser.id;
+      }
+    }
+
+    const contact = await prisma.contact.upsert({
+      where: {
+        userId_email: {
+          userId: resolvedUserId,
+          email: cleanEmail,
+        },
+      },
+      update: {
+        name: cleanName,
+        paypalHandle: paypalHandle || undefined,
+        lastSplitAt: new Date(),
+      },
+      create: {
+        userId: resolvedUserId,
+        name: cleanName,
+        email: cleanEmail,
+        paypalHandle: paypalHandle || undefined,
+        lastSplitAt: new Date(),
+      },
+    });
+
+    return { id: contact.id, name: contact.name, email: contact.email };
+  } catch (err) {
+    console.warn("[saveOrUpdateContact Error]", err);
+    return null;
+  }
+}
+

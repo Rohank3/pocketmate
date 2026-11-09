@@ -437,6 +437,13 @@ async function runPhase2Seeding(): Promise<void> {
       daysAgo: 15,
     },
     {
+      recipientEmail: "leo.vance.pm@personal.example.com",
+      amount: 25.00,
+      note: "uber ride share",
+      senderName: "Dave Chen",
+      daysAgo: 12,
+    },
+    {
       recipientEmail: "dave.chen.pm@personal.example.com",
       amount: 18.00,
       note: "", // Blank note as humans often do

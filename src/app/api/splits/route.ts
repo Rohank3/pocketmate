@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthenticatedUser, getUserIdFromRequest } from "@/lib/auth/session";
+import { saveOrUpdateContact } from "@/lib/contacts/contactResolver";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 
@@ -90,6 +91,17 @@ export async function POST(req: NextRequest) {
         items: true,
       },
     });
+
+    // Auto-persist provided emails to user's contact book
+    for (const item of items) {
+      if (item.participantEmail && item.participantEmail.includes("@")) {
+        try {
+          await saveOrUpdateContact(userId, item.participantName, item.participantEmail);
+        } catch {
+          // ignore
+        }
+      }
+    }
 
     return NextResponse.json({ success: true, split: created });
   } catch (error) {
