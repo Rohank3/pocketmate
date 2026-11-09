@@ -274,6 +274,13 @@ class PayPalSandboxClient {
           const feeObj = (info.fee_amount as Record<string, string>) || {};
           const payerEmail = ((payer.email_address as string) || "").toLowerCase().trim();
 
+          // Skip voided, reversed, or refunded transactions
+          const txStatus = (info.transaction_status as string) || "S";
+          const eventCode = (info.transaction_event_code as string) || "";
+          if (txStatus === "V" || eventCode.startsWith("T11") || eventCode.startsWith("T12")) {
+            continue;
+          }
+
           const rawNote = (
             (info.transaction_note as string) ||
             (info.transaction_subject as string) ||
@@ -369,14 +376,20 @@ class PayPalSandboxClient {
           }
         }
 
-        let status: "COMPLETED" | "PENDING" | "DRAFT" | "DISPUTED" | "CANCELLED" = "PENDING";
-        if (inv.status === "PAID" || inv.status === "MARKED_AS_PAID") status = "COMPLETED";
-        else if (inv.status === "DRAFT") status = "DRAFT";
-        else if (inv.status === "CANCELLED" || inv.status === "REFUNDED") status = "CANCELLED";
-
-        // Ignore cancelled or refunded invoices from active ledger
-        if (status === "CANCELLED") {
+        const rawStatus = ((inv.status as string) || "").toUpperCase();
+        // Ignore cancelled, refunded, draft, or scheduled invoices from active ledger
+        if (
+          rawStatus.includes("REFUND") ||
+          rawStatus.includes("CANCEL") ||
+          rawStatus === "DRAFT" ||
+          rawStatus === "SCHEDULED"
+        ) {
           continue;
+        }
+
+        let status: "COMPLETED" | "PENDING" | "DRAFT" | "DISPUTED" | "CANCELLED" = "PENDING";
+        if (rawStatus === "PAID" || rawStatus === "MARKED_AS_PAID") {
+          status = "COMPLETED";
         }
 
         // Extract memo/note separately from payee/merchant
