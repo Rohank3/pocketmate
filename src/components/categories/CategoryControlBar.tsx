@@ -233,11 +233,11 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
   };
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 shadow-md flex flex-col gap-2.5">
+    <div className="bg-white/[0.035] backdrop-blur-xl border border-white/10 rounded-2xl p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_8px_24px_-8px_rgba(0,0,0,0.5)] flex flex-col gap-2.5">
       {/* Top Bar: Roundabout Carousel + Budget Cap Meter + Action Buttons */}
       <div className="flex flex-wrap items-center justify-between gap-2.5">
         {/* Roundabout Category Navigator */}
-        <div className="flex items-center gap-2 bg-zinc-950 px-2.5 py-1.5 rounded-lg border border-zinc-800">
+        <div className="flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-xl border border-white/10">
           <span
             className="w-3 h-3 rounded-sm shrink-0"
             style={{
@@ -285,22 +285,17 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
 
           {activeCategoryObj && (
             <div
-              className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium border ${
+              className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium border ${
                 isOverCap
-                  ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
-                  : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                  ? "bg-rose-500/15 text-rose-300 border-rose-500/25"
+                  : "bg-emerald-500/15 text-emerald-300 border-emerald-500/25"
               }`}
             >
+              <span className={`w-1.5 h-1.5 rounded-full ${isOverCap ? "bg-rose-400" : "bg-emerald-400"}`} />
               {isOverCap ? (
-                <>
-                  <AlertTriangle className="w-3 h-3" />
-                  <span>+${(activeStats.spent - activeStats.cap).toFixed(2)} Over</span>
-                </>
+                <span>+${(activeStats.spent - activeStats.cap).toFixed(2)} Over</span>
               ) : (
-                <>
-                  <CheckCircle2 className="w-3 h-3" />
-                  <span>${(activeStats.cap - activeStats.spent).toFixed(2)} Remaining</span>
-                </>
+                <span>${(activeStats.cap - activeStats.spent).toFixed(2)} Remaining</span>
               )}
             </div>
           )}
@@ -314,7 +309,7 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
               setEditingCategoryId(null);
               setIsModalOpen(true);
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white text-xs font-semibold cursor-pointer shadow-sm transition-all focus-visible:outline-2 focus-visible:outline-blue-400"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 active:scale-[0.98] text-white text-xs font-semibold cursor-pointer border border-white/15 backdrop-blur-md shadow-sm transition-all focus-visible:outline-2 focus-visible:outline-white/30"
             title="Manage, rename, add, and set budget caps"
           >
             <Settings2 className="w-3.5 h-3.5" />
@@ -338,30 +333,30 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
             <div key={optName} className="relative group/pill flex items-center shrink-0">
               <button
                 onClick={() => onSelectCategory(optName)}
-                className={`flex items-center gap-1.5 pl-2.5 pr-2 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer border ${
+                className={`flex items-center gap-1.5 pl-3 pr-2.5 py-1 rounded-xl text-xs font-medium transition-all cursor-pointer border ${
                   isSelected
-                    ? "bg-blue-600 text-white border-blue-400 shadow-md shadow-blue-500/20"
-                    : "bg-zinc-950/90 text-zinc-300 border-zinc-800 hover:border-zinc-700 hover:text-zinc-100"
+                    ? "bg-white/15 text-white border-white/25 shadow-sm backdrop-blur-md"
+                    : "bg-white/[0.03] text-zinc-300 border-white/8 hover:border-white/15 hover:bg-white/[0.06] hover:text-white"
                 }`}
               >
                 {!isAll && (
                   <span
-                    className="w-2 h-2 rounded-full shrink-0"
+                    className="w-2 h-2 rounded-full shrink-0 shadow-sm"
                     style={{ backgroundColor: catObj?.color || "#3b82f6" }}
                   />
                 )}
                 <span>{optName}</span>
                 <span
-                  className={`text-[10px] font-mono px-1 rounded ${
+                  className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
                     isSelected
-                      ? "bg-blue-800 text-blue-100"
+                      ? "bg-white/15 text-white"
                       : catOverCap
-                      ? "bg-rose-950/80 text-rose-300 border border-rose-800/40"
-                      : "bg-zinc-800 text-zinc-400"
+                      ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                      : "bg-white/5 text-zinc-400"
                   }`}
                 >
                   ${stat.spent.toFixed(0)}
-                  {catOverCap && " ⚠️"}
+                  {catOverCap && " !"}
                 </span>
 
                 {/* 3-dots trigger inside custom category pills */}
