@@ -4,6 +4,7 @@ import { GridMutationState, ToolExecutionRecord, AgentRunResult } from "@/types/
 import { paypalClient } from "@/lib/paypal/client";
 import { resolveContact } from "@/lib/contacts/contactResolver";
 import { prisma } from "@/lib/db";
+import { loadUserCategorizationContext, categorizeTransactionsBatch } from "@/lib/services/categorizer";
 
 export interface AgentMessage {
   role: "user" | "assistant" | "system";
@@ -323,14 +324,56 @@ export async function handleDynamicAutonomousResponse(
     !p.includes("bill me");
 
   if (isInvoiceReviewIntent) {
+    const effectiveUserId = handlers.userId || "demo_user";
+    const filterEmail = effectiveUserId.includes("@") ? effectiveUserId : undefined;
+    const liveTxs = await paypalClient.fetchRecentTransactions(720, filterEmail).catch(() => []);
+
+    // 1. Identify invoice ID dynamically from prompt or live sandbox invoices
     const invMatch = prompt.match(/(INV2-[A-Z0-9-]+)/i) || prompt.match(/invoice\s+([A-Z0-9-]+)/i);
-    const invoiceId = invMatch ? invMatch[1] : "INV2-8UM5-HXTK-NH6M-QRHV";
+    const requestedInvId = invMatch ? invMatch[1].toUpperCase() : null;
 
+    const matchedTx = requestedInvId
+      ? liveTxs.find((t) => t.id.toUpperCase() === requestedInvId)
+      : liveTxs.find((t) => t.id.startsWith("INV2-") && t.status === "PENDING") ||
+        liveTxs.find((t) => t.id.startsWith("INV2-"));
+
+    const invoiceId = matchedTx?.id || requestedInvId || "INV2-PENDING";
+
+    // 2. Identify amount dynamically
     const amtMatch = prompt.match(/\$([0-9]+(?:\.[0-9]{1,2})?)/);
-    const amount = amtMatch ? parseFloat(amtMatch[1]) : 32.50;
+    const amount = matchedTx ? matchedTx.amount : amtMatch ? parseFloat(amtMatch[1]) : 0.0;
 
+    // 3. Identify merchant/payee dynamically
     const fromMatch = prompt.match(/from\s+([^.\n]+)/i);
-    const merchant = fromMatch ? fromMatch[1].trim() : "Bowlero Lanes Entertainment & Shoes";
+    const merchant = matchedTx?.merchantName || (fromMatch ? fromMatch[1].trim() : "PayPal Commercial Payee");
+
+    // 4. Fetch real authenticated user details dynamically from DB
+    let userRecord = null;
+    if (handlers.userId) {
+      userRecord = await prisma.user.findUnique({ where: { id: handlers.userId } }).catch(() => null);
+    }
+    const recipientName = userRecord?.name || "Dave Chen";
+    const recipientEmail = userRecord?.email || filterEmail || "dave.chen.pm@personal.example.com";
+
+    // 5. Determine category & budget impact dynamically from DB
+    const catContext = await loadUserCategorizationContext(effectiveUserId);
+    const catRes = await categorizeTransactionsBatch(
+      [{ id: invoiceId, merchantName: merchant, amount, note: matchedTx?.memo }],
+      catContext
+    );
+    const categoryName = catRes.get(invoiceId)?.category || "General";
+
+    const budgetCat = await prisma.budgetCategory.findFirst({
+      where: {
+        userId: effectiveUserId,
+        name: { equals: categoryName, mode: "insensitive" },
+      },
+    }).catch(() => null);
+
+    const monthlyCap = budgetCat?.monthlyCap ?? 300.0;
+    const currentSpent = budgetCat?.currentSpent ?? 0.0;
+    const projectedSpend = currentSpent + amount;
+    const remainingHeadroom = monthlyCap - projectedSpend;
 
     gridMutation = {
       highlightRowId: invoiceId,
@@ -343,8 +386,9 @@ export async function handleDynamicAutonomousResponse(
       invoiceId,
       amount,
       merchant,
-      recipientName: "Dave Chen",
-      recipientEmail: "dave.chen.pm@personal.example.com",
+      recipientName,
+      recipientEmail,
+      category: categoryName,
       requiresConfirmation: true,
       actions: [
         { label: `Pay via PayPal Sandbox ($${amount.toFixed(2)})`, action: "pay_invoice", variant: "primary" },
@@ -354,12 +398,16 @@ export async function handleDynamicAutonomousResponse(
     };
     handlers.onActionCard?.(actionCard);
 
+    const budgetImpactText = remainingHeadroom >= 0
+      ? `Leaves **$${remainingHeadroom.toFixed(2)} buffer remaining** under your $${monthlyCap.toFixed(2)} monthly ceiling.`
+      : `⚠️ Pushes **$${Math.abs(remainingHeadroom).toFixed(2)} over** your $${monthlyCap.toFixed(2)} monthly ceiling!`;
+
     reply = `### 🧾 Incoming Invoice Review: **${merchant}**
 
 • **Invoice ID:** \`${invoiceId}\`
 • **Amount Due:** **$${amount.toFixed(2)} USD**
-• **Billed To:** Dave Chen (\`dave.chen.pm@personal.example.com\`)
-• **Category Impact:** **Entertainment** (Leaves healthy headroom in monthly budget)
+• **Billed To:** ${recipientName} (\`${recipientEmail}\`)
+• **Category Impact:** **${categoryName}** (${budgetImpactText})
 • **Settlement Status:** ⏳ Pending Payment Clearing
 
 ---
@@ -370,49 +418,121 @@ export async function handleDynamicAutonomousResponse(
 
 Review the action card below to execute or reply with your preferred action.`;
   } else if (isBudgetBreachIntent) {
-    const category = p.includes("dining")
-      ? "Dining"
-      : p.includes("groceries")
-      ? "Groceries"
-      : p.includes("shopping")
-      ? "Shopping"
-      : p.includes("entertainment")
-      ? "Entertainment"
-      : p.includes("travel")
-      ? "Travel"
-      : "Dining";
+    const effectiveUserId = handlers.userId || "demo_user";
+    const filterEmail = effectiveUserId.includes("@") ? effectiveUserId : undefined;
 
-    const capMatch = prompt.match(/\$([0-9]+(?:\.[0-9]{1,2})?)\s*cap/i) || prompt.match(/cap\s*(?:of)?\s*\$([0-9]+(?:\.[0-9]{1,2})?)/i);
-    const breachMatch = prompt.match(/by\s*\$([0-9]+(?:\.[0-9]{1,2})?)/i) || prompt.match(/over\s*\$([0-9]+(?:\.[0-9]{1,2})?)/i);
+    // 1. Fetch user's actual categories from database
+    const userCategories = await prisma.budgetCategory.findMany({
+      where: { userId: effectiveUserId },
+    }).catch(() => []);
 
-    const cap = capMatch ? parseFloat(capMatch[1]) : 250.0;
-    const overrun = breachMatch ? parseFloat(breachMatch[1]) : 9.75;
-    const totalSpent = cap + overrun;
+    // 2. Determine target category dynamically from prompt or highest overrun
+    let targetCat = userCategories.find((c) => p.includes(c.name.toLowerCase()));
+
+    if (!targetCat) {
+      const overCat = userCategories
+        .filter((c) => c.currentSpent > c.monthlyCap)
+        .sort((a, b) => (b.currentSpent - b.monthlyCap) - (a.currentSpent - a.monthlyCap))[0];
+      targetCat = overCat || userCategories[0];
+    }
+
+    const categoryName = targetCat?.name || "Dining";
+
+    // 3. Fetch real live transactions and map categories dynamically
+    const liveTxs = await paypalClient.fetchRecentTransactions(720, filterEmail).catch(() => []);
+    const catContext = await loadUserCategorizationContext(effectiveUserId);
+    const categoryMap = await categorizeTransactionsBatch(
+      liveTxs.map((t) => ({ id: t.id, merchantName: t.merchantName, amount: t.amount, note: t.memo })),
+      catContext
+    );
+
+    // 4. Filter real live transactions belonging to this category
+    const categoryTxs = liveTxs.filter((t) => {
+      const cat = categoryMap.get(t.id)?.category || "Uncategorized";
+      return cat.toLowerCase() === categoryName.toLowerCase();
+    });
+
+    // 5. Reconcile cap, spent, and overrun dynamically
+    const promptCapMatch = prompt.match(/\$([0-9]+(?:\.[0-9]{1,2})?)\s*cap/i) || prompt.match(/cap\s*(?:of)?\s*\$([0-9]+(?:\.[0-9]{1,2})?)/i);
+    const promptBreachMatch = prompt.match(/by\s*\$([0-9]+(?:\.[0-9]{1,2})?)/i) || prompt.match(/over\s*\$([0-9]+(?:\.[0-9]{1,2})?)/i);
+
+    const calculatedSpent = categoryTxs.reduce((sum, t) => sum + t.amount, 0);
+    const monthlyCap = promptCapMatch
+      ? parseFloat(promptCapMatch[1])
+      : targetCat?.monthlyCap ?? 250.0;
+
+    const currentSpent = calculatedSpent > 0
+      ? calculatedSpent
+      : promptBreachMatch
+      ? monthlyCap + parseFloat(promptBreachMatch[1])
+      : targetCat?.currentSpent ?? monthlyCap;
+
+    const overrunAmount = Math.max(0, currentSpent - monthlyCap);
+    const percentUsed = monthlyCap > 0 ? ((currentSpent / monthlyCap) * 100).toFixed(0) : "100";
+
+    // 6. Extract real key spending drivers dynamically from actual transactions
+    const sortedTxs = [...categoryTxs].sort((a, b) => b.amount - a.amount);
+    const topTxs = sortedTxs.slice(0, 4);
+
+    const driversMarkdown = topTxs.length > 0
+      ? topTxs
+          .map((t, idx) => {
+            const pct = currentSpent > 0 ? ((t.amount / currentSpent) * 100).toFixed(0) : "0";
+            const memoPart = t.memo && t.memo.toLowerCase() !== t.merchantName.toLowerCase() ? ` *("${t.memo}")*` : "";
+            const discrepancyTag = t.status === "disputed" ? " — ⚠️ *Discrepancy flagged*" : "";
+            return `${idx + 1}. **${t.merchantName}**: **$${t.amount.toFixed(2)}** (${pct}% of category spend)${memoPart}${discrepancyTag}`;
+          })
+          .join("\n")
+      : `• No individual charges found under **${categoryName}**.`;
+
+    // 7. Generate dynamic actionable optimizations based on real data
+    const optimizationList: string[] = [];
+    if (topTxs.length > 0) {
+      const highest = topTxs[0];
+      const highestShare3Ways = (highest.amount * 2 / 3).toFixed(2);
+      optimizationList.push(
+        `**Split the Largest Expense (${highest.merchantName})**: If your **$${highest.amount.toFixed(2)}** charge at **${highest.merchantName}** was shared, say *"split $${highest.amount.toFixed(0)} with friends"* to recoup **$${highestShare3Ways}** in accounts receivable.`
+      );
+    }
+
+    if (topTxs.length > 1) {
+      const second = topTxs[1];
+      optimizationList.push(
+        `**Reallocate Recurring Charges**: Moving recurring or work-related expenses like **${second.merchantName}** ($${second.amount.toFixed(2)}) to Business/Services preserves personal ${categoryName} headroom.`
+      );
+    }
+
+    if (overrunAmount > 0) {
+      optimizationList.push(
+        `**Ceiling Recovery**: Reducing or recovering **$${overrunAmount.toFixed(2)}** immediately restores your **${categoryName}** budget to 100% compliance with your $${monthlyCap.toFixed(2)} ceiling.`
+      );
+    } else {
+      optimizationList.push(
+        `**Healthy Headroom**: You currently have **$${(monthlyCap - currentSpent).toFixed(2)}** in remaining headroom under your monthly cap.`
+      );
+    }
+
+    const optimizationsMarkdown = optimizationList.map((opt, i) => `${i + 1}. ${opt}`).join("\n");
 
     gridMutation = {
-      filter: { category },
+      filter: { category: categoryName },
       renderChart: "budget_burn_bar",
-      statusMessage: `Auditing ${category} budget: $${totalSpent.toFixed(2)} spent of $${cap.toFixed(2)} cap ($${overrun.toFixed(2)} over ceiling).`,
+      statusMessage: `Auditing ${categoryName} budget: $${currentSpent.toFixed(2)} spent of $${monthlyCap.toFixed(2)} cap (${overrunAmount > 0 ? `$${overrunAmount.toFixed(2)} over ceiling` : "within budget"}).`,
     };
     handlers.onGridMutation?.(gridMutation);
 
-    reply = `### 📊 Budget Optimization Audit: **${category}**
+    reply = `### 📊 Budget Optimization Audit: **${categoryName}**
 
-• **Monthly Cap:** $${cap.toFixed(2)}
-• **Current Spend:** $${totalSpent.toFixed(2)} (**⚠️ $${overrun.toFixed(2)} over ceiling — ${((totalSpent / cap) * 100).toFixed(0)}% utilized**)
-• **Active Charges:** 4 transactions recorded in ${category}
+• **Monthly Cap:** $${monthlyCap.toFixed(2)}
+• **Current Spend:** $${currentSpent.toFixed(2)} (${overrunAmount > 0 ? `⚠️ **$${overrunAmount.toFixed(2)} over ceiling** — ${percentUsed}% utilized` : `✅ **Within budget** — ${percentUsed}% utilized`})
+• **Active Charges:** ${categoryTxs.length} transaction(s) recorded in ${categoryName}
 
 #### 🔍 Key Spending Drivers:
-1. **Antoine Moreau Bistro**: **$130.00** (${((130 / totalSpent) * 100).toFixed(0)}% of total category spend) — *Audit detected $15.00 unlisted merchant surcharge*.
-2. **Chipotle Mexican Grill**: **$16.99**
-3. **Alex Morgan (tacos 🌮)**: **$14.00**
-4. **Starbucks Coffee**: **$6.85**
+${driversMarkdown}
 
 ---
-#### 💡 3 Actionable Cost Optimizations:
-1. **Claim the $15.00 Bistro Discrepancy**: Initiating a PayPal dispute for the unlisted service surcharge on Antoine Moreau Bistro drops your Dining spend to **$${(totalSpent - 15).toFixed(2)}**, bringing you back **$${(cap - (totalSpent - 15)).toFixed(2)} under your monthly cap**!
-2. **Split the Bistro Dinner Check**: If the $130 bistro meal was shared with friends, reply *"split $130 bistro bill 3 ways with friends"* to recoup **$86.66** in accounts receivable.
-3. **Reallocate Work Coffee Runs**: Tag recurring Starbucks coffee charges under **Work & Client Services** to preserve personal Dining headroom for evening meals.`;
+#### 💡 Actionable Cost Optimizations:
+${optimizationsMarkdown}`;
   } else if (isTriageIntent) {
     const effectiveUserId = handlers.userId || "demo_user";
     const filterEmail = effectiveUserId.includes("@") ? effectiveUserId : undefined;
@@ -446,18 +566,30 @@ Review the action card below to execute or reply with your preferred action.`;
       reply = `🎉 **Ledger Reconciled!**\n\nAll ${liveTxs.length} transactions in your PayPal sandbox ledger are already categorized across your active budgets.\n\nYou can review your spending breakdown in the **Insights** tab or say *"did I overspend on Groceries this month?"*`;
     } else {
       const nextTx = uncategorizedTxs[0];
-      const mName = nextTx.merchantName.toLowerCase();
-      let suggestedCategory = "Shopping";
 
-      if (mName.includes("hotel") || mName.includes("uber") || mName.includes("airalo") || mName.includes("eurostar") || mName.includes("roma")) {
-        suggestedCategory = "Travel";
-      } else if (mName.includes("bistro") || mName.includes("cafe") || mName.includes("chipotle") || mName.includes("starbucks") || mName.includes("taco") || mName.includes("restaurant") || mName.includes("dining")) {
-        suggestedCategory = "Dining";
-      } else if (mName.includes("whole") || mName.includes("trader") || mName.includes("market") || mName.includes("grocery") || mName.includes("food")) {
-        suggestedCategory = "Groceries";
-      } else if (mName.includes("netflix") || mName.includes("spotify") || mName.includes("bowlero") || mName.includes("amc") || mName.includes("theater")) {
-        suggestedCategory = "Entertainment";
-      }
+      // Dynamically determine AI suggested category
+      const catContext = await loadUserCategorizationContext(effectiveUserId);
+      const catRes = await categorizeTransactionsBatch(
+        [{ id: nextTx.id, merchantName: nextTx.merchantName, amount: nextTx.amount, note: nextTx.memo }],
+        catContext
+      );
+      const suggestedCategory = catRes.get(nextTx.id)?.category || "Shopping";
+
+      // Load active user categories dynamically from DB
+      const userCategories = await prisma.budgetCategory.findMany({
+        where: { userId: effectiveUserId },
+        select: { name: true },
+        orderBy: { createdAt: "asc" },
+      }).catch(() => []);
+
+      const activeCatNames = userCategories.length > 0
+        ? userCategories.map((c) => c.name)
+        : ["Dining", "Groceries", "Shopping", "Entertainment", "Travel"];
+
+      const optionsLines = activeCatNames
+        .slice(0, 5)
+        .map((name, i) => `• Reply **${i + 1}** for **${name}**`)
+        .join("\n");
 
       gridMutation = {
         highlightRowId: nextTx.id,
@@ -483,12 +615,8 @@ ${memoLine}• **Date:** ${dateStr}
 💡 **AI Recommended Category:** **${suggestedCategory}**
 
 ---
-**How would you like to categorize this?**
-• Reply **1** for **${suggestedCategory}**
-• Reply **2** for **Dining**
-• Reply **3** for **Shopping**
-• Reply **4** for **Entertainment**
-• Reply **5** for **Travel**
+**Choose how to categorize this item:**
+${optionsLines}
 • Or reply with any custom category name!`;
     }
   } else if (isTriageResponse) {
@@ -516,28 +644,28 @@ ${memoLine}• **Date:** ${dateStr}
 
     if (uncategorizedTxs.length > 0) {
       const currentTx = uncategorizedTxs[0];
-      const mName = currentTx.merchantName.toLowerCase();
-      let defaultSuggested = "Shopping";
-      if (mName.includes("hotel") || mName.includes("uber") || mName.includes("airalo") || mName.includes("eurostar") || mName.includes("roma")) {
-        defaultSuggested = "Travel";
-      } else if (mName.includes("bistro") || mName.includes("cafe") || mName.includes("chipotle") || mName.includes("starbucks") || mName.includes("taco") || mName.includes("restaurant") || mName.includes("dining")) {
-        defaultSuggested = "Dining";
-      } else if (mName.includes("whole") || mName.includes("trader") || mName.includes("market") || mName.includes("grocery") || mName.includes("food")) {
-        defaultSuggested = "Groceries";
-      } else if (mName.includes("netflix") || mName.includes("spotify") || mName.includes("bowlero") || mName.includes("amc") || mName.includes("theater")) {
-        defaultSuggested = "Entertainment";
-      }
+
+      // Load active user categories dynamically from DB
+      const userCategories = await prisma.budgetCategory.findMany({
+        where: { userId: effectiveUserId },
+        select: { name: true },
+        orderBy: { createdAt: "asc" },
+      }).catch(() => []);
+
+      const activeCatNames = userCategories.length > 0
+        ? userCategories.map((c) => c.name)
+        : ["Dining", "Groceries", "Shopping", "Entertainment", "Travel"];
 
       // Map choice to target category
-      let chosenCategory = defaultSuggested;
       const cleanInput = p.trim();
-      if (cleanInput === "1") chosenCategory = defaultSuggested;
-      else if (cleanInput === "2") chosenCategory = "Dining";
-      else if (cleanInput === "3") chosenCategory = "Shopping";
-      else if (cleanInput === "4") chosenCategory = "Entertainment";
-      else if (cleanInput === "5") chosenCategory = "Travel";
-      else {
-        chosenCategory = cleanInput.charAt(0).toUpperCase() + cleanInput.slice(1).toLowerCase();
+      let chosenCategory = activeCatNames[0] || "General";
+
+      if (/^[1-5]$/.test(cleanInput)) {
+        const idx = parseInt(cleanInput, 10) - 1;
+        chosenCategory = activeCatNames[idx] || activeCatNames[0] || "General";
+      } else {
+        const matchedActive = activeCatNames.find((c) => c.toLowerCase() === cleanInput.toLowerCase());
+        chosenCategory = matchedActive || cleanInput.charAt(0).toUpperCase() + cleanInput.slice(1).toLowerCase();
       }
 
       // Persist category override
@@ -573,17 +701,19 @@ ${memoLine}• **Date:** ${dateStr}
         reply = `✅ Tagged **${currentTx.merchantName}** ($${currentTx.amount.toFixed(2)}) as **${chosenCategory}**.\n\n🎉 **All done!** Every transaction in your ledger has been categorized. Your budget balances and charts are fully reconciled!`;
       } else {
         const nextTx = remainingTxs[0];
-        const nextM = nextTx.merchantName.toLowerCase();
-        let nextSuggested = "Shopping";
-        if (nextM.includes("hotel") || nextM.includes("uber") || nextM.includes("airalo") || nextM.includes("eurostar") || nextM.includes("roma")) {
-          nextSuggested = "Travel";
-        } else if (nextM.includes("bistro") || nextM.includes("cafe") || nextM.includes("chipotle") || nextM.includes("starbucks") || nextM.includes("taco") || nextM.includes("restaurant") || nextM.includes("dining")) {
-          nextSuggested = "Dining";
-        } else if (nextM.includes("whole") || nextM.includes("trader") || nextM.includes("market") || nextM.includes("grocery") || nextM.includes("food")) {
-          nextSuggested = "Groceries";
-        } else if (nextM.includes("netflix") || nextM.includes("spotify") || nextM.includes("bowlero") || nextM.includes("amc") || nextM.includes("theater")) {
-          nextSuggested = "Entertainment";
-        }
+
+        // Determine AI recommendation for next item
+        const catContext = await loadUserCategorizationContext(effectiveUserId);
+        const nextCatRes = await categorizeTransactionsBatch(
+          [{ id: nextTx.id, merchantName: nextTx.merchantName, amount: nextTx.amount, note: nextTx.memo }],
+          catContext
+        );
+        const nextSuggested = nextCatRes.get(nextTx.id)?.category || "Shopping";
+
+        const optionsLines = activeCatNames
+          .slice(0, 5)
+          .map((name, i) => `• Reply **${i + 1}** for **${name}**`)
+          .join("\n");
 
         gridMutation = {
           highlightRowId: nextTx.id,
@@ -606,7 +736,9 @@ ${memoLine}• **Date:** ${dateStr}
 
 💡 **AI Recommended:** **${nextSuggested}**
 
-Reply with **1** for **${nextSuggested}**, **2** for **Dining**, **3** for **Shopping**, **4** for **Entertainment**, **5** for **Travel**, or type any category name!`;
+**Choose how to categorize this item:**
+${optionsLines}
+• Or reply with any custom category name!`;
       }
     } else {
       reply = `All transactions are currently categorized! If you want to change any category, click the category badge directly in the AG Grid ledger or tell me (e.g. *"mark Grand Vista Hotel as Travel"*).`;
@@ -914,7 +1046,10 @@ Reply with **1** for **${nextSuggested}**, **2** for **Dining**, **3** for **Sho
     const amountToLog = logAmountMatch ? parseFloat(logAmountMatch[1]) : 82.50;
     const categoryName = p.includes("dining") ? "Dining" : p.includes("shopping") ? "Shopping" : "Groceries";
 
-    const logArgs = { category: categoryName, amount: amountToLog, merchant: "Target Superstore", description: categoryName };
+    const storeMatch = prompt.match(/(?:at|from|to)\s+([A-Za-z0-9\s&'.]+?)(?:\s+for|\s+and|\s*\$|$)/i);
+    const merchantName = storeMatch ? storeMatch[1].trim() : `${categoryName} Merchant`;
+
+    const logArgs = { category: categoryName, amount: amountToLog, merchant: merchantName, description: categoryName };
     const logResult = (await executeAgentTool("log_category_expense", logArgs, handlers.userId)) as {
       success: boolean;
       newSpent: number;
@@ -1022,12 +1157,12 @@ Reply with **1** for **${nextSuggested}**, **2** for **Dining**, **3** for **Sho
 
     let targetTx = liveTxs.find((t) => p.includes(t.merchantName.toLowerCase()));
     if (!targetTx) {
-      targetTx = liveTxs.find((t) => t.merchantName.toLowerCase().includes("antoine")) || liveTxs[0];
+      targetTx = liveTxs.find((t) => t.status === "DISPUTED") || liveTxs[0];
     }
 
     if (targetTx) {
-      const amtMatch = prompt.match(/\$?(\d+(?:\.\d{1,2})?)/);
-      const disputeAmt = amtMatch ? parseFloat(amtMatch[1]) : 15.00;
+      const amtMatch = prompt.match(/\$?(\d+(?:\.[0-9]{1,2})?)/);
+      const disputeAmt = amtMatch ? parseFloat(amtMatch[1]) : (targetTx ? targetTx.amount : 0.0);
 
       const disputeArgs = {
         transactionId: targetTx.id,
@@ -1092,11 +1227,39 @@ Reply with **1** for **${nextSuggested}**, **2** for **Dining**, **3** for **Sho
     };
     handlers.onGridMutation?.(gridMutation);
 
-    reply = "I've reconfigured your AG Grid ledger to display unsettled items grouped by person. Dave currently has the largest outstanding balance ($65.00). Would you like me to dispatch reminder invoices?";
+    reply = `I've reconfigured your AG Grid ledger to display unsettled items grouped by ${groupByPerson ? "debtor name" : "category"}. Would you like me to review outstanding balances or dispatch reminder invoices?`;
   }
   // 8. End-of-Day Ambiguity Triage Sweep
-  else if (p.includes("sweep") || p.includes("triage") || p.includes("untagged") || p.includes("eod")) {
-    reply = "End-of-day audit complete. I identified 1 unassigned charge requiring your attention:\n\n• **$34.20** at 'SQ* Urban Blend' (Yesterday, 4:15 PM)\n\nWas this Dining, Work Supplies, or a Group Split with someone? Tell me and I will tag it and update your budget ledger.";
+  else if (p.includes("sweep") || p.includes("untagged") || p.includes("eod")) {
+    const effectiveUserId = handlers.userId || "demo_user";
+    const filterEmail = effectiveUserId.includes("@") ? effectiveUserId : undefined;
+    const liveTxs = await paypalClient.fetchRecentTransactions(720, filterEmail).catch(() => []);
+
+    let existingOverrides: Array<{ transactionId: string; categoryName: string }> = [];
+    try {
+      existingOverrides = await prisma.transactionCategoryOverride.findMany({
+        where: { userId: effectiveUserId },
+        select: { transactionId: true, categoryName: true },
+      });
+    } catch (dbErr) {
+      console.warn("[Sweep DB Warning]", dbErr);
+    }
+
+    const overriddenIds = new Set(
+      existingOverrides
+        .filter((o) => o.categoryName.toLowerCase() !== "uncategorized")
+        .map((o) => o.transactionId)
+    );
+
+    const uncategorizedTxs = liveTxs.filter((t) => !overriddenIds.has(t.id));
+
+    if (uncategorizedTxs.length > 0) {
+      const topUncat = uncategorizedTxs[0];
+      const dateStr = new Date(topUncat.timestamp).toLocaleDateString([], { month: "short", day: "numeric" });
+      reply = `End-of-day audit complete. I identified ${uncategorizedTxs.length} unassigned charge(s) requiring your attention:\n\n• **$${topUncat.amount.toFixed(2)}** at **'${topUncat.merchantName}'** (${dateStr})\n\nHow would you like to categorize this? You can say *"mark as Dining"*, *"mark as Travel"*, or *"split this"*!`;
+    } else {
+      reply = "End-of-day audit complete. All transactions in your ledger are fully categorized across your active budgets!";
+    }
   }
   // 9. Learned Merchant Rule or Transaction Category Assignment
   else if (

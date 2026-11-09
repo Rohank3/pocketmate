@@ -150,29 +150,29 @@ export async function POST(req: NextRequest) {
     }
 
     if (actionToConfirm && actionToConfirm.action === "pay_invoice") {
-      const amt = Number(actionToConfirm.amount || 32.50);
-      const invId = actionToConfirm.invoiceId || "INV2-8UM5-HXTK-NH6M-QRHV";
+      const amt = Number(actionToConfirm.amount || 0);
+      const invId = actionToConfirm.invoiceId || "Invoice";
       return NextResponse.json({
-        reply: `✅ Payment of **$${amt.toFixed(2)} USD** for invoice \`${invId}\` has been successfully settled via your PayPal Sandbox Wallet. Your ledger and Entertainment budget have been updated.`,
+        reply: `✅ Payment of **$${amt.toFixed(2)} USD** for invoice \`${invId}\` has been successfully settled via your PayPal Sandbox Wallet. Your ledger and budget have been updated.`,
         actionCard: null,
         executedTools: [],
       });
     }
 
     if (actionToConfirm && actionToConfirm.action === "split_invoice") {
-      const amt = Number(actionToConfirm.amount || 32.50);
-      const invId = actionToConfirm.invoiceId || "INV2-8UM5-HXTK-NH6M-QRHV";
-      const merchant = actionToConfirm.merchant || "Bowlero Lanes Entertainment & Shoes";
+      const amt = Number(actionToConfirm.amount || 0);
+      const invId = actionToConfirm.invoiceId || "Invoice";
+      const merchant = actionToConfirm.merchant || "Merchant";
       return NextResponse.json({
-        reply: `Group split initiated for invoice \`${invId}\` (**$${amt.toFixed(2)}** from **${merchant}**).\n\nWho would you like to split this with? Reply with the participants (e.g. *"split this $${amt.toFixed(2)} charge 3 ways with Alex and Sam"*).`,
+        reply: `Group split initiated for invoice \`${invId}\` (**$${amt.toFixed(2)}** from **${merchant}**).\n\nWho would you like to split this with? Reply with the participants (e.g. *"split this charge 3 ways with Alex and Sam"*).`,
         actionCard: null,
         executedTools: [],
       });
     }
 
     if (actionToConfirm && actionToConfirm.action === "dispute_invoice") {
-      const invId = actionToConfirm.invoiceId || "INV2-8UM5-HXTK-NH6M-QRHV";
-      const merchant = actionToConfirm.merchant || "Bowlero Lanes Entertainment & Shoes";
+      const invId = actionToConfirm.invoiceId || "Invoice";
+      const merchant = actionToConfirm.merchant || "Merchant";
       return NextResponse.json({
         reply: `🛡️ **PayPal Dispute Filed**: Invoice \`${invId}\` for **${merchant}** has been flagged under PayPal Sandbox Buyer Protection for billing discrepancy review.`,
         actionCard: null,

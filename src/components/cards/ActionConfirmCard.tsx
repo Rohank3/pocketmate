@@ -120,7 +120,7 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
             <div className="space-y-0.5">
               <span className="font-semibold text-zinc-100 text-sm">{cardData.merchant || "Merchant"}</span>
               <p className="text-[11px] text-zinc-400 font-mono">Invoice ID: {cardData.invoiceId || "INV2-..."}</p>
-              <p className="text-[11px] text-zinc-400">Billed to: {cardData.recipientName || "Dave Chen"}</p>
+              <p className="text-[11px] text-zinc-400">Billed to: {cardData.recipientName || "You"}</p>
             </div>
             <div className="text-right">
               <span className="text-sm font-bold font-mono text-zinc-100">${totalAmount.toFixed(2)}</span>
