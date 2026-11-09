@@ -33,6 +33,7 @@ const ActionToConfirmSchema = z.discriminatedUnion("action", [
     amount: z.number().finite().positive().max(50000).optional(),
     totalAmount: z.number().finite().positive().max(50000).optional(),
     note: z.string().trim().max(255).optional(),
+    category: z.string().trim().max(50).optional(),
   }),
   z.object({
     action: z.literal("pay_invoice"),
@@ -136,6 +137,7 @@ export async function POST(req: NextRequest) {
           recipientEmail,
           amount,
           note,
+          category: actionToConfirm.category,
           isConfirmed: true,
         },
         userId,

@@ -10,6 +10,18 @@ export interface SplitParticipant {
   emailOrHandle: string;
 }
 
+export interface UnequalParticipant {
+  name: string;
+  emailOrHandle: string;
+  amount: number;
+}
+
+export interface PercentageParticipant {
+  name: string;
+  emailOrHandle: string;
+  percentage: number;
+}
+
 export interface SplitAllocation {
   name: string;
   emailOrHandle: string;
@@ -196,6 +208,120 @@ export function calculateItemizedSplit(
     participantCount: allParticipants.length,
     allocations,
     discrepancyCents: finalTotalCents - sumCents,
+    breakdownReport: breakdownLines.join("\n"),
+  };
+}
+
+/**
+ * Computes an unequal split by explicit dollar/currency amounts with penny conservation.
+ */
+export function calculateUnequalSplit(
+  totalAmount: number,
+  participants: UnequalParticipant[],
+  memoContext?: string
+): DeterministicSplitResult {
+  if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+    throw new Error("Total amount must be a positive finite number.");
+  }
+  if (participants.length === 0) {
+    throw new Error("Cannot split among zero participants.");
+  }
+
+  const totalCents = toCents(totalAmount);
+  let allocatedCentsSum = 0;
+
+  const allocations: SplitAllocation[] = participants.map((p) => {
+    const cents = toCents(p.amount);
+    allocatedCentsSum += cents;
+    return {
+      name: p.name,
+      emailOrHandle: p.emailOrHandle,
+      amount: toDollars(cents),
+      cents,
+      itemizedSummary: memoContext ?? `Custom allocation: $${toDollars(cents).toFixed(2)}`,
+    };
+  });
+
+  // If there is any 1-2 cent rounding variance between parts and total, balance on first participant
+  const diffCents = totalCents - allocatedCentsSum;
+  if (diffCents !== 0 && allocations.length > 0) {
+    allocations[0].cents += diffCents;
+    allocations[0].amount = toDollars(allocations[0].cents);
+  }
+
+  const breakdownLines = [
+    `Total: $${toDollars(totalCents).toFixed(2)} split custom amounts among ${participants.length} people:`,
+    ...allocations.map((a) => `• ${a.name} (${a.emailOrHandle}): $${a.amount.toFixed(2)}`),
+  ];
+
+  return {
+    totalAmount: toDollars(totalCents),
+    totalCents,
+    participantCount: participants.length,
+    allocations,
+    discrepancyCents: 0,
+    breakdownReport: breakdownLines.join("\n"),
+  };
+}
+
+/**
+ * Computes a percentage split with exact penny conservation and remainder cent distribution.
+ */
+export function calculatePercentageSplit(
+  totalAmount: number,
+  participants: PercentageParticipant[],
+  memoContext?: string
+): DeterministicSplitResult {
+  if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+    throw new Error("Total amount must be a positive finite number.");
+  }
+  if (participants.length === 0) {
+    throw new Error("Cannot split among zero participants.");
+  }
+
+  const totalCents = toCents(totalAmount);
+
+  // Compute floor cents for each share
+  const indexed = participants.map((p, idx) => {
+    const rawCents = (p.percentage / 100) * totalCents;
+    const floorCents = Math.floor(rawCents);
+    const fraction = rawCents - floorCents;
+    return { participant: p, floorCents, fraction, originalIndex: idx };
+  });
+
+  const sumFloorCents = indexed.reduce((acc, curr) => acc + curr.floorCents, 0);
+  const remainderCents = totalCents - sumFloorCents;
+
+  // Sort by highest fraction descending to distribute remainder cents
+  const sorted = [...indexed].sort((a, b) => b.fraction - a.fraction);
+  for (let i = 0; i < remainderCents && i < sorted.length; i++) {
+    sorted[i].floorCents += 1;
+  }
+
+  // Restore original ordering
+  sorted.sort((a, b) => a.originalIndex - b.originalIndex);
+
+  const allocations: SplitAllocation[] = sorted.map((s) => ({
+    name: s.participant.name,
+    emailOrHandle: s.participant.emailOrHandle,
+    amount: toDollars(s.floorCents),
+    cents: s.floorCents,
+    itemizedSummary: memoContext ?? `${s.participant.percentage}% allocation ($${toDollars(s.floorCents).toFixed(2)})`,
+  }));
+
+  const sumAllocated = allocations.reduce((acc, curr) => acc + curr.cents, 0);
+
+  const breakdownLines = [
+    `Total: $${toDollars(totalCents).toFixed(2)} percentage split among ${participants.length} people:`,
+    ...allocations.map((a, i) => `• ${a.name} (${participants[i].percentage}%): $${a.amount.toFixed(2)}`),
+  ];
+
+  return {
+    totalAmount: toDollars(totalCents),
+    totalCents,
+    participantCount: participants.length,
+    allocations,
+    discrepancyCents: totalCents - sumAllocated,
     breakdownReport: breakdownLines.join("\n"),
   };
 }

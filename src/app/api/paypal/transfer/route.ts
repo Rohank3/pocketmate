@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { paypalClient } from "@/lib/paypal/client";
 import { getAuthenticatedUser } from "@/lib/auth/session";
+import { prisma } from "@/lib/db";
 import { z } from "zod";
 
 const TransferSchema = z.object({
@@ -15,6 +16,7 @@ const TransferSchema = z.object({
       "Amount cannot have more than 2 decimal places."
     ),
   note: z.string().trim().max(255).optional(),
+  category: z.string().trim().max(50).optional(),
   currency: z.string().trim().max(10).default("USD"),
 });
 
@@ -41,7 +43,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { recipientEmail, amount, note, currency } = parseResult.data;
+    const { recipientEmail, amount, note, category, currency } = parseResult.data;
 
     const result = await paypalClient.sendPayout({
       recipientEmail,
@@ -50,10 +52,32 @@ export async function POST(req: NextRequest) {
       currency,
     });
 
+    if (category && user.id) {
+      try {
+        await prisma.transactionCategoryOverride.upsert({
+          where: {
+            userId_transactionId: {
+              userId: user.id,
+              transactionId: result.payoutBatchId,
+            },
+          },
+          update: { categoryName: category },
+          create: {
+            userId: user.id,
+            transactionId: result.payoutBatchId,
+            categoryName: category,
+          },
+        });
+      } catch (catErr) {
+        console.warn("[Transfer Category Override Warning]", catErr);
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      message: `Dispatched PayPal Sandbox payout of $${amount.toFixed(2)} to ${recipientEmail}`,
+      message: `Dispatched PayPal Sandbox payout of $${amount.toFixed(2)} to ${recipientEmail}${category ? ` [${category}]` : ""}`,
       payout: result,
+      category: category || "Personal Reimbursement",
     });
   } catch (error: unknown) {
     console.error("[PayPal Transfer API Error]", error);
