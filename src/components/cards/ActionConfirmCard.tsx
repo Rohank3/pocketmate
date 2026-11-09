@@ -5,6 +5,8 @@ import { Send, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { InteractiveSplitCard } from "./InteractiveSplitCard";
 import { CategoryTriageCard } from "./CategoryTriageCard";
 import { InvoiceReviewCard } from "./InvoiceReviewCard";
+import { DisputeResolutionCard } from "./DisputeResolutionCard";
+import { SplitReconciliationCard } from "./SplitReconciliationCard";
 
 export interface ActionCardData {
   action?: "DISPATCH_INVOICES" | "DISPATCH_PAYOUT" | "CREATE_SPLIT" | "PROPOSE_SPLIT_BREAKDOWN" | "CATEGORY_TRIAGE" | "REVIEW_INCOMING_INVOICE" | string;
@@ -41,13 +43,21 @@ export interface ActionCardData {
     amount: number;
     description: string;
   }>;
+  splitRecordId?: string;
+  totalBill?: number;
   participants?: Array<{
+    id?: string;
     name: string;
     email?: string;
-    amount: number;
+    amount?: number;
+    originalAmount?: number;
+    amountPaid?: number;
+    newShare?: number;
     isHost?: boolean;
     isLocked?: boolean;
     note?: string;
+    reason?: string;
+    status?: string;
   }>;
 }
 
@@ -151,6 +161,36 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
         }}
         categories={categories}
         onAssignCategory={onAssignCategory}
+        onCancel={handleCancel}
+      />
+    );
+  }
+
+  // Interactive Dispute Resolution Card (Accept, Request Difference, Reinvoke)
+  if (cardData.action === "DISPUTE_RESOLUTION" || cardData.type === "dispute_resolution") {
+    return (
+      <DisputeResolutionCard
+        cardData={cardData}
+        onAccept={async (data) => {
+          await onConfirm({ ...data, action: "ACCEPT_DISPUTE" });
+        }}
+        onRequestDifference={async (data) => {
+          await onConfirm({ ...data, action: "REQUEST_DIFFERENCE" });
+        }}
+        onReinvokeSplit={async (data) => {
+          await onConfirm({ ...data, action: "REINVOKE_SPLIT" });
+        }}
+        onCancel={handleCancel}
+      />
+    );
+  }
+
+  // Interactive Simultaneous Split Reconciliation & Rebalancing Card
+  if (cardData.action === "REINVOKE_SPLIT" || cardData.type === "split_reconciliation") {
+    return (
+      <SplitReconciliationCard
+        cardData={cardData}
+        onConfirm={onConfirm}
         onCancel={handleCancel}
       />
     );
