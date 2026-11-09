@@ -329,41 +329,7 @@ class PayPalSandboxClient {
         page++;
       } while (page <= totalPages && page <= 5);
 
-      const merchantDomainMap: Record<string, string> = {
-        "grandvistahotel.com": "Grand Vista Hotel",
-        "billing@grandvistahotel.com": "Grand Vista Hotel",
-        "antoine.moreau.cafe@business.example.com": "Antoine Moreau Bistro",
-        "wholefoods.example.com": "Whole Foods Market",
-        "billing@wholefoods.example.com": "Whole Foods Market",
-        "traderjoes.example.com": "Trader Joe's",
-        "billing@traderjoes.example.com": "Trader Joe's",
-        "starbucks.example.com": "Starbucks Coffee",
-        "billing@starbucks.example.com": "Starbucks Coffee",
-        "chipotle.example.com": "Chipotle Mexican Grill",
-        "billing@chipotle.example.com": "Chipotle Mexican Grill",
-        "uber.example.com": "Uber",
-        "receipts@uber.example.com": "Uber",
-        "shelloil.example.com": "Shell Oil",
-        "billing@shelloil.example.com": "Shell Oil",
-        "target.example.com": "Target",
-        "billing@target.example.com": "Target",
-        "amazon.example.com": "Amazon.com",
-        "orders@amazon.example.com": "Amazon.com",
-        "amctheatres.example.com": "AMC Theatres",
-        "tickets@amctheatres.example.com": "AMC Theatres",
-        "netflixcom@billing.sandbox": "Netflix",
-        "spotifyusa@billing.sandbox": "Spotify",
-        "googlecloudstorage@billing.sandbox": "Google Cloud Storage",
-        "equinoxfitness@billing.sandbox": "Equinox Fitness",
-        "settlement@pocketmate.sandbox": "PocketMate Settlement",
-        "hotelroma.example.com": "Hotel Roma",
-        "reservations@hotelroma.example.com": "Hotel Roma",
-        "airalo.example.com": "Airalo eSIM",
-        "billing@airalo.example.com": "Airalo eSIM",
-        "eurostar.example.com": "Eurostar",
-        "tickets@eurostar.example.com": "Eurostar",
-      };
-
+      // Derive authentic merchant name dynamically with zero hardcoded lookup tables
       for (const inv of allInvoices) {
         const detail = (inv.detail as Record<string, unknown>) || {};
         const primaryRecipients = (inv.primary_recipients as Array<{ billing_info?: { email_address?: string; name?: { given_name?: string } } }>) || [];
@@ -390,7 +356,7 @@ class PayPalSandboxClient {
         else if (inv.status === "DRAFT") status = "DRAFT";
         else if (inv.status === "CANCELLED" || inv.status === "REFUNDED") status = "CANCELLED";
 
-        // Derive authentic merchant name
+        // Derive authentic merchant name dynamically
         const invItems = (inv.items as Array<{ name?: string }>) || [];
         let merchantName = (detail.note as string) || invItems[0]?.name;
         
@@ -402,20 +368,38 @@ class PayPalSandboxClient {
             merchantName = `${invoicer.name.given_name} ${invoicer.name.surname || ""}`.trim();
           } else if (invoicer.email_address) {
             const email = invoicer.email_address.toLowerCase().trim();
-            if (merchantDomainMap[email]) {
-              merchantName = merchantDomainMap[email];
+            const [localPart, domainPart = ""] = email.split("@");
+
+            // Strip common transactional mailbox handles and subdomains
+            const cleanLocal = localPart
+              .replace(/^(billing|orders|receipts|reservations|tickets|settlement|support|info|contact|pay)[._-]?/i, "")
+              .replace(/\.(cafe|studio|tech|retail|art|music|pm)$/i, "")
+              .trim();
+
+            const cleanDomain = domainPart
+              .replace(/\.(example\.com|sandbox|com|org|net|co|io|edu|gov)$/i, "")
+              .replace(/^(billing|retail|business|personal)[._-]?/i, "")
+              .trim();
+
+            let candidate = "";
+            if (cleanDomain && cleanDomain !== "business" && cleanDomain !== "personal" && cleanDomain !== "billing") {
+              candidate = cleanDomain;
+            } else if (cleanLocal) {
+              candidate = cleanLocal;
             } else {
-              const domain = email.split("@")[1] || "";
-              if (merchantDomainMap[domain]) {
-                merchantName = merchantDomainMap[domain];
-              } else if (domain && !domain.includes("sandbox") && !domain.includes("example.com")) {
-                const root = domain.split(".")[0];
-                merchantName = root.charAt(0).toUpperCase() + root.slice(1);
-              } else {
-                const prefix = email.split("@")[0].replace(/[._]/g, " ");
-                merchantName = prefix.charAt(0).toUpperCase() + prefix.slice(1);
-              }
+              candidate = localPart;
             }
+
+            // Word separation for camelCase, dots, hyphens, and underscores
+            const words = candidate
+              .replace(/[._-]+/g, " ")
+              .replace(/([a-z])([A-Z])/g, "$1 $2")
+              .trim()
+              .split(/\s+/);
+
+            merchantName = words
+              .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+              .join(" ");
           }
         }
 

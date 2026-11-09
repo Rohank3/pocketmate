@@ -367,8 +367,9 @@ async function runPhase2Seeding(): Promise<void> {
   await sleep(250);
 
   // 2. Antoine Moreau Bistro ($130.00, 4 days ago) — RECEIPT SURCHARGE AUDIT TARGET!
-  // Item total = $115.00 ($100 items + $5 tax + $10 tip), charged = $130.00 (triggers $15 dispute/audit tool)
-  console.log("  • Seeding $130 Antoine Moreau Bistro charge with $115 receipt breakdown ($15 audit)...");
+  // Settled card charge is $130.00. The customer holds an itemized receipt for $100 food + $5 tax + $10 tip = $115.00.
+  // The PocketMate AI dynamically cross-audits the receipt against the live $130 charge to detect the $15 discrepancy.
+  console.log("  • Seeding $130 Antoine Moreau Bistro charge (receipt audit target)...");
   const cafeId = await createPaidInvoice({
     invoicerName: "Antoine Moreau Bistro",
     invoicerEmail: "antoine.moreau.cafe@business.example.com",
@@ -377,12 +378,6 @@ async function runPhase2Seeding(): Promise<void> {
     amount: 130.00,
     note: "", // Real restaurant card debits have no custom note
     daysAgo: 4,
-    items: [
-      { name: "Artisanal Dinner Entree", quantity: "2", unitPrice: 38.00 },  // $76.00
-      { name: "Handcrafted Cocktail", quantity: "2", unitPrice: 12.00 },     // $24.00
-      { name: "Praline Chocolate Torte", quantity: "1", unitPrice: 15.00 },   // $15.00
-      { name: "Merchant Surcharge & Service Fee", quantity: "1", unitPrice: 15.00 }, // $15.00 -> Total $130.00
-    ],
   });
   console.log(`    ✓ Antoine Moreau Bistro ($130.00) seeded [ID: ${cafeId}].`);
   totalInjected++;
