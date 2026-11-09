@@ -230,6 +230,17 @@ export const ProposeCategoryTriageSchema = z.object({
   reasoning: z.string().trim().max(500).optional(),
 });
 
+export const ReviewIncomingInvoiceSchema = z.object({
+  invoiceId: z.string().trim().min(1).max(100),
+  merchantName: z.string().trim().min(1).max(100).optional(),
+  amount: z.number().finite().positive().max(500000),
+  currency: z.string().default("USD").optional(),
+  senderName: z.string().trim().max(100).optional(),
+  senderEmail: z.string().trim().email().max(255).optional(),
+  memo: z.string().trim().max(255).optional(),
+  paypalInvoiceUrl: z.string().url().optional(),
+});
+
 // ============================================================================
 // In-Memory Fallback State (Simulating DB when Neon is not connected)
 // ============================================================================
@@ -562,6 +573,24 @@ export const agentToolDeclarations = [
         reasoning: { type: "STRING", description: "Short explanation for the suggested category." },
       },
       required: ["transactionId", "merchantName", "suggestedCategory"],
+    },
+  },
+  {
+    name: "review_incoming_invoice",
+    description: "Initiates an interactive review card for an incoming debt or PayPal invoice where the authenticated user is the recipient/debtor. Prompts with 3 one-tap resolution options: (1) Pay in Full via PayPal, (2) Pay with Different Value (with custom amount & reason), and (3) Decline (with reason). Never suggest sending reminders when the user is the debtor.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        invoiceId: { type: "STRING", description: "The PayPal invoice ID or split transaction ID to review." },
+        merchantName: { type: "STRING", description: "The memo or merchant description, e.g. 'Grand Vista Hotel split share'." },
+        amount: { type: "NUMBER", description: "The dollar amount owed on this incoming invoice." },
+        senderName: { type: "STRING", description: "The name of the user who sent the invoice (e.g. 'Dave Chen')." },
+        senderEmail: { type: "STRING", description: "The email of the user who sent the invoice." },
+        currency: { type: "STRING", description: "Currency code (default: USD)." },
+        memo: { type: "STRING", description: "Optional memo or description." },
+        paypalInvoiceUrl: { type: "STRING", description: "Optional authentic PayPal invoice payment URL." },
+      },
+      required: ["invoiceId", "amount"],
     },
   },
 ];
@@ -1343,6 +1372,61 @@ export async function executeAgentTool(
         confidence: parsed.confidence ?? 0.85,
         reasoning: parsed.reasoning || `Suggested category based on merchant '${parsed.merchantName}' and budget allocations.`,
         message: `Proposed category '${parsed.suggestedCategory}' for ${parsed.merchantName}. Tap a scope to apply.`,
+      };
+    }
+
+    case "review_incoming_invoice": {
+      const parsed = ReviewIncomingInvoiceSchema.parse(safeArgs);
+      let senderName = parsed.senderName;
+      let senderEmail = parsed.senderEmail;
+      let memo = parsed.memo || parsed.merchantName || "Split share invoice";
+      let splitItemId: string | undefined = undefined;
+
+      const splitItem = await prisma.splitItem.findFirst({
+        where: {
+          OR: [
+            { paypalInvoiceId: parsed.invoiceId },
+            { id: parsed.invoiceId },
+          ],
+        },
+        include: {
+          splitRecord: {
+            include: {
+              user: true,
+            },
+          },
+        },
+      });
+
+      if (splitItem) {
+        splitItemId = splitItem.id;
+        senderName = senderName || splitItem.splitRecord.user.name || "Dave Chen";
+        senderEmail = senderEmail || splitItem.splitRecord.user.email;
+        memo = splitItem.splitRecord.description || memo;
+      }
+
+      const invoiceUrl =
+        parsed.paypalInvoiceUrl || `https://www.sandbox.paypal.com/invoice/p/#${parsed.invoiceId}`;
+
+      return {
+        action: "REVIEW_INCOMING_INVOICE",
+        type: "incoming_invoice_review",
+        invoiceId: parsed.invoiceId,
+        splitItemId,
+        amount: parsed.amount,
+        totalAmount: parsed.amount,
+        currency: parsed.currency || "USD",
+        merchant: parsed.merchantName || memo,
+        merchantName: parsed.merchantName || memo,
+        senderName: senderName || "Organizer",
+        senderEmail: senderEmail || "dave.chen@business.example.com",
+        recipientName: "You",
+        memo,
+        paypalInvoiceUrl: invoiceUrl,
+        requiresConfirmation: true,
+        message: `I've opened the payment review for your pending debt of $${parsed.amount.toFixed(
+          2
+        )} (${parsed.merchantName || memo}). Please select one of the three options below: Pay in Full, Pay with Different Value, or Decline.`,
       };
     }
 

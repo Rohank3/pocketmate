@@ -1,18 +1,24 @@
 "use client";
 
 import React, { useState } from "react";
-import { Send, CheckCircle, XCircle, Loader2, CreditCard, Users, ShieldAlert } from "lucide-react";
+import { Send, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { InteractiveSplitCard } from "./InteractiveSplitCard";
 import { CategoryTriageCard } from "./CategoryTriageCard";
+import { InvoiceReviewCard } from "./InvoiceReviewCard";
 
 export interface ActionCardData {
-  action?: "DISPATCH_INVOICES" | "DISPATCH_PAYOUT" | "CREATE_SPLIT" | "PROPOSE_SPLIT_BREAKDOWN" | "CATEGORY_TRIAGE" | string;
+  action?: "DISPATCH_INVOICES" | "DISPATCH_PAYOUT" | "CREATE_SPLIT" | "PROPOSE_SPLIT_BREAKDOWN" | "CATEGORY_TRIAGE" | "REVIEW_INCOMING_INVOICE" | string;
   type?: string;
   category?: string;
   invoiceId?: string;
+  splitItemId?: string;
   transactionId?: string;
   merchant?: string;
   merchantName?: string;
+  senderName?: string;
+  senderEmail?: string;
+  paypalInvoiceUrl?: string;
+  currency?: string;
   totalRecipients?: number;
   totalAmount?: number;
   recipientName?: string;
@@ -47,6 +53,7 @@ export interface ActionCardData {
 
 interface ActionConfirmCardProps {
   cardData: ActionCardData;
+  categories?: Array<{ id?: string; name: string; color?: string }>;
   onConfirm: (cardData: ActionCardData) => Promise<void>;
   onCancel: () => void;
   onAssignCategory?: (
@@ -70,6 +77,7 @@ const TRANSFER_PURPOSES = [
 
 export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
   cardData,
+  categories = [],
   onConfirm,
   onCancel,
   onAssignCategory,
@@ -98,18 +106,6 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
         category: isPayout ? selectedCategory : cardData.category,
       });
       setCompleted(isPayout ? "transferred" : "dispatched");
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleActionClick = async (actionType: string) => {
-    setLoading(true);
-    try {
-      await onConfirm({ ...cardData, action: actionType });
-      setCompleted(actionType);
     } catch (err) {
       console.error(err);
     } finally {
@@ -153,6 +149,7 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
           confidence: cardData.confidence,
           reasoning: cardData.reasoning || cardData.note,
         }}
+        categories={categories}
         onAssignCategory={onAssignCategory}
         onCancel={handleCancel}
       />
@@ -188,75 +185,27 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
     );
   }
 
-  // Incoming Invoice Review Card Layout
-  if (isInvoiceReview) {
+  // Incoming Invoice Review Card Layout (3 Options: Pay in Full, Pay Different Value, Decline)
+  if (isInvoiceReview || cardData.action === "REVIEW_INCOMING_INVOICE") {
     return (
-      <div className="my-3 p-4 bg-zinc-900 border border-blue-500/40 rounded-xl shadow-xl transition-all">
-        <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-            <h4 className="text-xs font-semibold text-zinc-100 uppercase tracking-wider">
-              Incoming Invoice (PayPal Sandbox)
-            </h4>
-          </div>
-          <span className="text-xs font-mono font-bold text-emerald-400">
-            ${totalAmount.toFixed(2)} Due
-          </span>
-        </div>
-
-        <div className="py-3 space-y-2 text-xs">
-          <div className="flex items-center justify-between p-2.5 rounded-lg bg-zinc-800/40 border border-zinc-800">
-            <div className="space-y-0.5">
-              <span className="font-semibold text-zinc-100 text-sm">{cardData.merchant || "Merchant"}</span>
-              <p className="text-[11px] text-zinc-400 font-mono">Invoice ID: {cardData.invoiceId || "INV2-..."}</p>
-              <p className="text-[11px] text-zinc-400">Billed to: {cardData.recipientName || "You"}</p>
-            </div>
-            <div className="text-right">
-              <span className="text-sm font-bold font-mono text-zinc-100">${totalAmount.toFixed(2)}</span>
-              <p className="text-[10px] text-amber-400 font-medium">Pending Settlement</p>
-            </div>
-          </div>
-        </div>
-
-        {/* 3 Single-Tap Actions */}
-        <div className="pt-3 border-t border-zinc-800 flex flex-wrap items-center justify-end gap-2">
-          <button
-            onClick={() => handleActionClick("dispute_invoice")}
-            disabled={loading}
-            className="px-3 py-1.5 text-xs font-medium text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
-          >
-            <ShieldAlert className="w-3.5 h-3.5" />
-            Dispute / Decline
-          </button>
-
-          <button
-            onClick={() => handleActionClick("split_invoice")}
-            disabled={loading}
-            className="px-3 py-1.5 text-xs font-medium text-blue-300 hover:text-blue-200 bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/30 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
-          >
-            <Users className="w-3.5 h-3.5" />
-            Split with Friends
-          </button>
-
-          <button
-            onClick={() => handleActionClick("pay_invoice")}
-            disabled={loading}
-            className="px-4 py-1.5 text-xs font-medium text-zinc-950 bg-emerald-400 hover:bg-emerald-300 active:bg-emerald-500 rounded-lg transition-colors shadow-lg shadow-emerald-500/20 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                Processing...
-              </>
-            ) : (
-              <>
-                <CreditCard className="w-3.5 h-3.5" />
-                Pay via PayPal Sandbox (${totalAmount.toFixed(2)})
-              </>
-            )}
-          </button>
-        </div>
-      </div>
+      <InvoiceReviewCard
+        cardData={{
+          action: "REVIEW_INCOMING_INVOICE",
+          type: "incoming_invoice_review",
+          invoiceId: cardData.invoiceId,
+          splitItemId: cardData.splitItemId,
+          merchant: cardData.merchant,
+          merchantName: cardData.merchantName,
+          amount: totalAmount,
+          totalAmount,
+          currency: cardData.currency || "USD",
+          senderName: cardData.senderName,
+          senderEmail: cardData.senderEmail,
+          memo: cardData.memo || cardData.note,
+          paypalInvoiceUrl: cardData.paypalInvoiceUrl,
+        }}
+        onCancel={handleCancel}
+      />
     );
   }
 
