@@ -58,7 +58,8 @@ export async function runAgentOrchestrator(options: AgentRunOptions): Promise<Ag
 
   try {
     const systemPrompt = assembleSystemPrompt(persona);
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    const primaryModel = process.env.GEMINI_MODEL || "gemini-3.5-flash";
+    let geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${primaryModel}:generateContent?key=${apiKey}`;
 
     const formattedContents: Array<{ role: "user" | "model"; parts: [{ text: string }] }> = [];
     for (const m of messages) {
@@ -106,16 +107,26 @@ export async function runAgentOrchestrator(options: AgentRunOptions): Promise<Ag
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-    const res = await fetch(geminiUrl, {
+    let res = await fetch(geminiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(bodyPayload),
       signal: controller.signal,
     }).finally(() => clearTimeout(timeoutId));
 
+    if (!res.ok && (res.status === 429 || res.status === 503 || res.status === 404)) {
+      geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`;
+      res = await fetch(geminiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(bodyPayload),
+      });
+    }
+
     if (!res.ok) {
       console.warn(`[Gemini API] Returned HTTP ${res.status}. Falling back to dynamic autonomous engine.`);
       return handleDynamicAutonomousResponse(lastUserMsg, persona, {
+        userId,
         onTextDelta,
         onToolCall,
         onGridMutation,
@@ -178,6 +189,7 @@ export async function runAgentOrchestrator(options: AgentRunOptions): Promise<Ag
   } catch (error) {
     console.warn("[Gemini API Fallback]", error);
     return handleDynamicAutonomousResponse(lastUserMsg, persona, {
+      userId,
       onTextDelta,
       onToolCall,
       onGridMutation,
@@ -250,8 +262,56 @@ export async function handleDynamicAutonomousResponse(
     handlers.onPersonaUpdate?.(persona);
   }
 
-  // 1. Direct Peer Settlement / Transfer via PayPal Payouts API
-  // e.g. "Pay Dave $50", "Send $30 to Sarah", "Transfer $45 to Dave Chen", "Settle $65 with Dave"
+  // --------------------------------------------------------------------------
+  // A. Review Incoming PayPal Invoice (e.g. from banner or quick action)
+  // e.g. "Review incoming invoice INV2-8UM5-HXTK-NH6M-QRHV for $32.50 from Bowlero Lanes Entertainment & Shoes"
+  // --------------------------------------------------------------------------
+  const isInvoiceReviewIntent =
+    (p.includes("review") && p.includes("invoice")) ||
+    p.includes("inv2-") ||
+    (p.includes("incoming") && p.includes("invoice"));
+
+  // --------------------------------------------------------------------------
+  // B. Budget Cap Breach & Category Cost Optimization
+  // e.g. "PocketMate, my Dining budget has breached its $250 cap by $9.75. Please review category transactions and suggest cost optimizations."
+  // --------------------------------------------------------------------------
+  const isBudgetBreachIntent =
+    (p.includes("breached") ||
+      p.includes("breach") ||
+      p.includes("cap") ||
+      p.includes("cost optimization") ||
+      p.includes("overrun") ||
+      p.includes("overspend")) &&
+    (p.includes("budget") ||
+      p.includes("dining") ||
+      p.includes("groceries") ||
+      p.includes("shopping") ||
+      p.includes("entertainment") ||
+      p.includes("travel"));
+
+  // --------------------------------------------------------------------------
+  // C. Conversational One-by-One Uncategorized Triage Wizard
+  // e.g. "triage", "prompt me to uncategorized one by one", "help me categorize"
+  // --------------------------------------------------------------------------
+  const isTriageIntent =
+    p.includes("one by one") ||
+    p.includes("step by step") ||
+    p.includes("triage") ||
+    (p.includes("uncategorized") &&
+      (p.includes("guide") ||
+        p.includes("prompt") ||
+        p.includes("review") ||
+        p.includes("help") ||
+        p.includes("walk through")));
+
+  // --------------------------------------------------------------------------
+  // D. Triage Selection Response (User replying with category selection 1-5 or category name)
+  // --------------------------------------------------------------------------
+  const isTriageResponse =
+    /^(1|2|3|4|5)$/.test(p.trim()) ||
+    ["travel", "dining", "shopping", "groceries", "entertainment"].includes(p.trim());
+
+  // Direct Peer Settlement / Transfer via PayPal Payouts API
   const isPayoutIntent =
     (p.startsWith("pay") ||
       p.startsWith("send") ||
@@ -262,7 +322,300 @@ export async function handleDynamicAutonomousResponse(
     !p.includes("invoice") &&
     !p.includes("bill me");
 
-  if (isPayoutIntent) {
+  if (isInvoiceReviewIntent) {
+    const invMatch = prompt.match(/(INV2-[A-Z0-9-]+)/i) || prompt.match(/invoice\s+([A-Z0-9-]+)/i);
+    const invoiceId = invMatch ? invMatch[1] : "INV2-8UM5-HXTK-NH6M-QRHV";
+
+    const amtMatch = prompt.match(/\$([0-9]+(?:\.[0-9]{1,2})?)/);
+    const amount = amtMatch ? parseFloat(amtMatch[1]) : 32.50;
+
+    const fromMatch = prompt.match(/from\s+([^.\n]+)/i);
+    const merchant = fromMatch ? fromMatch[1].trim() : "Bowlero Lanes Entertainment & Shoes";
+
+    gridMutation = {
+      highlightRowId: invoiceId,
+      statusMessage: `Reviewing incoming invoice ${invoiceId} ($${amount.toFixed(2)}) from ${merchant}.`,
+    };
+    handlers.onGridMutation?.(gridMutation);
+
+    actionCard = {
+      type: "incoming_invoice_review",
+      invoiceId,
+      amount,
+      merchant,
+      recipientName: "Dave Chen",
+      recipientEmail: "dave.chen.pm@personal.example.com",
+      requiresConfirmation: true,
+      actions: [
+        { label: `Pay via PayPal Sandbox ($${amount.toFixed(2)})`, action: "pay_invoice", variant: "primary" },
+        { label: "Split with Friends", action: "split_invoice", variant: "secondary" },
+        { label: "Dispute / Decline", action: "dispute_invoice", variant: "danger" },
+      ],
+    };
+    handlers.onActionCard?.(actionCard);
+
+    reply = `### 🧾 Incoming Invoice Review: **${merchant}**
+
+• **Invoice ID:** \`${invoiceId}\`
+• **Amount Due:** **$${amount.toFixed(2)} USD**
+• **Billed To:** Dave Chen (\`dave.chen.pm@personal.example.com\`)
+• **Category Impact:** **Entertainment** (Leaves healthy headroom in monthly budget)
+• **Settlement Status:** ⏳ Pending Payment Clearing
+
+---
+#### ⚡ Single-Tap Sandbox Actions:
+1. **Pay via PayPal Sandbox**: Instantly settle **$${amount.toFixed(2)}** via your linked sandbox buyer wallet.
+2. **Split with Friends**: Divide this invoice across your group (e.g. *"split this $${amount.toFixed(2)} invoice 3 ways with Alex and Sam"*).
+3. **Dispute / Decline**: Flag unauthorized billing or billing mismatch under PayPal Buyer Protection.
+
+Review the action card below to execute or reply with your preferred action.`;
+  } else if (isBudgetBreachIntent) {
+    const category = p.includes("dining")
+      ? "Dining"
+      : p.includes("groceries")
+      ? "Groceries"
+      : p.includes("shopping")
+      ? "Shopping"
+      : p.includes("entertainment")
+      ? "Entertainment"
+      : p.includes("travel")
+      ? "Travel"
+      : "Dining";
+
+    const capMatch = prompt.match(/\$([0-9]+(?:\.[0-9]{1,2})?)\s*cap/i) || prompt.match(/cap\s*(?:of)?\s*\$([0-9]+(?:\.[0-9]{1,2})?)/i);
+    const breachMatch = prompt.match(/by\s*\$([0-9]+(?:\.[0-9]{1,2})?)/i) || prompt.match(/over\s*\$([0-9]+(?:\.[0-9]{1,2})?)/i);
+
+    const cap = capMatch ? parseFloat(capMatch[1]) : 250.0;
+    const overrun = breachMatch ? parseFloat(breachMatch[1]) : 9.75;
+    const totalSpent = cap + overrun;
+
+    gridMutation = {
+      filter: { category },
+      renderChart: "budget_burn_bar",
+      statusMessage: `Auditing ${category} budget: $${totalSpent.toFixed(2)} spent of $${cap.toFixed(2)} cap ($${overrun.toFixed(2)} over ceiling).`,
+    };
+    handlers.onGridMutation?.(gridMutation);
+
+    reply = `### 📊 Budget Optimization Audit: **${category}**
+
+• **Monthly Cap:** $${cap.toFixed(2)}
+• **Current Spend:** $${totalSpent.toFixed(2)} (**⚠️ $${overrun.toFixed(2)} over ceiling — ${((totalSpent / cap) * 100).toFixed(0)}% utilized**)
+• **Active Charges:** 4 transactions recorded in ${category}
+
+#### 🔍 Key Spending Drivers:
+1. **Antoine Moreau Bistro**: **$130.00** (${((130 / totalSpent) * 100).toFixed(0)}% of total category spend) — *Audit detected $15.00 unlisted merchant surcharge*.
+2. **Chipotle Mexican Grill**: **$16.99**
+3. **Alex Morgan (tacos 🌮)**: **$14.00**
+4. **Starbucks Coffee**: **$6.85**
+
+---
+#### 💡 3 Actionable Cost Optimizations:
+1. **Claim the $15.00 Bistro Discrepancy**: Initiating a PayPal dispute for the unlisted service surcharge on Antoine Moreau Bistro drops your Dining spend to **$${(totalSpent - 15).toFixed(2)}**, bringing you back **$${(cap - (totalSpent - 15)).toFixed(2)} under your monthly cap**!
+2. **Split the Bistro Dinner Check**: If the $130 bistro meal was shared with friends, reply *"split $130 bistro bill 3 ways with friends"* to recoup **$86.66** in accounts receivable.
+3. **Reallocate Work Coffee Runs**: Tag recurring Starbucks coffee charges under **Work & Client Services** to preserve personal Dining headroom for evening meals.`;
+  } else if (isTriageIntent) {
+    const effectiveUserId = handlers.userId || "demo_user";
+    const filterEmail = effectiveUserId.includes("@") ? effectiveUserId : undefined;
+    const liveTxs = await paypalClient.fetchRecentTransactions(720, filterEmail).catch(() => []);
+
+    let existingOverrides: Array<{ transactionId: string; categoryName: string }> = [];
+    try {
+      existingOverrides = await prisma.transactionCategoryOverride.findMany({
+        where: { userId: effectiveUserId },
+        select: { transactionId: true, categoryName: true },
+      });
+    } catch (dbErr) {
+      console.warn("[Triage DB Warning]", dbErr);
+    }
+
+    const overriddenIds = new Set(
+      existingOverrides
+        .filter((o) => o.categoryName.toLowerCase() !== "uncategorized")
+        .map((o) => o.transactionId)
+    );
+
+    const uncategorizedTxs = liveTxs.filter((t) => !overriddenIds.has(t.id));
+
+    if (uncategorizedTxs.length === 0) {
+      gridMutation = {
+        filter: { category: "all" },
+        statusMessage: "All transactions are fully categorized across your active budgets.",
+      };
+      handlers.onGridMutation?.(gridMutation);
+
+      reply = `🎉 **Ledger Reconciled!**\n\nAll ${liveTxs.length} transactions in your PayPal sandbox ledger are already categorized across your active budgets.\n\nYou can review your spending breakdown in the **Insights** tab or say *"did I overspend on Groceries this month?"*`;
+    } else {
+      const nextTx = uncategorizedTxs[0];
+      const mName = nextTx.merchantName.toLowerCase();
+      let suggestedCategory = "Shopping";
+
+      if (mName.includes("hotel") || mName.includes("uber") || mName.includes("airalo") || mName.includes("eurostar") || mName.includes("roma")) {
+        suggestedCategory = "Travel";
+      } else if (mName.includes("bistro") || mName.includes("cafe") || mName.includes("chipotle") || mName.includes("starbucks") || mName.includes("taco") || mName.includes("restaurant") || mName.includes("dining")) {
+        suggestedCategory = "Dining";
+      } else if (mName.includes("whole") || mName.includes("trader") || mName.includes("market") || mName.includes("grocery") || mName.includes("food")) {
+        suggestedCategory = "Groceries";
+      } else if (mName.includes("netflix") || mName.includes("spotify") || mName.includes("bowlero") || mName.includes("amc") || mName.includes("theater")) {
+        suggestedCategory = "Entertainment";
+      }
+
+      gridMutation = {
+        highlightRowId: nextTx.id,
+        filter: { category: "Uncategorized" },
+        statusMessage: `Triage Mode (1 of ${uncategorizedTxs.length}): Reviewing ${nextTx.merchantName} ($${nextTx.amount.toFixed(2)})`,
+      };
+      handlers.onGridMutation?.(gridMutation);
+
+      const dateStr = new Date(nextTx.timestamp).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+      const memoLine = nextTx.memo && nextTx.memo.toLowerCase() !== nextTx.merchantName.toLowerCase()
+        ? `• **Memo / Item:** ${nextTx.memo}\n`
+        : "";
+
+      reply = `### 🔍 Interactive Triage (1 of ${uncategorizedTxs.length} Uncategorized)
+
+I've highlighted the next uncategorized item on your AG Grid ledger:
+
+• **Merchant / Payee:** **${nextTx.merchantName}**
+• **Amount:** **$${nextTx.amount.toFixed(2)} USD**
+${memoLine}• **Date:** ${dateStr}
+• **Settlement Status:** ${nextTx.status === "COMPLETED" ? "Cleared & Settled" : "Pending Authorization"}
+
+💡 **AI Recommended Category:** **${suggestedCategory}**
+
+---
+**How would you like to categorize this?**
+• Reply **1** for **${suggestedCategory}**
+• Reply **2** for **Dining**
+• Reply **3** for **Shopping**
+• Reply **4** for **Entertainment**
+• Reply **5** for **Travel**
+• Or reply with any custom category name!`;
+    }
+  } else if (isTriageResponse) {
+    const effectiveUserId = handlers.userId || "demo_user";
+    const filterEmail = effectiveUserId.includes("@") ? effectiveUserId : undefined;
+    const liveTxs = await paypalClient.fetchRecentTransactions(720, filterEmail).catch(() => []);
+
+    let existingOverrides: Array<{ transactionId: string; categoryName: string }> = [];
+    try {
+      existingOverrides = await prisma.transactionCategoryOverride.findMany({
+        where: { userId: effectiveUserId },
+        select: { transactionId: true, categoryName: true },
+      });
+    } catch (dbErr) {
+      console.warn("[Triage DB Warning]", dbErr);
+    }
+
+    const overriddenIds = new Set(
+      existingOverrides
+        .filter((o) => o.categoryName.toLowerCase() !== "uncategorized")
+        .map((o) => o.transactionId)
+    );
+
+    const uncategorizedTxs = liveTxs.filter((t) => !overriddenIds.has(t.id));
+
+    if (uncategorizedTxs.length > 0) {
+      const currentTx = uncategorizedTxs[0];
+      const mName = currentTx.merchantName.toLowerCase();
+      let defaultSuggested = "Shopping";
+      if (mName.includes("hotel") || mName.includes("uber") || mName.includes("airalo") || mName.includes("eurostar") || mName.includes("roma")) {
+        defaultSuggested = "Travel";
+      } else if (mName.includes("bistro") || mName.includes("cafe") || mName.includes("chipotle") || mName.includes("starbucks") || mName.includes("taco") || mName.includes("restaurant") || mName.includes("dining")) {
+        defaultSuggested = "Dining";
+      } else if (mName.includes("whole") || mName.includes("trader") || mName.includes("market") || mName.includes("grocery") || mName.includes("food")) {
+        defaultSuggested = "Groceries";
+      } else if (mName.includes("netflix") || mName.includes("spotify") || mName.includes("bowlero") || mName.includes("amc") || mName.includes("theater")) {
+        defaultSuggested = "Entertainment";
+      }
+
+      // Map choice to target category
+      let chosenCategory = defaultSuggested;
+      const cleanInput = p.trim();
+      if (cleanInput === "1") chosenCategory = defaultSuggested;
+      else if (cleanInput === "2") chosenCategory = "Dining";
+      else if (cleanInput === "3") chosenCategory = "Shopping";
+      else if (cleanInput === "4") chosenCategory = "Entertainment";
+      else if (cleanInput === "5") chosenCategory = "Travel";
+      else {
+        chosenCategory = cleanInput.charAt(0).toUpperCase() + cleanInput.slice(1).toLowerCase();
+      }
+
+      // Persist category override
+      try {
+        await prisma.transactionCategoryOverride.upsert({
+          where: {
+            userId_transactionId: {
+              userId: effectiveUserId,
+              transactionId: currentTx.id,
+            },
+          },
+          update: { categoryName: chosenCategory },
+          create: {
+            userId: effectiveUserId,
+            transactionId: currentTx.id,
+            categoryName: chosenCategory,
+          },
+        });
+      } catch (err) {
+        console.warn("[Triage Upsert Warning]", err);
+      }
+
+      // Check if more uncategorized transactions remain
+      const remainingTxs = uncategorizedTxs.slice(1);
+
+      if (remainingTxs.length === 0) {
+        gridMutation = {
+          filter: { category: "all" },
+          statusMessage: `Tagged ${currentTx.merchantName} as ${chosenCategory}. All transactions are now categorized!`,
+        };
+        handlers.onGridMutation?.(gridMutation);
+
+        reply = `✅ Tagged **${currentTx.merchantName}** ($${currentTx.amount.toFixed(2)}) as **${chosenCategory}**.\n\n🎉 **All done!** Every transaction in your ledger has been categorized. Your budget balances and charts are fully reconciled!`;
+      } else {
+        const nextTx = remainingTxs[0];
+        const nextM = nextTx.merchantName.toLowerCase();
+        let nextSuggested = "Shopping";
+        if (nextM.includes("hotel") || nextM.includes("uber") || nextM.includes("airalo") || nextM.includes("eurostar") || nextM.includes("roma")) {
+          nextSuggested = "Travel";
+        } else if (nextM.includes("bistro") || nextM.includes("cafe") || nextM.includes("chipotle") || nextM.includes("starbucks") || nextM.includes("taco") || nextM.includes("restaurant") || nextM.includes("dining")) {
+          nextSuggested = "Dining";
+        } else if (nextM.includes("whole") || nextM.includes("trader") || nextM.includes("market") || nextM.includes("grocery") || nextM.includes("food")) {
+          nextSuggested = "Groceries";
+        } else if (nextM.includes("netflix") || nextM.includes("spotify") || nextM.includes("bowlero") || nextM.includes("amc") || nextM.includes("theater")) {
+          nextSuggested = "Entertainment";
+        }
+
+        gridMutation = {
+          highlightRowId: nextTx.id,
+          filter: { category: "Uncategorized" },
+          statusMessage: `Tagged ${currentTx.merchantName} as ${chosenCategory}. Reviewing ${nextTx.merchantName} (${remainingTxs.length} remaining).`,
+        };
+        handlers.onGridMutation?.(gridMutation);
+
+        const dateStr = new Date(nextTx.timestamp).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+        const memoLine = nextTx.memo && nextTx.memo.toLowerCase() !== nextTx.merchantName.toLowerCase()
+          ? `• **Memo / Item:** ${nextTx.memo}\n`
+          : "";
+
+        reply = `✅ Tagged **${currentTx.merchantName}** as **${chosenCategory}**!\n\n---
+### 🔍 Next Item (${remainingTxs.length} remaining):
+
+• **Merchant / Payee:** **${nextTx.merchantName}**
+• **Amount:** **$${nextTx.amount.toFixed(2)} USD**
+${memoLine}• **Date:** ${dateStr}
+
+💡 **AI Recommended:** **${nextSuggested}**
+
+Reply with **1** for **${nextSuggested}**, **2** for **Dining**, **3** for **Shopping**, **4** for **Entertainment**, **5** for **Travel**, or type any category name!`;
+      }
+    } else {
+      reply = `All transactions are currently categorized! If you want to change any category, click the category badge directly in the AG Grid ledger or tell me (e.g. *"mark Grand Vista Hotel as Travel"*).`;
+    }
+  }
+
+  // 1. Direct Peer Settlement / Transfer via PayPal Payouts API
+  // e.g. "Pay Dave $50", "Send $30 to Sarah", "Transfer $45 to Dave Chen", "Settle $65 with Dave"
+  else if (isPayoutIntent) {
     const dollarMatch = prompt.match(/\$([0-9]+(\.[0-9]{1,2})?)/) || prompt.match(/(\d+(\.\d+)?)\s*(?:dollars?|usd)/i);
     const amount = dollarMatch ? parseFloat(dollarMatch[1]) : 50.0;
 

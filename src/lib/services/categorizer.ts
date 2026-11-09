@@ -273,9 +273,9 @@ ${JSON.stringify(
   const timeoutId = setTimeout(() => controller.abort(), 6000);
 
   try {
-    const model = process.env.GEMINI_MODEL || "gemini-flash-latest";
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-    const res = await fetch(url, {
+    const primaryModel = process.env.GEMINI_MODEL || "gemini-3.5-flash";
+    let url = `https://generativelanguage.googleapis.com/v1beta/models/${primaryModel}:generateContent?key=${apiKey}`;
+    let res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       signal: controller.signal,
@@ -287,6 +287,23 @@ ${JSON.stringify(
         },
       }),
     });
+
+    if (!res.ok && (res.status === 429 || res.status === 503 || res.status === 404)) {
+      // Fallback to flash-lite
+      url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`;
+      res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.1,
+            responseMimeType: "application/json",
+          },
+        }),
+      });
+    }
 
     clearTimeout(timeoutId);
 
@@ -724,9 +741,9 @@ Return ONLY valid JSON with an array of matching transaction IDs:
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 6000);
 
-    const model = process.env.GEMINI_MODEL || "gemini-flash-latest";
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-    const res = await fetch(url, {
+    const primaryModel = process.env.GEMINI_MODEL || "gemini-3.5-flash";
+    let url = `https://generativelanguage.googleapis.com/v1beta/models/${primaryModel}:generateContent?key=${apiKey}`;
+    let res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       signal: controller.signal,
@@ -738,6 +755,22 @@ Return ONLY valid JSON with an array of matching transaction IDs:
         },
       }),
     });
+
+    if (!res.ok && (res.status === 429 || res.status === 503 || res.status === 404)) {
+      url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`;
+      res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.1,
+            responseMimeType: "application/json",
+          },
+        }),
+      });
+    }
 
     clearTimeout(timeoutId);
 

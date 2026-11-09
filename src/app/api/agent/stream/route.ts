@@ -191,7 +191,8 @@ export async function POST(req: NextRequest) {
 
         try {
           const systemPrompt = assembleSystemPrompt(persona);
-          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?key=${apiKey}&alt=sse`;
+          const primaryModel = process.env.GEMINI_MODEL || "gemini-3.5-flash";
+          let geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${primaryModel}:streamGenerateContent?key=${apiKey}&alt=sse`;
 
           const formattedContents: Array<{ role: "user" | "model"; parts: [{ text: string }] }> = [];
           for (const m of messages) {
@@ -237,12 +238,21 @@ export async function POST(req: NextRequest) {
           const abortController = new AbortController();
           const timeoutId = setTimeout(() => abortController.abort(), 8000);
 
-          const geminiRes = await fetch(geminiUrl, {
+          let geminiRes = await fetch(geminiUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(bodyPayload),
             signal: abortController.signal,
           }).finally(() => clearTimeout(timeoutId));
+
+          if (!geminiRes.ok && (geminiRes.status === 429 || geminiRes.status === 503 || geminiRes.status === 404)) {
+            geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:streamGenerateContent?key=${apiKey}&alt=sse`;
+            geminiRes = await fetch(geminiUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(bodyPayload),
+            });
+          }
 
           if (!geminiRes.ok || !geminiRes.body) {
             console.warn(`[Gemini SSE] HTTP ${geminiRes.status}. Falling back to dynamic autonomous engine.`);
