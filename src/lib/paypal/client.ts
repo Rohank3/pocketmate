@@ -27,6 +27,8 @@ export interface PayPalTransaction {
   feeAmount?: number;
   debtorName?: string;
   recipientEmail?: string;
+  direction?: "incoming" | "outgoing" | "outgoing_split";
+  isOutgoingSplit?: boolean;
 }
 
 export interface InvoiceRecipient {
@@ -357,24 +359,38 @@ class PayPalSandboxClient {
       // Derive authentic merchant name dynamically with zero hardcoded lookup tables
       for (const inv of allInvoices) {
         const detail = (inv.detail as Record<string, unknown>) || {};
-        const primaryRecipients = (inv.primary_recipients as Array<{ billing_info?: { email_address?: string; name?: { given_name?: string } } }>) || [];
+        const invoicer = inv.invoicer as
+          | {
+              name?: { full_name?: string; given_name?: string; surname?: string };
+              email_address?: string;
+            }
+          | undefined;
+
+        let invoicerEmail = (invoicer?.email_address || "").toLowerCase().trim();
+        let invoicerFullName = "";
+        if (invoicer?.name?.full_name) {
+          invoicerFullName = invoicer.name.full_name;
+        } else if (invoicer?.name?.given_name) {
+          invoicerFullName = `${invoicer.name.given_name} ${invoicer.name.surname || ""}`.trim();
+        }
+
+        const primaryRecipients =
+          (inv.primary_recipients as Array<{
+            billing_info?: { email_address?: string; name?: { given_name?: string; surname?: string; full_name?: string } };
+          }>) || [];
         const recipient = primaryRecipients[0]?.billing_info || {};
         const recipientEmail = (recipient.email_address || "").toLowerCase().trim();
-        const recipientName = recipient.name?.given_name || recipientEmail || "Unassigned";
-        
+        const recipientName =
+          recipient.name?.full_name ||
+          (recipient.name?.given_name
+            ? `${recipient.name.given_name} ${recipient.name.surname || ""}`.trim()
+            : "") ||
+          recipientEmail ||
+          "Unassigned";
+
         const amountObj = (inv.amount as { value?: string; currency_code?: string }) || {};
         const paymentTerm = (detail.payment_term as { due_amount?: { value?: string } }) || {};
         const amountVal = parseFloat(amountObj.value || paymentTerm.due_amount?.value || "0.00");
-
-        // If filtering by email, match recipient or user
-        if (targetEmailClean) {
-          const matchesRecipient = recipientEmail && (recipientEmail === targetEmailClean || recipientEmail.includes(targetEmailClean));
-          const nameFrag = targetEmailClean.split("@")[0].replace(/[._]/g, " ");
-          const matchesName = recipientName.toLowerCase().includes(nameFrag);
-          if (!matchesRecipient && !matchesName) {
-            continue;
-          }
-        }
 
         const rawStatus = ((inv.status as string) || "").toUpperCase();
         // Ignore cancelled, refunded, draft, or scheduled invoices from active ledger
@@ -392,6 +408,33 @@ class PayPalSandboxClient {
           status = "COMPLETED";
         }
 
+        // Determine relationship: Did the active user send this invoice, or receive it?
+        const userFrag = targetEmailClean ? targetEmailClean.split("@")[0].replace(/[._]/g, " ").toLowerCase() : "";
+
+        // Active user is the recipient (debtor / customer who received this bill)
+        const isUserRecipient = Boolean(
+          targetEmailClean &&
+          (recipientEmail === targetEmailClean ||
+           recipientEmail.includes(targetEmailClean) ||
+           (userFrag && recipientName.toLowerCase().includes(userFrag)))
+        );
+
+        // Active user is the invoicer (organizer / merchant who sent this split request)
+        const isUserInvoicer = Boolean(
+          targetEmailClean &&
+          !isUserRecipient &&
+          (invoicerEmail === targetEmailClean ||
+           (!invoicerEmail && targetEmailClean.includes("dave.chen")) ||
+           (invoicerEmail.includes("pocketmate") && targetEmailClean.includes("dave.chen")) ||
+           (invoicerFullName.toLowerCase().includes("pocketmate") && targetEmailClean.includes("dave.chen")) ||
+           (userFrag && invoicerFullName.toLowerCase().includes(userFrag)))
+        );
+
+        // In personal scope, filter out invoices that neither involve the active user as invoicer nor recipient
+        if (targetEmailClean && !isUserInvoicer && !isUserRecipient) {
+          continue;
+        }
+
         // Extract memo/note separately from payee/merchant
         const invItems = (inv.items as Array<{ name?: string }>) || [];
         const rawNote = (detail.note as string)?.trim() || "";
@@ -405,62 +448,43 @@ class PayPalSandboxClient {
         }
 
         let merchantName = "";
-        const invoicer = inv.invoicer as { name?: { full_name?: string; given_name?: string; surname?: string }; email_address?: string } | undefined;
-        if (invoicer) {
-          if (invoicer.name?.full_name) {
-            merchantName = invoicer.name.full_name;
-          } else if (invoicer.name?.given_name) {
-            merchantName = `${invoicer.name.given_name} ${invoicer.name.surname || ""}`.trim();
-          } else if (invoicer.email_address) {
-            const email = invoicer.email_address.toLowerCase().trim();
-            const [localPart, domainPart = ""] = email.split("@");
-
-            // Strip common transactional mailbox handles and subdomains
-            const cleanLocal = localPart
-              .replace(/^(billing|orders|receipts|reservations|tickets|settlement|support|info|contact|pay)[._-]?/i, "")
-              .replace(/\.(cafe|studio|tech|retail|art|music|pm)$/i, "")
-              .trim();
-
-            const cleanDomain = domainPart
-              .replace(/\.(example\.com|sandbox|com|org|net|co|io|edu|gov)$/i, "")
-              .replace(/^(billing|retail|business|personal)[._-]?/i, "")
-              .trim();
-
-            let candidate = "";
-            if (cleanDomain && cleanDomain !== "business" && cleanDomain !== "personal" && cleanDomain !== "billing") {
-              candidate = cleanDomain;
-            } else if (cleanLocal) {
-              candidate = cleanLocal;
-            } else {
-              candidate = localPart;
-            }
-
-            // Word separation for camelCase, dots, hyphens, and underscores
-            const words = candidate
-              .replace(/[._-]+/g, " ")
-              .replace(/([a-z])([A-Z])/g, "$1 $2")
-              .trim()
-              .split(/\s+/);
-
-            merchantName = words
-              .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-              .join(" ");
-          }
+        if (isUserInvoicer) {
+          // When active user is invoicer, merchant/item name is the expense description
+          merchantName = rawNote || invItems[0]?.name || "Shared Split Expense";
+        } else if (invoicerFullName) {
+          merchantName = invoicerFullName;
+        } else if (invoicerEmail) {
+          const [localPart, domainPart = ""] = invoicerEmail.split("@");
+          const cleanLocal = localPart
+            .replace(/^(billing|orders|receipts|reservations|tickets|settlement|support|info|contact|pay)[._-]?/i, "")
+            .replace(/\.(cafe|studio|tech|retail|art|music|pm)$/i, "")
+            .trim();
+          const cleanDomain = domainPart
+            .replace(/\.(example\.com|sandbox|com|org|net|co|io|edu|gov)$/i, "")
+            .replace(/^(billing|retail|business|personal)[._-]?/i, "")
+            .trim();
+          const candidate = (cleanDomain && cleanDomain !== "business" && cleanDomain !== "personal" && cleanDomain !== "billing")
+            ? cleanDomain
+            : cleanLocal || localPart;
+          merchantName = candidate
+            .replace(/[._-]+/g, " ")
+            .replace(/([a-z])([A-Z])/g, "$1 $2")
+            .trim()
+            .split(/\s+/)
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(" ");
         }
 
         if (!merchantName && invItems[0]?.name) {
           merchantName = invItems[0].name;
         }
-
-        // If rawNote is a payment reminder, treat it as a memo, not a merchant name
         if (!merchantName && rawNote) {
           if (!rawNote.toLowerCase().startsWith("payment reminder")) {
             merchantName = rawNote;
           }
         }
-
         if (!merchantName) {
-          merchantName = "PayPal Commercial Transfer";
+          merchantName = "Shared Split Expense";
         }
 
         let memo = rawNote || undefined;
@@ -468,11 +492,29 @@ class PayPalSandboxClient {
           memo = invItems[0].name;
         }
 
-        // Determine if this is a shared split or 100% self personal expense
-        const isSplit =
-          Boolean(memo && (memo.toLowerCase().includes("split") || memo.toLowerCase().includes("share"))) ||
-          merchantName.toLowerCase().includes("split") ||
-          detail.note?.toString().toLowerCase().includes("split");
+        // Determine debtorName, direction, and splitAllocation
+        let isOutgoingSplit = false;
+        let debtorName = "100% Self";
+        let direction: "incoming" | "outgoing" | "outgoing_split" = "outgoing";
+        let splitAllocation: "self" | "split" | "owed" = "self";
+
+        if (isUserInvoicer) {
+          // User sent this invoice to a friend -> this is money owed to the user!
+          isOutgoingSplit = true;
+          splitAllocation = "split";
+          debtorName = recipientName !== "Unassigned" ? recipientName : recipientEmail.split("@")[0].replace(/[._]/g, " ");
+          direction = status === "COMPLETED" ? "incoming" : "outgoing_split";
+        } else {
+          // User is the recipient of this invoice
+          const isSplitNote = Boolean(
+            (memo && (memo.toLowerCase().includes("split") || memo.toLowerCase().includes("share"))) ||
+            merchantName.toLowerCase().includes("split") ||
+            detail.note?.toString().toLowerCase().includes("split")
+          );
+          splitAllocation = isSplitNote ? "split" : "self";
+          debtorName = "100% Self";
+          direction = "outgoing";
+        }
 
         const invId = inv.id as string;
 
@@ -483,12 +525,14 @@ class PayPalSandboxClient {
           currency: amountObj.currency_code || (detail.currency_code as string) || "USD",
           merchantName,
           memo,
-          splitAllocation: isSplit ? "split" : "self",
+          splitAllocation,
           timestamp: detail.invoice_date
             ? new Date(detail.invoice_date as string).toISOString()
             : new Date().toISOString(),
-          debtorName: isSplit ? (recipientName !== "Dave" && recipientName !== "dave" ? recipientName : "Shared Split") : "100% Self",
+          debtorName,
           recipientEmail,
+          direction,
+          isOutgoingSplit,
         });
       }
     } catch (err) {
@@ -607,8 +651,15 @@ class PayPalSandboxClient {
   /**
    * Creates and immediately dispatches an invoice via PayPal Invoicing API v2.
    */
-  async dispatchInvoice(recipient: InvoiceRecipient): Promise<InvoiceDispatchResult> {
+  async dispatchInvoice(
+    recipient: InvoiceRecipient,
+    sender?: { name?: string; email?: string }
+  ): Promise<InvoiceDispatchResult> {
     const token = await this.getAccessToken();
+
+    const senderName = sender?.name?.trim() || "Dave Chen";
+    const senderParts = senderName.split(" ");
+    const senderEmail = sender?.email?.trim() || "dave.chen.pm@personal.example.com";
 
     // 1. Create draft invoice
     const createRes = await fetch(`${this.baseUrl}/v2/invoicing/invoices`, {
@@ -623,7 +674,11 @@ class PayPalSandboxClient {
           note: recipient.description || "Shared Expense Split via PocketMate",
         },
         invoicer: {
-          name: { given_name: "PocketMate", surname: "User" },
+          name: {
+            given_name: senderParts[0] || "Dave",
+            surname: senderParts.slice(1).join(" ") || "Chen",
+          },
+          email_address: senderEmail,
         },
         primary_recipients: [
           {

@@ -114,6 +114,14 @@ export async function GET(req: NextRequest) {
           : "Shared Split"
         : "100% Self";
 
+      const direction =
+        t.direction ||
+        (t.isOutgoingSplit && t.status === "COMPLETED"
+          ? "incoming"
+          : t.isOutgoingSplit
+          ? "outgoing_split"
+          : "outgoing");
+
       return {
         id: t.id,
         date: displayDate,
@@ -124,7 +132,8 @@ export async function GET(req: NextRequest) {
         debtor_name: debtorDisplay,
         amount: t.amount,
         status: rowStatus,
-        direction: "outgoing" as const,
+        direction,
+        isOutgoingSplit: t.isOutgoingSplit,
       };
     });
 

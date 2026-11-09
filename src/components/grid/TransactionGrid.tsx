@@ -52,7 +52,8 @@ export interface TransactionRow {
   amount: number;
   status: "settled" | "pending" | "disputed" | "unresolved";
   invoiceStatus?: string;
-  direction?: "incoming" | "outgoing";
+  direction?: "incoming" | "outgoing" | "outgoing_split";
+  isOutgoingSplit?: boolean;
 }
 
 export type ReclassifyScope = "single" | "merchant" | "similar";
