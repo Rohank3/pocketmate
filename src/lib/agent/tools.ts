@@ -1,8 +1,15 @@
 import { z } from "zod";
 import { paypalClient } from "../paypal/client";
-import { calculateEqualSplit, SplitParticipant } from "../math/split";
+import {
+  calculateEqualSplit,
+  calculateUnequalSplit,
+  calculatePercentageSplit,
+  SplitParticipant,
+  DeterministicSplitResult,
+} from "../math/split";
 import { syncBudgetExpenseToDB } from "./dbSync";
 import { prisma } from "../db";
+import type { Prisma } from "@prisma/client";
 import {
   loadUserCategorizationContext,
   categorizeTransactionsBatch,
@@ -50,7 +57,38 @@ export const SendPayoutSchema = z.object({
   recipientEmail: z.string().trim().email().max(255),
   amount: z.number().finite().positive().max(50000),
   note: z.string().trim().max(255).optional(),
+  category: z.string().trim().max(50).optional(),
   isConfirmed: z.boolean().default(false),
+});
+
+export const CreateSplitSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  totalAmount: z.number().finite().positive().max(500000),
+  currency: z.string().default("USD"),
+  splitType: z.enum(["equal", "unequal", "percentage"]).default("equal"),
+  participants: z
+    .array(
+      z.object({
+        name: z.string().trim().min(1).max(100),
+        emailOrHandle: z.string().trim().max(255).optional(),
+        amount: z.number().finite().positive().optional(),
+        percentage: z.number().finite().positive().optional(),
+      })
+    )
+    .min(1)
+    .max(50),
+  dispatchInvoices: z.boolean().default(false),
+  isConfirmed: z.boolean().default(false),
+});
+
+export const AddScheduledEventSchema = z.object({
+  title: z.string().trim().min(1).max(100),
+  amount: z.number().finite().positive().max(100000),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD").optional(),
+  dayOfMonth: z.number().int().min(1).max(31).optional(),
+  type: z.enum(["incoming", "outgoing", "milestone"]).default("outgoing"),
+  category: z.string().trim().max(50).default("General"),
+  counterparty: z.string().trim().max(100).optional(),
 });
 
 const PROTOTYPE_POLLUTION_KEYS = new Set([
@@ -212,6 +250,52 @@ export const agentToolDeclarations = [
         },
       },
       required: ["totalAmount", "participants"],
+    },
+  },
+  {
+    name: "create_split",
+    description: "Records an expense split (equal, custom unequal amounts, or percentages) backed by SplitRecord database entities. Works with USD ($) or INR (₹). Can dispatch PayPal invoices.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        title: { type: "STRING", description: "Title or memo of what was split, e.g. 'Dinner with friends' or 'Office supplies'." },
+        totalAmount: { type: "NUMBER", description: "Total expense amount." },
+        currency: { type: "STRING", description: "Currency code (USD, INR, etc.), default USD." },
+        splitType: { type: "STRING", description: "'equal', 'unequal' (specific dollar amounts), or 'percentage'." },
+        participants: {
+          type: "ARRAY",
+          items: {
+            type: "OBJECT",
+            properties: {
+              name: { type: "STRING" },
+              emailOrHandle: { type: "STRING" },
+              amount: { type: "NUMBER" },
+              percentage: { type: "NUMBER" },
+            },
+            required: ["name"],
+          },
+          description: "List of participants and their shares.",
+        },
+        dispatchInvoices: { type: "BOOLEAN", description: "Whether to dispatch real PayPal invoices to participants." },
+      },
+      required: ["title", "totalAmount", "participants"],
+    },
+  },
+  {
+    name: "add_scheduled_event",
+    description: "Schedules a recurring bill, rent, utility, subscription, or expected receivable in the user's financial calendar (e.g. 'add my rent of $1200 due on the 1st of every month').",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        title: { type: "STRING", description: "Title of bill/income, e.g. 'Apartment Rent' or 'Electric Utility'." },
+        amount: { type: "NUMBER", description: "Amount of bill." },
+        date: { type: "STRING", description: "Target date (YYYY-MM-DD)." },
+        dayOfMonth: { type: "NUMBER", description: "Day of the month (1-31)." },
+        type: { type: "STRING", description: "'outgoing' (bill) or 'incoming' (receivable)." },
+        category: { type: "STRING", description: "Category (Rent, Utilities, Entertainment, etc.)." },
+        counterparty: { type: "STRING", description: "Landlord, utility company, or provider name." },
+      },
+      required: ["title", "amount"],
     },
   },
   {
@@ -462,7 +546,7 @@ export async function executeAgentTool(
     }
 
     case "send_direct_payout": {
-      const { recipientEmail, amount, note, isConfirmed } = SendPayoutSchema.parse(safeArgs);
+      const { recipientEmail, amount, note, category, isConfirmed } = SendPayoutSchema.parse(safeArgs);
 
       if (!isConfirmed) {
         return {
@@ -470,6 +554,7 @@ export async function executeAgentTool(
           action: "DISPATCH_PAYOUT",
           recipientEmail,
           amount,
+          category: category || "Personal Reimbursement",
           note: note || "Direct P2P Settlement via PocketMate",
           recipients: [
             {
@@ -491,10 +576,188 @@ export async function executeAgentTool(
         note: note || "Direct P2P Settlement via PocketMate",
       });
 
+      if (category && userId) {
+        try {
+          await prisma.transactionCategoryOverride.upsert({
+            where: {
+              userId_transactionId: {
+                userId,
+                transactionId: payoutRes.payoutBatchId,
+              },
+            },
+            update: { categoryName: category },
+            create: {
+              userId,
+              transactionId: payoutRes.payoutBatchId,
+              categoryName: category,
+            },
+          });
+        } catch (catErr) {
+          console.warn("[Payout Category Override Warning]", catErr);
+        }
+      }
+
       return {
         success: true,
         action: "PAYOUT_COMPLETED",
+        category: category || "Personal Reimbursement",
         ...payoutRes,
+      };
+    }
+
+    case "create_split": {
+      const { title, totalAmount, currency, splitType, participants, dispatchInvoices, isConfirmed } =
+        CreateSplitSchema.parse(safeArgs);
+
+      let calculated: DeterministicSplitResult;
+      if (splitType === "percentage") {
+        const pShares = participants.map((p) => ({
+          name: p.name,
+          emailOrHandle: p.emailOrHandle || `${p.name.toLowerCase().replace(/\s+/g, ".")}@example.com`,
+          percentage: p.percentage ?? (100 / participants.length),
+        }));
+        calculated = calculatePercentageSplit(totalAmount, pShares, title);
+      } else if (splitType === "unequal" && participants.some((p) => p.amount !== undefined)) {
+        const uShares = participants.map((p) => ({
+          name: p.name,
+          emailOrHandle: p.emailOrHandle || `${p.name.toLowerCase().replace(/\s+/g, ".")}@example.com`,
+          amount: p.amount ?? (totalAmount / participants.length),
+        }));
+        calculated = calculateUnequalSplit(totalAmount, uShares, title);
+      } else {
+        const eShares = participants.map((p) => ({
+          name: p.name,
+          emailOrHandle: p.emailOrHandle || `${p.name.toLowerCase().replace(/\s+/g, ".")}@example.com`,
+        }));
+        calculated = calculateEqualSplit(totalAmount, eShares, title);
+      }
+
+      const recipients = calculated.allocations.map((a) => ({
+        email: a.emailOrHandle.includes("@") ? a.emailOrHandle : `${a.name.toLowerCase().replace(/\s+/g, ".")}@personal.example.com`,
+        name: a.name,
+        amount: a.amount,
+        description: `Split: ${title} (${a.name}'s share)`,
+      }));
+
+      if (!isConfirmed) {
+        return {
+          requiresConfirmation: true,
+          action: "DISPATCH_INVOICES",
+          totalRecipients: recipients.length,
+          totalAmount: calculated.totalAmount,
+          currency,
+          recipients,
+          message: `Split preview prepared: $${calculated.totalAmount.toFixed(2)} divided across ${recipients.length} people.`,
+          breakdown: calculated.breakdownReport,
+        };
+      }
+
+      let savedRecord = null;
+      if (userId) {
+        try {
+          savedRecord = await prisma.splitRecord.create({
+            data: {
+              userId,
+              totalAmount: calculated.totalAmount,
+              status: dispatchInvoices ? "SENT" : "PENDING_CONFIRMATION",
+              description: title,
+              itemsJson: calculated.allocations as unknown as Prisma.InputJsonValue,
+              items: {
+                create: calculated.allocations.map((a) => ({
+                  participantName: a.name,
+                  participantEmail: a.emailOrHandle.includes("@") ? a.emailOrHandle : `${a.name.toLowerCase().replace(/\s+/g, ".")}@personal.example.com`,
+                  amount: a.amount,
+                  status: dispatchInvoices ? "SENT" : "DRAFT",
+                })),
+              },
+            },
+            include: { items: true },
+          });
+        } catch (dbErr) {
+          console.warn("[SplitRecord Create Warning]", dbErr);
+        }
+      }
+
+      const invoiceResults = [];
+      if (dispatchInvoices) {
+        for (const r of recipients) {
+          try {
+            const res = await paypalClient.dispatchInvoice(r);
+            invoiceResults.push(res);
+          } catch (invErr) {
+            console.warn("[Dispatch Invoice in Split Error]", invErr);
+          }
+        }
+      }
+
+      return {
+        success: true,
+        splitRecordId: savedRecord?.id || `split_${Date.now()}`,
+        totalAmount: calculated.totalAmount,
+        currency,
+        allocations: calculated.allocations,
+        breakdownReport: calculated.breakdownReport,
+        invoicesDispatched: invoiceResults.length,
+      };
+    }
+
+    case "add_bill":
+    case "add_scheduled_event": {
+      const { title, amount, date, dayOfMonth, type, category, counterparty } =
+        AddScheduledEventSchema.parse(safeArgs);
+
+      const today = new Date();
+      let eventDate = date;
+      const targetDay = dayOfMonth ?? (date ? parseInt(date.slice(8, 10), 10) : today.getDate());
+
+      if (!eventDate) {
+        let yr = today.getFullYear();
+        let mo = today.getMonth() + 1;
+        if (targetDay < today.getDate()) {
+          mo += 1;
+          if (mo > 12) {
+            mo = 1;
+            yr += 1;
+          }
+        }
+        eventDate = `${yr}-${String(mo).padStart(2, "0")}-${String(targetDay).padStart(2, "0")}`;
+      }
+
+      let createdEvent = null;
+      if (userId) {
+        try {
+          createdEvent = await prisma.scheduledEvent.create({
+            data: {
+              userId,
+              title,
+              amount,
+              date: eventDate,
+              dayOfMonth: targetDay,
+              type,
+              category,
+              counterparty: counterparty || null,
+              status: "scheduled",
+            },
+          });
+        } catch (dbErr) {
+          console.warn("[ScheduledEvent Create Warning]", dbErr);
+        }
+      }
+
+      return {
+        success: true,
+        event: createdEvent || {
+          id: `evt_${Date.now()}`,
+          title,
+          amount,
+          date: eventDate,
+          dayOfMonth: targetDay,
+          type,
+          category,
+          counterparty,
+          status: "scheduled",
+        },
+        message: `Scheduled ${type === "incoming" ? "receivable" : "bill"} "${title}" ($${amount.toFixed(2)}) due on ${eventDate}.`,
       };
     }
 

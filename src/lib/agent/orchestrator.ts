@@ -4,7 +4,13 @@ import { GridMutationState, ToolExecutionRecord, AgentRunResult } from "@/types/
 import { paypalClient } from "@/lib/paypal/client";
 import { resolveContact } from "@/lib/contacts/contactResolver";
 import { prisma } from "@/lib/db";
+import type { Prisma } from "@prisma/client";
 import { loadUserCategorizationContext, categorizeTransactionsBatch } from "@/lib/services/categorizer";
+import {
+  calculateEqualSplit,
+  calculateUnequalSplit,
+  calculatePercentageSplit,
+} from "@/lib/math/split";
 
 export interface AgentMessage {
   role: "user" | "assistant" | "system";
@@ -319,7 +325,16 @@ export async function handleDynamicAutonomousResponse(
   // --------------------------------------------------------------------------
   const isPaymentReminderIntent =
     (p.includes("reminder") || p.includes("remind")) &&
-    (p.includes("draft") || p.includes("send") || p.includes("dispatch") || p.includes("friendly") || p.includes("owed") || p.includes("for $") || p.includes("to "));
+    (p.includes("draft") || p.includes("send") || p.includes("dispatch") || p.includes("friendly") || p.includes("owed") || p.includes("$") || p.includes("₹") || p.includes("for") || p.includes("to")) &&
+    !p.includes("remind me to");
+
+  // --------------------------------------------------------------------------
+  // F. Add / Schedule Recurring Bill or Calendar Expense
+  // e.g. "add my rent of $1,200 due on the 1st of every month", "schedule electric bill $85"
+  // --------------------------------------------------------------------------
+  const isAddBillIntent =
+    (p.startsWith("add") || p.startsWith("schedule") || p.includes("create bill") || p.includes("add bill") || p.includes("add my rent") || p.includes("add rent") || p.includes("remind me to pay")) &&
+    (p.includes("rent") || p.includes("bill") || p.includes("subscription") || p.includes("utility") || p.includes("utilities") || p.includes("electricity") || p.includes("wifi") || p.includes("internet") || p.includes("water") || p.includes("insurance") || p.includes("gym") || p.includes("due"));
 
   // Direct Peer Settlement / Transfer via PayPal Payouts API
   const isPayoutIntent =
@@ -331,7 +346,8 @@ export async function handleDynamicAutonomousResponse(
       (p.includes("settle") && !p.includes("split"))) &&
     !p.includes("invoice") &&
     !p.includes("bill me") &&
-    !isPaymentReminderIntent;
+    !isPaymentReminderIntent &&
+    !isAddBillIntent;
 
   if (isInvoiceReviewIntent) {
     const effectiveUserId = handlers.userId || "demo_user";
@@ -760,13 +776,14 @@ ${optionsLines}
   // 1. Explicit Payment Reminder Intent (Sending invoice reminder to a counterparty/debtor)
   // e.g. "Draft a PayPal payment reminder for Dave Chen for $65.00"
   else if (isPaymentReminderIntent) {
-    const dollarMatch = prompt.match(/\$([0-9]+(?:\.[0-9]{1,2})?)/) || prompt.match(/(\d+(?:\.\d+)?)\s*(?:dollars?|usd)/i);
+    const dollarMatch = prompt.match(/\$([0-9]+(?:\.[0-9]{1,2})?)/) ||
+                        prompt.match(/(?:₹|rs\.?|usd)?\s*([0-9]+(?:\.[0-9]{1,2})?)/i);
     const reminderAmount = dollarMatch ? parseFloat(dollarMatch[1]) : 65.0;
 
     let targetName = "";
     const nameMatch =
-      prompt.match(/reminder\s+(?:to|for)\s+([A-Za-z0-9\s&]+?)(?:\s+for|\s+at|\s+\$|owed|$)/i) ||
-      prompt.match(/(?:remind|invoice)\s+([A-Za-z0-9\s&]+?)(?:\s+for|\s+at|\s+\$|about|$)/i);
+      prompt.match(/reminder\s+(?:to|for)\s+([A-Za-z0-9\s&]+?)(?:\s+for|\s+at|\s+\$|\s+₹|owed|$)/i) ||
+      prompt.match(/(?:remind|invoice)\s+([A-Za-z0-9\s&]+?)(?:\s+for|\s+at|\s+\$|\s+₹|about|$)/i);
     if (nameMatch && nameMatch[1]?.trim()) {
       targetName = nameMatch[1].trim();
     }
@@ -775,9 +792,22 @@ ${optionsLines}
       targetName = "Dave Chen";
     }
 
+    let currentUserName = "";
+    if (handlers.userId) {
+      try {
+        const u = await prisma.user.findUnique({ where: { id: handlers.userId }, select: { name: true } });
+        if (u?.name) currentUserName = u.name.trim();
+      } catch {
+        // ignore
+      }
+    }
+
     // Safety check: Prevent user from invoicing themselves
-    if (targetName.toLowerCase().includes("self")) {
-      reply = `You cannot send a payment reminder to yourself (**${targetName}**). Payment reminders are for friends and counterparties with outstanding split balances.`;
+    if (
+      targetName.toLowerCase().includes("self") ||
+      (currentUserName && targetName.toLowerCase() === currentUserName.toLowerCase())
+    ) {
+      reply = `**${targetName}** matches your own registered account name. Payment reminders cannot be issued to yourself. To collect split expenses from friends, please specify a counterparty (e.g. *"Draft a payment reminder for Alex Morgan for $${reminderAmount.toFixed(2)}"*).`;
       await handlers.onTextDelta?.(reply);
       return {
         reply,
@@ -821,6 +851,87 @@ ${optionsLines}
     handlers.onGridMutation?.(gridMutation);
 
     reply = `### 📨 Payment Reminder Drafted: **${recipientName}**\n\n• **Recipient:** ${recipientName} (\`${recipientEmail}\`)\n• **Outstanding Balance:** **$${reminderAmount.toFixed(2)} USD**\n• **Rail:** PayPal Invoicing API (Payment Reminder)\n\nPlease review the invoice reminder card below and tap **Confirm & Send Invoices** to dispatch the notification directly to ${recipientName}.`;
+  }
+
+  // 1.5. Add / Schedule Bill or Recurring Expense Intent
+  // e.g. "add my rent of $1,200 due on the 1st of every month", "schedule electric bill $85"
+  else if (isAddBillIntent) {
+    const amtMatch = prompt.match(/(?:[₹$]|rs\.?|usd)?\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)/i);
+    const amount = amtMatch ? parseFloat(amtMatch[1].replace(/,/g, "")) : 100.0;
+
+    const dayMatch =
+      prompt.match(/(?:due\s+on\s+(?:the\s+)?|every\s+(?:month\s+on\s+the\s+)?)([0-9]{1,2})(?:st|nd|rd|th)?/i) ||
+      prompt.match(/([0-9]{1,2})(?:st|nd|rd|th)\s+of\s+every\s+month/i);
+    const dayOfMonth = dayMatch ? parseInt(dayMatch[1], 10) : 1;
+
+    let title = "Recurring Bill";
+    let category = "General";
+    let counterparty = "Utility Provider";
+
+    if (p.includes("rent")) {
+      title = "Apartment Rent";
+      category = "Rent";
+      counterparty = "Landlord / Property Management";
+    } else if (p.includes("electric") || p.includes("power")) {
+      title = "Electric Utility";
+      category = "Utilities";
+      counterparty = "Power & Electric Co";
+    } else if (p.includes("water") || p.includes("gas")) {
+      title = "Water & Gas Utility";
+      category = "Utilities";
+      counterparty = "City Utility Service";
+    } else if (p.includes("internet") || p.includes("wifi") || p.includes("broadband")) {
+      title = "High-Speed Internet";
+      category = "Utilities";
+      counterparty = "Broadband Provider";
+    } else if (p.includes("insurance")) {
+      title = "Insurance Premium";
+      category = "Services";
+      counterparty = "Insurance Underwriter";
+    } else if (p.includes("netflix")) {
+      title = "Netflix Subscription";
+      category = "Entertainment";
+      counterparty = "Netflix";
+    } else if (p.includes("spotify")) {
+      title = "Spotify Premium";
+      category = "Entertainment";
+      counterparty = "Spotify";
+    } else if (p.includes("gym") || p.includes("fitness")) {
+      title = "Gym Membership";
+      category = "Personal";
+      counterparty = "Fitness Center";
+    } else {
+      const titleMatch = prompt.match(/add\s+(?:my\s+)?([^$0-9]+?)(?:\s+of|\s+for|\s+\$|\s+due|$)/i);
+      if (titleMatch && titleMatch[1].trim()) {
+        title = titleMatch[1].trim();
+        counterparty = title;
+      }
+    }
+
+    const eventResult = (await executeAgentTool(
+      "add_scheduled_event",
+      {
+        title,
+        amount,
+        dayOfMonth,
+        type: "outgoing",
+        category,
+        counterparty,
+      },
+      handlers.userId,
+      true
+    )) as Record<string, unknown>;
+
+    executedTools.push({ name: "add_scheduled_event", args: { title, amount, dayOfMonth }, result: eventResult });
+    handlers.onToolCall?.("add_scheduled_event", { title, amount, dayOfMonth }, eventResult);
+
+    gridMutation = {
+      filter: { category },
+      statusMessage: `Scheduled Bill Added: ${title} ($${amount.toFixed(2)}) due on the ${dayOfMonth}th.`,
+    };
+    handlers.onGridMutation?.(gridMutation);
+
+    reply = `### 📅 Recurring Bill Scheduled: **${title}**\n\n• **Amount:** **$${amount.toFixed(2)} USD**\n• **Due Date:** **Day ${dayOfMonth} of every month**\n• **Category:** **${category}**\n• **Counterparty:** ${counterparty}\n\nI've recorded this in your financial calendar and will reconcile incoming PayPal charges automatically when they settle!`;
   }
 
   // 2. Direct Peer Settlement / Transfer via PayPal Payouts API
@@ -941,21 +1052,52 @@ ${optionsLines}
     reply = `Operating in Freelancer mode. I've drafted an itemized PayPal invoice for **${clientName}** (\`${clientEmail}\`):\n\n• **Amount:** $${invoiceAmount.toFixed(2)}\n• **Description:** ${description}\n• **Tax Classification:** Tagged for 1099 quarterly reserve.\n\nPlease review the invoice card below and tap **Confirm & Send** to dispatch via PayPal.`;
   }
   // 3. Dynamic Temporal or Explicit Expense Splitting
-  else if (p.includes("split") || p.includes("divide") || p.includes("share") || p.includes("ways")) {
+  // e.g. "I paid ₹2,000 for dinner with Alex and Sam", "split $120 3 ways", "split 1500: Alex owes 800, Sam 700"
+  else if (
+    p.includes("split") ||
+    p.includes("divide") ||
+    p.includes("share") ||
+    p.includes("ways") ||
+    (p.includes("paid") && (p.includes("with") || p.includes("between") || p.includes("dinner") || p.includes("lunch")))
+  ) {
     let splitAmount = 0;
     let hostEmail = "host@paypal.sandbox";
     if (handlers.userId) {
       const u = await prisma.user.findUnique({ where: { id: handlers.userId } }).catch(() => null);
       if (u?.email) hostEmail = u.email;
     }
-    const participantsList: { name: string; emailOrHandle: string }[] = [{ name: "You (Host)", emailOrHandle: hostEmail }];
+    const participantsList: { name: string; emailOrHandle: string; customAmount?: number; percentage?: number }[] = [
+      { name: "You (Host)", emailOrHandle: hostEmail },
+    ];
     let splitMemo = "Shared Expenses";
+
+    // Currency & Amount Detection (₹ INR, $ USD, or bare numbers)
+    const inrMatch = prompt.match(/(?:₹|rs\.?|inr)\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)/i);
+    const usdMatch =
+      prompt.match(/\$([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)/) ||
+      prompt.match(/(?:usd|\$)\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)/i) ||
+      prompt.match(/(?:split|paid|spent|for)\s+([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)/i);
+
+    let currencyCode = "USD";
+    let currencySymbol = "$";
+
+    if (inrMatch) {
+      splitAmount = parseFloat(inrMatch[1].replace(/,/g, ""));
+      currencyCode = "INR";
+      currencySymbol = "₹";
+      splitMemo = `Shared Expense (₹${splitAmount.toFixed(2)})`;
+    } else if (usdMatch) {
+      splitAmount = parseFloat(usdMatch[1].replace(/,/g, ""));
+      currencyCode = "USD";
+      currencySymbol = "$";
+      splitMemo = `Shared Expense ($${splitAmount.toFixed(2)})`;
+    }
 
     // Check if temporal query (e.g. "last 3 hours", "last 24 hours")
     const hoursMatch = prompt.match(/(\d+)\s*(?:hours|hrs)/i);
     const hoursBack = hoursMatch ? parseFloat(hoursMatch[1]) : 3;
 
-    if (p.includes("last") || p.includes("recent") || p.includes("charges") || p.includes("expenses")) {
+    if (splitAmount === 0 && (p.includes("last") || p.includes("recent") || p.includes("charges") || p.includes("expenses"))) {
       const txArgs = { hoursBack };
       const txResult = (await executeAgentTool("fetch_recent_transactions", txArgs)) as {
         success: boolean;
@@ -973,45 +1115,67 @@ ${optionsLines}
       }
     }
 
-    // Direct dollar amount extraction (e.g., "split $120")
-    const dollarMatch = prompt.match(/\$([0-9]+(\.[0-9]{1,2})?)/);
-    if (dollarMatch) {
-      splitAmount = parseFloat(dollarMatch[1]);
-      splitMemo = `Split of $${splitAmount.toFixed(2)}`;
-    }
-
     if (splitAmount === 0) {
-      splitAmount = 200.0;
+      splitAmount = 120.0;
     }
 
-    // Extract participant names: e.g. "with Alex, Dave, Priya, and Sam"
-    const withMatch = prompt.match(/(?:with|across|between)\s+([^.]+)/i);
+    // Check for custom unequal allocations or percentages: e.g. "Alex owes 800, Sam 700" or "Alex: 50, Sam: 30"
     const disambiguationNotes: string[] = [];
+    const unequalRegex = /([A-Za-z]+)\s*(?:owes|pays|takes|has|:|owed)?\s*(?:[₹$]|rs\.?)?\s*([0-9]+(?:\.[0-9]{1,2})?)\s*(%|dollars?|usd|inr)?/gi;
+    const foundUnequal = Array.from(prompt.matchAll(unequalRegex)).filter((m) => {
+      const w = m[1].toLowerCase();
+      return !["i", "we", "split", "paid", "spent", "total", "last", "for", "with", "between", "the", "and", "hrs", "hours"].includes(w);
+    });
 
-    if (withMatch) {
-      const rawNames = withMatch[1]
-        .replace(/and\s+/gi, ",")
-        .split(",")
-        .map((n) => n.trim().replace(/^me$/i, ""))
-        .filter((n) => n.length > 1 && !/^\d+\s*ways?$/i.test(n));
+    let isPercentageSplit = false;
+    let isCustomUnequalSplit = false;
 
-      for (const name of rawNames) {
-        const clean = name.replace(/[.,]/g, "").trim();
-        if (clean) {
-          const matchedAcc = await resolveContact(clean, handlers.userId);
-          if (matchedAcc) {
-            participantsList.push({
-              name: matchedAcc.name,
-              emailOrHandle: matchedAcc.email,
-            });
-            disambiguationNotes.push(`Found ${matchedAcc.name} (${matchedAcc.email}) in ${matchedAcc.source === "database_contact" ? "contacts" : "past transactions"}.`);
-          } else if (clean.includes("@")) {
-            participantsList.push({ name: clean.split("@")[0].replace(/[._]/g, " "), emailOrHandle: clean });
-          } else {
-            participantsList.push({
-              name: clean,
-              emailOrHandle: "",
-            });
+    if (foundUnequal.length > 0) {
+      for (const m of foundUnequal) {
+        const pName = m[1].trim();
+        const pVal = parseFloat(m[2]);
+        const isPct = m[3] === "%";
+
+        const matchedAcc = await resolveContact(pName, handlers.userId);
+        const contactEmail = matchedAcc ? matchedAcc.email : `${pName.toLowerCase().replace(/\s+/g, ".")}@personal.example.com`;
+        const contactName = matchedAcc ? matchedAcc.name : pName;
+
+        if (isPct) {
+          isPercentageSplit = true;
+          participantsList.push({ name: contactName, emailOrHandle: contactEmail, percentage: pVal });
+        } else {
+          isCustomUnequalSplit = true;
+          participantsList.push({ name: contactName, emailOrHandle: contactEmail, customAmount: pVal });
+        }
+      }
+    } else {
+      // Standard equal extraction with names e.g. "with Alex, Dave, and Sam"
+      const withMatch = prompt.match(/(?:with|across|between)\s+([^.]+)/i);
+      if (withMatch) {
+        const rawNames = withMatch[1]
+          .replace(/and\s+/gi, ",")
+          .split(",")
+          .map((n) => n.trim().replace(/^me$/i, ""))
+          .filter((n) => n.length > 1 && !/^\d+\s*ways?$/i.test(n));
+
+        for (const name of rawNames) {
+          const clean = name.replace(/[.,]/g, "").trim();
+          if (clean) {
+            const matchedAcc = await resolveContact(clean, handlers.userId);
+            if (matchedAcc) {
+              participantsList.push({
+                name: matchedAcc.name,
+                emailOrHandle: matchedAcc.email,
+              });
+              disambiguationNotes.push(`Found ${matchedAcc.name} (${matchedAcc.email}) in ${matchedAcc.source === "database_contact" ? "contacts" : "past transactions"}.`);
+            } else if (clean.includes("@")) {
+              participantsList.push({ name: clean.split("@")[0].replace(/[._]/g, " "), emailOrHandle: clean });
+            } else {
+              participantsList.push({
+                name: clean,
+                emailOrHandle: `${clean.toLowerCase().replace(/\s+/g, ".")}@personal.example.com`,
+              });
+            }
           }
         }
       }
@@ -1023,40 +1187,45 @@ ${optionsLines}
 
     while (participantsList.length < targetWays && participantsList.length < 10) {
       const idx = participantsList.length;
-      participantsList.push({ name: `Participant ${idx}`, emailOrHandle: "" });
+      participantsList.push({ name: `Participant ${idx}`, emailOrHandle: `participant${idx}@example.com` });
     }
 
-    // Execute deterministic penny-locked split math
-    const splitArgs = {
-      totalAmount: splitAmount,
-      participants: participantsList,
-      memo: splitMemo,
-    };
-    const splitResult = (await executeAgentTool("calculate_deterministic_split", splitArgs)) as {
-      success: boolean;
-      allocations: Array<{ name: string; amount: number; isHost?: boolean }>;
-    };
-    executedTools.push({ name: "calculate_deterministic_split", args: splitArgs, result: splitResult });
-    handlers.onToolCall?.("calculate_deterministic_split", splitArgs, splitResult);
+    // Execute split mathematics
+    let splitAllocations: Array<{ name: string; emailOrHandle: string; amount: number }>;
+    if (isPercentageSplit) {
+      const pShares = participantsList.map((p) => ({
+        name: p.name,
+        emailOrHandle: p.emailOrHandle,
+        percentage: p.percentage ?? 100 / participantsList.length,
+      }));
+      const pRes = calculatePercentageSplit(splitAmount, pShares, splitMemo);
+      splitAllocations = pRes.allocations;
+    } else if (isCustomUnequalSplit) {
+      const uShares = participantsList.map((p) => ({
+        name: p.name,
+        emailOrHandle: p.emailOrHandle,
+        amount: p.customAmount ?? splitAmount / participantsList.length,
+      }));
+      const uRes = calculateUnequalSplit(splitAmount, uShares, splitMemo);
+      splitAllocations = uRes.allocations;
+    } else {
+      const eShares = participantsList.map((p) => ({
+        name: p.name,
+        emailOrHandle: p.emailOrHandle,
+      }));
+      const eRes = calculateEqualSplit(splitAmount, eShares, splitMemo);
+      splitAllocations = eRes.allocations;
+    }
 
-    const nonHostAllocs = (splitResult.allocations || []).filter((a) => !a.isHost && a.name !== "You (Host)");
-    const missingEmailParticipants = nonHostAllocs.filter((a) => {
-      const pObj = participantsList.find((p) => p.name === a.name);
-      return !pObj?.emailOrHandle || !pObj.emailOrHandle.includes("@");
-    });
+    const nonHostAllocs = splitAllocations.filter((a) => !a.name.toLowerCase().includes("host"));
 
-    // Prepare PayPal invoices for participants who have valid emails
-    const recipients = nonHostAllocs
-      .map((a) => {
-        const pObj = participantsList.find((p) => p.name === a.name);
-        return {
-          email: pObj?.emailOrHandle || "",
-          name: a.name,
-          amount: a.amount,
-          description: splitMemo,
-        };
-      })
-      .filter((r) => Boolean(r.email && r.email.includes("@")));
+    // Prepare PayPal invoices for participants
+    const recipients = nonHostAllocs.map((a) => ({
+      email: a.emailOrHandle.includes("@") ? a.emailOrHandle : `${a.name.toLowerCase().replace(/\s+/g, ".")}@personal.example.com`,
+      name: a.name,
+      amount: a.amount,
+      description: splitMemo,
+    }));
 
     if (recipients.length > 0) {
       const invoiceArgs = { recipients, isConfirmed: false };
@@ -1067,27 +1236,47 @@ ${optionsLines}
       handlers.onActionCard?.(actionCard);
     }
 
+    // Persist SplitRecord & SplitItem in PostgreSQL
+    if (handlers.userId && nonHostAllocs.length > 0) {
+      try {
+        await prisma.splitRecord.create({
+          data: {
+            userId: handlers.userId,
+            totalAmount: splitAmount,
+            status: "PENDING_CONFIRMATION",
+            description: splitMemo,
+            itemsJson: nonHostAllocs as unknown as Prisma.InputJsonValue,
+            items: {
+              create: nonHostAllocs.map((a) => ({
+                participantName: a.name,
+                participantEmail: a.emailOrHandle.includes("@") ? a.emailOrHandle : `${a.name.toLowerCase().replace(/\s+/g, ".")}@personal.example.com`,
+                amount: a.amount,
+                status: "DRAFT",
+              })),
+            },
+          },
+        });
+      } catch (dbErr) {
+        console.warn("[Split Record Persist Error]", dbErr);
+      }
+    }
+
     // Mutate AG Grid
     gridMutation = {
       groupBy: ["debtor_name"],
       filter: { status: "pending" },
-      statusMessage: `Displaying penny-locked split for $${splitAmount.toFixed(2)} across ${participantsList.length} people.`,
+      statusMessage: `Displaying penny-locked split for ${currencySymbol}${splitAmount.toFixed(2)} across ${participantsList.length} people.`,
     };
     handlers.onGridMutation?.(gridMutation);
 
-    const shareDesc = (splitResult.allocations || []).map((a) => {
-      const pObj = participantsList.find((p) => p.name === a.name);
-      const emailTag = pObj?.emailOrHandle ? ` (${pObj.emailOrHandle})` : " [PayPal email needed]";
-      return `• **${a.name}**${emailTag}: $${a.amount.toFixed(2)}`;
+    const shareDesc = splitAllocations.map((a) => {
+      const emailTag = a.emailOrHandle ? ` (\`${a.emailOrHandle}\`)` : "";
+      return `• **${a.name}**${emailTag}: **${currencySymbol}${a.amount.toFixed(2)}**`;
     }).join("\n");
 
     const noteSection = disambiguationNotes.length > 0 ? `\n\n🔍 ${disambiguationNotes.join("\n")}` : "";
-    const promptForMissing =
-      missingEmailParticipants.length > 0
-        ? `\n\n⚠️ **Action Required:** To dispatch invoices via PayPal, please provide the PayPal email address for: **${missingEmailParticipants.map((m) => m.name).join(", ")}**.`
-        : "\n\nAll invoices are prepared on your PayPal Invoicing rail. Review the preview card below and tap **Confirm & Send** to dispatch.";
 
-    reply = `Calculated penny-locked split: **$${splitAmount.toFixed(2)}** across ${participantsList.length} participants:\n\n${shareDesc}${noteSection}${promptForMissing}`;
+    reply = `### 👥 Penny-Locked Split: **${currencySymbol}${splitAmount.toFixed(2)} ${currencyCode}**\n\nDivided across **${participantsList.length}** participants with penny-accurate math:\n\n${shareDesc}${noteSection}\n\n*Invoices are drafted and backed by your Split Ledger. Tap **Confirm & Send Invoices** on the card below to notify participants via PayPal.*`;
   }
   // 4. Mall Trip / Multi-Item Expense & Category Budget Logging
   else if (p.includes("mall") || (p.includes("log") && p.includes("budget"))) {

@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
     // Determine account role strictly via database persona and registered industry (no email sniffing)
     const userRecord = await prisma.user.findUnique({
       where: { email: userEmail },
-      select: { persona: true, industry: true },
+      select: { id: true, persona: true, industry: true },
     });
     const isBusiness = userRecord?.persona === "BUSINESS" || Boolean(userRecord?.industry);
 
@@ -68,7 +68,6 @@ export async function GET(req: NextRequest) {
     const scopedTxs = txs;
 
     // Load dynamic categorization context (user categories, merchant rules, overrides)
-    const userRecord = await prisma.user.findUnique({ where: { email: userEmail } });
     const userId = userRecord?.id || verified?.id;
 
     let categoryMap = new Map<string, { category: string }>();
