@@ -64,8 +64,10 @@ model BudgetCategory {
   userId       String
   name         String
   monthlyCap   Float
-  currentSpent Float         @default(0.0)
-  color        String?       @default("#3b82f6")
+  currentSpent   Float         @default(0.0)
+  alertThreshold Float?        @default(0.80)
+  softCap        Float?
+  color          String?       @default("#3b82f6")
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 

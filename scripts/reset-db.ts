@@ -65,6 +65,7 @@ async function main() {
   ];
 
   for (const cat of baselineCategories) {
+    const softCap = cat.monthlyCap * 0.80;
     await prisma.budgetCategory.upsert({
       where: {
         userId_name: {
@@ -76,6 +77,8 @@ async function main() {
         monthlyCap: cat.monthlyCap,
         currentSpent: 0.0,
         color: cat.color,
+        alertThreshold: 0.80,
+        softCap: softCap,
       },
       create: {
         userId: user.id,
@@ -83,6 +86,8 @@ async function main() {
         monthlyCap: cat.monthlyCap,
         currentSpent: 0.0,
         color: cat.color,
+        alertThreshold: 0.80,
+        softCap: softCap,
       },
     });
   }
