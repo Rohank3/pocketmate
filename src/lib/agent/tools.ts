@@ -382,7 +382,7 @@ export const agentToolDeclarations = [
   },
   {
     name: "send_direct_payout",
-    description: "Transfers funds directly from your PayPal Sandbox account to a recipient using PayPal Payouts API. Used for direct settlements, reimbursements, or payments ('pay Dave $50', 'send $30 to Sarah'). Returns an interactive preview card if not confirmed.",
+    description: "Transfers funds directly from your PayPal Sandbox account to a recipient using PayPal Payouts API. Used for direct settlements, reimbursements, or payments ('pay Alex $50', 'send $30 to Sarah'). Returns an interactive preview card if not confirmed.",
     parameters: {
       type: "OBJECT",
       properties: {
@@ -608,7 +608,7 @@ export const agentToolDeclarations = [
         invoiceId: { type: "STRING", description: "The PayPal invoice ID or split transaction ID to review." },
         merchantName: { type: "STRING", description: "The memo or merchant description, e.g. 'Grand Vista Hotel split share'." },
         amount: { type: "NUMBER", description: "The dollar amount owed on this incoming invoice." },
-        senderName: { type: "STRING", description: "The name of the user who sent the invoice (e.g. 'Dave Chen')." },
+        senderName: { type: "STRING", description: "The name of the user who sent the invoice (e.g. 'Jane Doe')." },
         senderEmail: { type: "STRING", description: "The email of the user who sent the invoice." },
         currency: { type: "STRING", description: "Currency code (default: USD)." },
         memo: { type: "STRING", description: "Optional memo or description." },
@@ -693,7 +693,10 @@ export async function executeAgentTool(
             select: { name: true, email: true },
           });
           if (userRec) {
-            senderInfo = { name: userRec.name || "Dave Chen", email: userRec.email };
+            senderInfo = {
+              name: userRec.name || userRec.email.split("@")[0].replace(/[._]/g, " "),
+              email: userRec.email,
+            };
           }
         } catch {
           // ignore
@@ -889,7 +892,10 @@ export async function executeAgentTool(
               select: { name: true, email: true },
             });
             if (userRec) {
-              senderInfo = { name: userRec.name || "Dave Chen", email: userRec.email };
+              senderInfo = {
+                name: userRec.name || (userRec.email ? userRec.email.split("@")[0].replace(/[._]/g, " ") : "Organizer"),
+                email: userRec.email,
+              };
             }
           } catch {
             // ignore
@@ -1522,7 +1528,7 @@ export async function executeAgentTool(
 
       if (splitItem) {
         splitItemId = splitItem.id;
-        senderName = senderName || splitItem.splitRecord.user.name || "Dave Chen";
+        senderName = senderName || splitItem.splitRecord.user.name || "Organizer";
         senderEmail = senderEmail || splitItem.splitRecord.user.email;
         memo = splitItem.splitRecord.description || memo;
       }
@@ -1541,7 +1547,7 @@ export async function executeAgentTool(
         merchant: parsed.merchantName || memo,
         merchantName: parsed.merchantName || memo,
         senderName: senderName || "Organizer",
-        senderEmail: senderEmail || "dave.chen@business.example.com",
+        senderEmail: senderEmail || "",
         recipientName: "You",
         memo,
         paypalInvoiceUrl: invoiceUrl,

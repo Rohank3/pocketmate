@@ -1183,8 +1183,8 @@ export default function Home() {
         cardData.recipients.forEach((r) => {
           SandboxStore.createInvoice({
             senderId: currentUser?.id || `usr_${Date.now()}`,
-            senderName: currentUser?.name || "PocketMate Host",
-            senderEmail: currentUser?.email || "host@paypal.sandbox",
+            senderName: currentUser?.name || currentUser?.email?.split("@")[0].replace(/[._]/g, " ") || "Host",
+            senderEmail: currentUser?.email || "",
             recipientId: `usr_${r.email.replace(/[^a-z0-9]/gi, "_")}`,
             recipientName: r.name || "Recipient",
             recipientEmail: r.email,

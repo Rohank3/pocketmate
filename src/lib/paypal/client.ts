@@ -320,7 +320,9 @@ class PayPalSandboxClient {
             timestamp: (info.transaction_initiation_date as string) || new Date().toISOString(),
             feeAmount: parseFloat(feeObj.value || "0.00"),
             debtorName: isSplit
-              ? debtor && debtor !== "Dave" && debtor !== "dave" && debtor !== "Self"
+              ? debtor &&
+                !debtor.toLowerCase().includes("self") &&
+                (!targetEmailClean || !debtor.toLowerCase().includes(targetEmailClean.split("@")[0].replace(/[._]/g, " ")))
                 ? debtor
                 : "Shared Split"
               : "100% Self",
@@ -366,7 +368,7 @@ class PayPalSandboxClient {
             }
           | undefined;
 
-        let invoicerEmail = (invoicer?.email_address || "").toLowerCase().trim();
+        const invoicerEmail = (invoicer?.email_address || "").toLowerCase().trim();
         let invoicerFullName = "";
         if (invoicer?.name?.full_name) {
           invoicerFullName = invoicer.name.full_name;
@@ -421,13 +423,11 @@ class PayPalSandboxClient {
 
         // Active user is the invoicer (organizer / merchant who sent this split request)
         const isUserInvoicer = Boolean(
-          targetEmailClean &&
-          !isUserRecipient &&
-          (invoicerEmail === targetEmailClean ||
-           (!invoicerEmail && targetEmailClean.includes("dave.chen")) ||
-           (invoicerEmail.includes("pocketmate") && targetEmailClean.includes("dave.chen")) ||
-           (invoicerFullName.toLowerCase().includes("pocketmate") && targetEmailClean.includes("dave.chen")) ||
-           (userFrag && invoicerFullName.toLowerCase().includes(userFrag)))
+          !targetEmailClean ||
+          (!isUserRecipient &&
+           (invoicerEmail === targetEmailClean ||
+            !invoicerEmail ||
+            (userFrag && invoicerFullName.toLowerCase().includes(userFrag))))
         );
 
         // In personal scope, filter out invoices that neither involve the active user as invoicer nor recipient
@@ -657,9 +657,12 @@ class PayPalSandboxClient {
   ): Promise<InvoiceDispatchResult> {
     const token = await this.getAccessToken();
 
-    const senderName = sender?.name?.trim() || "Dave Chen";
+    const senderName =
+      sender?.name?.trim() ||
+      sender?.email?.split("@")[0].replace(/[._]/g, " ") ||
+      "Organizer";
     const senderParts = senderName.split(" ");
-    const senderEmail = sender?.email?.trim() || "dave.chen.pm@personal.example.com";
+    const senderEmail = sender?.email?.trim();
 
     // 1. Create draft invoice
     const createRes = await fetch(`${this.baseUrl}/v2/invoicing/invoices`, {
@@ -675,10 +678,10 @@ class PayPalSandboxClient {
         },
         invoicer: {
           name: {
-            given_name: senderParts[0] || "Dave",
-            surname: senderParts.slice(1).join(" ") || "Chen",
+            given_name: senderParts[0] || "Organizer",
+            surname: senderParts.slice(1).join(" ") || "",
           },
-          email_address: senderEmail,
+          ...(senderEmail ? { email_address: senderEmail } : {}),
         },
         primary_recipients: [
           {

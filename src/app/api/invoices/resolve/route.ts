@@ -188,15 +188,11 @@ export async function POST(req: NextRequest) {
       if (orgUser) organizerUserId = orgUser.id;
     }
 
-    // Fallback: If no organizer found, deliver to primary host (Dave Chen or senderName)
-    if (!organizerUserId) {
-      const targetQuery = senderName && senderName !== "Organizer" ? senderName : "Dave";
+    // If no organizer found by email, attempt lookup by senderName if provided
+    if (!organizerUserId && senderName && senderName !== "Organizer") {
       const org = await prisma.user.findFirst({
         where: {
-          OR: [
-            { email: "dave.chen@business.example.com" },
-            { name: { contains: targetQuery } },
-          ],
+          name: { contains: senderName },
         },
       });
       if (org) organizerUserId = org.id;

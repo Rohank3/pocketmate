@@ -254,7 +254,7 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
 
         return (
           <span
-            title="Personal single-party expense (100% Dave Chen)"
+            title="Personal single-party expense (100% Self)"
             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 font-sans"
           >
             <User className="w-3 h-3 text-zinc-500 shrink-0" />
