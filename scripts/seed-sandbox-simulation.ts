@@ -826,60 +826,64 @@ async function runCleanup(): Promise<void> {
 
     let cleaned = 0;
     for (const inv of items) {
-      const invId = inv.id;
-      const status = inv.status;
+      try {
+        const invId = inv.id;
+        const status = inv.status;
 
-      // Invoices in DRAFT can be deleted directly
-      if (status === "DRAFT") {
-        const delRes = await fetch(`${baseUrl}/v2/invoicing/invoices/${encodeURIComponent(invId)}`, {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        if (delRes.ok) {
-          console.log(`  ✓ Deleted DRAFT invoice: ${invId}`);
-          cleaned++;
+        // Invoices in DRAFT can be deleted directly
+        if (status === "DRAFT") {
+          const delRes = await fetch(`${baseUrl}/v2/invoicing/invoices/${encodeURIComponent(invId)}`, {
+            method: "DELETE",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
+          if (delRes.ok) {
+            console.log(`  ✓ Deleted DRAFT invoice: ${invId}`);
+            cleaned++;
+          }
         }
-      }
-      // Invoices in SENT / SCHEDULED / UNPAID can be cancelled
-      else if (status === "SENT" || status === "SCHEDULED" || status === "UNPAID") {
-        const cancelRes = await fetch(`${baseUrl}/v2/invoicing/invoices/${encodeURIComponent(invId)}/cancel`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            subject: "Simulation Teardown",
-            note: "Cancelled during test simulation reset.",
-            send_to_recipient: false,
-          }),
-        });
-        if (cancelRes.ok) {
-          console.log(`  ✓ Cancelled SENT invoice: ${invId}`);
-          cleaned++;
+        // Invoices in SENT / SCHEDULED / UNPAID can be cancelled
+        else if (status === "SENT" || status === "SCHEDULED" || status === "UNPAID") {
+          const cancelRes = await fetch(`${baseUrl}/v2/invoicing/invoices/${encodeURIComponent(invId)}/cancel`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              subject: "Simulation Teardown",
+              note: "Cancelled during test simulation reset.",
+              send_to_recipient: false,
+            }),
+          });
+          if (cancelRes.ok) {
+            console.log(`  ✓ Cancelled SENT invoice: ${invId}`);
+            cleaned++;
+          }
         }
-      }
-      // Invoices in PAID / MARKED_AS_PAID can be refunded
-      else if (status === "PAID" || status === "MARKED_AS_PAID") {
-        const refundRes = await fetch(`${baseUrl}/v2/invoicing/invoices/${encodeURIComponent(invId)}/refunds`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            method: "PAYPAL",
-            refund_date: new Date().toISOString().split("T")[0],
-            amount: inv.amount,
-            note: "Simulation reset refund",
-          }),
-        });
-        if (refundRes.ok) {
-          console.log(`  ✓ Refunded settled invoice: ${invId}`);
-          cleaned++;
+        // Invoices in PAID / MARKED_AS_PAID can be refunded
+        else if (status === "PAID" || status === "MARKED_AS_PAID") {
+          const refundRes = await fetch(`${baseUrl}/v2/invoicing/invoices/${encodeURIComponent(invId)}/refunds`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              method: "PAYPAL",
+              refund_date: new Date().toISOString().split("T")[0],
+              amount: inv.amount,
+              note: "Simulation reset refund",
+            }),
+          });
+          if (refundRes.ok) {
+            console.log(`  ✓ Refunded settled invoice: ${invId}`);
+            cleaned++;
+          }
         }
+      } catch (itemErr) {
+        console.warn(`  ⚠️ Error processing invoice ${inv?.id}:`, itemErr instanceof Error ? itemErr.message : itemErr);
       }
       await sleep(100);
     }
