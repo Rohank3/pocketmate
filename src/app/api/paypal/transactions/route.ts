@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const scopedTxs = txs;
+    const scopedTxs = txs.filter((t) => t.status !== "CANCELLED");
 
     // Load dynamic categorization context (user categories, merchant rules, overrides)
     const userId = userRecord?.id || verified?.id;

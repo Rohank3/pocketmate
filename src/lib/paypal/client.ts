@@ -374,9 +374,22 @@ class PayPalSandboxClient {
         else if (inv.status === "DRAFT") status = "DRAFT";
         else if (inv.status === "CANCELLED" || inv.status === "REFUNDED") status = "CANCELLED";
 
+        // Ignore cancelled or refunded invoices from active ledger
+        if (status === "CANCELLED") {
+          continue;
+        }
+
         // Extract memo/note separately from payee/merchant
         const invItems = (inv.items as Array<{ name?: string }>) || [];
         const rawNote = (detail.note as string)?.trim() || "";
+
+        // Skip self-issued reminder invoices to prevent ledger pollution
+        if (
+          (recipientName.toLowerCase() === "self" || recipientEmail.includes("self@")) &&
+          rawNote.toLowerCase().includes("self")
+        ) {
+          continue;
+        }
 
         let merchantName = "";
         const invoicer = inv.invoicer as { name?: { full_name?: string; given_name?: string; surname?: string }; email_address?: string } | undefined;
@@ -426,8 +439,11 @@ class PayPalSandboxClient {
           merchantName = invItems[0].name;
         }
 
+        // If rawNote is a payment reminder, treat it as a memo, not a merchant name
         if (!merchantName && rawNote) {
-          merchantName = rawNote;
+          if (!rawNote.toLowerCase().startsWith("payment reminder")) {
+            merchantName = rawNote;
+          }
         }
 
         if (!merchantName) {
