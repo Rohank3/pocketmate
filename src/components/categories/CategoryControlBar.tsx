@@ -23,6 +23,8 @@ export interface CategoryItem {
   monthlyCap: number;
   color: string;
   isCustom?: boolean;
+  alertThreshold?: number | null;
+  softCap?: number | null;
 }
 
 interface CategoryControlBarProps {

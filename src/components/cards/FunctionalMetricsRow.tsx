@@ -71,7 +71,7 @@ export interface SettledSplitSummary {
 
 interface ActionQueueItem {
   id: string;
-  type: "dispute" | "uncategorized" | "debtor" | "budget_breach" | "debt_owed";
+  type: "dispute" | "uncategorized" | "debtor" | "budget_breach" | "debt_owed" | "bill_due";
   title: string;
   description: string;
   amount?: number;
@@ -354,6 +354,15 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
     // Outgoing events for the current month
     const outgoingEvents = events.filter((e) => {
       if (e.type !== "outgoing") return false;
+      const titleLower = e.title.toLowerCase();
+      // Defensive filter: Ignore budget threshold alert records
+      if (
+        titleLower.includes("alert") ||
+        titleLower.includes("soft cap") ||
+        titleLower.includes("threshold")
+      ) {
+        return false;
+      }
       const dayOfMonth = e.dayOfMonth || (e.date ? parseInt(e.date.slice(8, 10)) : 15);
       const isFutureDay = dayOfMonth > todayDay;
       // Future dates this month are strictly upcoming bills
@@ -369,34 +378,12 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
     const subs: ScheduledEvent[] = [];
     const debts: ScheduledEvent[] = [];
 
+    // All valid outgoing scheduled events represent legitimate recurring bills or subscriptions
     outgoingEvents.forEach((ev) => {
-      const titleLower = ev.title.toLowerCase();
-      const catLower = ev.category.toLowerCase();
-      const cpLower = (ev.counterparty || "").toLowerCase();
-
-      const isSub =
-        catLower.includes("sub") ||
-        catLower.includes("util") ||
-        titleLower.includes("netflix") ||
-        titleLower.includes("spotify") ||
-        titleLower.includes("gym") ||
-        titleLower.includes("chatgpt") ||
-        titleLower.includes("cloud") ||
-        titleLower.includes("aws") ||
-        titleLower.includes("wifi") ||
-        titleLower.includes("adobe") ||
-        titleLower.includes("subscription") ||
-        cpLower.includes("start:") ||
-        cpLower.includes("ongoing");
-
-      if (isSub) {
-        subs.push(ev);
-      } else {
-        debts.push(ev);
-      }
+      subs.push(ev);
     });
 
-    // Also include transactions where currentUser is debtor
+    // Personal debts strictly come from transactions / split invoices where currentUser is debtor
     const currentUserNameLower = (currentUser?.name || "").toLowerCase().trim();
     if (currentUser && activeScope === "personal") {
       const userOwedTxs = transactions.filter((t) => {
@@ -526,6 +513,14 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
     const todayDay = now.getDate();
     const billsDueSoon = events.filter((e) => {
       if (e.type !== "outgoing" || e.status === "completed") return false;
+      const titleLower = e.title.toLowerCase();
+      if (
+        titleLower.includes("alert") ||
+        titleLower.includes("soft cap") ||
+        titleLower.includes("threshold")
+      ) {
+        return false;
+      }
       const day = e.dayOfMonth || (e.date ? parseInt(e.date.slice(8, 10)) : 15);
       const diff = day - todayDay;
       return diff >= 0 && diff <= 2;
@@ -534,7 +529,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
     billsDueSoon.forEach((b) => {
       queue.push({
         id: `bill_due_${b.id}`,
-        type: "debt_owed",
+        type: "bill_due",
         title: `Bill Due in 48h: ${b.title}`,
         description: `$${b.amount.toFixed(2)} due on ${b.date || `day ${b.dayOfMonth}`}.`,
         amount: b.amount,
