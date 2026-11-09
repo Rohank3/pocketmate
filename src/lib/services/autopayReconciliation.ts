@@ -1,57 +1,7 @@
 import { prisma } from "@/lib/db";
 import { paypalClient } from "@/lib/paypal/client";
 import { formatCounterpartyWithLifecycle } from "@/lib/utils/subscriptionLifecycle";
-
-interface SubscriptionMatcher {
-  pattern: RegExp;
-  name: string;
-  category: string;
-}
-
-const KNOWN_SUBSCRIPTION_PROVIDERS: SubscriptionMatcher[] = [
-  // Housing, Rent & Property
-  { pattern: /rent|landlord|realty|property management|apartment|lease/i, name: "Apartment Rent & Housing", category: "Rent" },
-
-  // Electricity & Power Utilities
-  { pattern: /electric|power|edison|national grid|pge|coned|pacific gas|duke energy/i, name: "Electric & Power Utility", category: "Utilities" },
-
-  // Water, Gas & Sanitation
-  { pattern: /water company|gas company|sewer|sanitation|city water/i, name: "Water & Gas Utility", category: "Utilities" },
-
-  // Telecom, Mobile & Broadband Internet
-  { pattern: /broadband|internet|verizon|at&t|comcast|xfinity|t-mobile|spectrum|airalo/i, name: "High-Speed Internet & Mobile", category: "Utilities" },
-
-  // Insurance Premiums
-  { pattern: /insurance|geico|state farm|progressive|allstate|lemonade|metlife/i, name: "Insurance Premium", category: "Services" },
-
-  // Gym, Fitness & Wellness
-  { pattern: /gym|fitness|equinox|planet fitness|anytime fitness|crossfit|yoga/i, name: "Gym & Fitness Membership", category: "Personal" },
-
-  // Software, Cloud & Developer Infrastructure
-  { pattern: /aws|amazon web services/i, name: "AWS Cloud Infrastructure", category: "Utilities" },
-  { pattern: /cloudflare/i, name: "Cloudflare", category: "Utilities" },
-  { pattern: /openai|chatgpt/i, name: "OpenAI ChatGPT Plus", category: "Services" },
-  { pattern: /github/i, name: "GitHub Copilot", category: "Services" },
-  { pattern: /google|workspace/i, name: "Google Workspace", category: "Services" },
-  { pattern: /adobe/i, name: "Adobe Creative Cloud", category: "Software" },
-  { pattern: /slack/i, name: "Slack Pro", category: "Services" },
-  { pattern: /figma/i, name: "Figma Professional", category: "Software" },
-  { pattern: /dropbox/i, name: "Dropbox Storage", category: "Services" },
-  { pattern: /notion/i, name: "Notion Plus", category: "Services" },
-  { pattern: /zoom/i, name: "Zoom One", category: "Services" },
-
-  // Streaming & Entertainment
-  { pattern: /netflix/i, name: "Netflix", category: "Entertainment" },
-  { pattern: /spotify/i, name: "Spotify", category: "Entertainment" },
-  { pattern: /digital services|streaming/i, name: "Streaming & Digital Services", category: "Entertainment" },
-  { pattern: /apple/i, name: "Apple Services", category: "Entertainment" },
-  { pattern: /hulu|disney/i, name: "Disney / Hulu", category: "Entertainment" },
-  { pattern: /youtube/i, name: "YouTube Premium", category: "Entertainment" },
-  { pattern: /hbo|max/i, name: "Max (HBO)", category: "Entertainment" },
-
-  // Generic Autopay & Recurring Billing
-  { pattern: /autopay|recurring|membership fee/i, name: "Recurring Subscription", category: "Services" },
-];
+import { normalizeMerchant } from "./categorizer";
 
 export interface ReconciliationReport {
   reconciledCount: number;
@@ -59,9 +9,119 @@ export interface ReconciliationReport {
   reconciledEventTitles: string[];
 }
 
+interface DynamicSubscription {
+  merchantName: string;
+  canonicalName: string;
+  category: string;
+  amount: number;
+  dayOfMonth: number;
+  timestamp: string;
+  confidence: number;
+  source: "cadence_analysis" | "gemini_inference" | "heuristic_indicator";
+}
+
+// Session-level classification cache to minimize repeated AI inferences
+const subscriptionClassificationCache = new Map<
+  string,
+  { isRecurring: boolean; canonicalName: string; category: string }
+>();
+
 /**
- * Reconciles scheduled bills with settled PayPal transactions and auto-detects
- * recurring subscriptions from PayPal transaction activity.
+ * Dynamically queries Gemini AI to determine whether transactions represent
+ * ongoing subscriptions, SaaS tools, utilities, or recurring memberships.
+ * Zero hardcoded merchant names or static provider tables.
+ */
+async function classifySubscriptionsWithGemini(
+  candidates: Array<{ merchantName: string; amount: number; memo?: string }>
+): Promise<Map<string, { isRecurring: boolean; canonicalName: string; category: string }>> {
+  const results = new Map<string, { isRecurring: boolean; canonicalName: string; category: string }>();
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY_SECONDARY;
+
+  if (!apiKey || apiKey === "your-gemini-api-key" || candidates.length === 0) {
+    return results;
+  }
+
+  const prompt = `
+You are PocketMate's Autonomous Financial Subscription Intelligence.
+Analyze the following financial transactions from a user's ledger:
+
+${JSON.stringify(
+  candidates.map((c) => ({
+    merchant: c.merchantName,
+    amount: c.amount,
+    memo: c.memo || "",
+  })),
+  null,
+  2
+)}
+
+TASK:
+Identify which of these transactions represent ongoing recurring subscriptions, utilities, rent, memberships, or digital services (e.g., streaming, gym memberships, software licenses, broadband/mobile, cloud storage, power utilities).
+DO NOT use hardcoded vendor lists. Evaluate based on merchant name semantics, typical SaaS/subscription pricing patterns, and memo context.
+
+OUTPUT SCHEMA:
+Return ONLY valid JSON matching this schema:
+{
+  "classifications": [
+    {
+      "merchant": "Exact merchant string from input",
+      "canonicalName": "Clean Title (e.g. Netflix, Equinox Fitness, Google Workspace)",
+      "isRecurring": true,
+      "category": "Entertainment" | "Utilities" | "Services" | "Software" | "Rent" | "Personal",
+      "confidence": 0.95
+    }
+  ]
+}
+`;
+
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.1,
+            responseMimeType: "application/json",
+          },
+        }),
+      }
+    );
+
+    if (res.ok) {
+      const data = await res.json();
+      const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (rawText) {
+        const parsed = JSON.parse(rawText);
+        const list = parsed.classifications || parsed.subscriptions || [];
+        for (const item of list) {
+          if (item.merchant && typeof item.isRecurring === "boolean") {
+            results.set(normalizeMerchant(item.merchant), {
+              isRecurring: item.isRecurring,
+              canonicalName: item.canonicalName || item.merchant,
+              category: item.category || "Services",
+            });
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[Autopay Reconciliation] Gemini inference warning:", err);
+  }
+
+  return results;
+}
+
+/**
+ * Heuristic semantic indicators for recurring patterns (used when Gemini AI is offline).
+ */
+const RECURRING_SEMANTIC_INDICATORS = /\b(subscription|sub|autopay|recurring|monthly|membership|bill|utility|power|electric|water|gas|internet|broadband|hosting|cloud|saas|storage|insurance|premium|stream|gym|fitness|rent|lease|realty)\b/i;
+
+/**
+ * Reconciles scheduled bills with settled PayPal transactions and dynamically auto-detects
+ * recurring subscriptions from PayPal transaction activity without hardcoded provider lists.
  */
 export async function reconcileAutopaySubscriptions(
   userId: string,
@@ -127,9 +187,7 @@ export async function reconcileAutopaySubscriptions(
         const merchantMatches =
           (cp && (mName.includes(cp) || cp.includes(mName))) ||
           title.includes(mName) ||
-          mName.includes("aws") && (title.includes("aws") || cp.includes("aws")) ||
-          mName.includes("streaming") && (title.includes("streaming") || cp.includes("digital services")) ||
-          mName.includes("cloudflare") && title.includes("cloudflare");
+          mName.includes(title);
 
         return amountMatches && merchantMatches;
       });
@@ -157,97 +215,222 @@ export async function reconcileAutopaySubscriptions(
     const currentMonth = now.getMonth();
     const todayDay = now.getDate();
 
-    // 4. Auto-Detect: Identify recurring subscriptions from transaction history
+    // 4. Dynamic Subscription Detection Engine (Zero Hardcoded Providers)
+    // Step 4A: Algorithmic Cadence Analysis
+    // Group completed transactions by normalized merchant to detect repeating billing cadences
+    const txsByMerchant = new Map<string, typeof completedTxs>();
     for (const tx of completedTxs) {
-      const mName = tx.merchantName;
-      const matchedProvider = KNOWN_SUBSCRIPTION_PROVIDERS.find((p) =>
-        p.pattern.test(mName)
-      );
+      const norm = normalizeMerchant(tx.merchantName);
+      const list = txsByMerchant.get(norm) || [];
+      list.push(tx);
+      txsByMerchant.set(norm, list);
+    }
 
-      if (matchedProvider) {
-        // Check if an event already exists for this provider
-        const existingForProvider = existingEvents.find((e) => {
-          const cp = (e.counterparty || "").toLowerCase();
-          const title = e.title.toLowerCase();
-          const target = matchedProvider.name.toLowerCase();
-          return cp.includes(target) || title.includes(target) || matchedProvider.pattern.test(title);
-        });
+    const dynamicallyDetected: DynamicSubscription[] = [];
+    const classifiedNorms = new Set<string>();
 
-        const txDate = new Date(tx.timestamp);
-        const dayOfMonth = txDate.getDate() || 15;
-        const eventDateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(dayOfMonth).padStart(2, "0")}`;
-        const isFutureInCurrentMonth = dayOfMonth > todayDay;
+    for (const [normMerchant, txList] of txsByMerchant.entries()) {
+      if (txList.length >= 2) {
+        // Chronological sort
+        const sorted = [...txList].sort(
+          (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        );
 
-        if (!existingForProvider) {
-          const startDateStr = txDate.toISOString().slice(0, 10);
-          const formattedCp = formatCounterpartyWithLifecycle(matchedProvider.name, startDateStr);
+        for (let i = 0; i < sorted.length - 1; i++) {
+          const t1 = sorted[i];
+          const t2 = sorted[i + 1];
+          const daysDiff = Math.abs(
+            (new Date(t2.timestamp).getTime() - new Date(t1.timestamp).getTime()) /
+              (1000 * 60 * 60 * 24)
+          );
+          const amountMatches = Math.abs(t1.amount - t2.amount) <= 0.05;
 
-          // If day of month is in the future for current month, initial status is "scheduled", NOT "completed"!
-          const initialStatus = isFutureInCurrentMonth ? "scheduled" : "completed";
+          // Natural monthly cadence occurs within 25 to 35 calendar days
+          if (amountMatches && daysDiff >= 25 && daysDiff <= 35) {
+            const txDate = new Date(t2.timestamp);
+            dynamicallyDetected.push({
+              merchantName: t2.merchantName,
+              canonicalName: t2.merchantName,
+              category: "Services",
+              amount: t2.amount,
+              dayOfMonth: txDate.getDate() || 15,
+              timestamp: t2.timestamp,
+              confidence: 0.98,
+              source: "cadence_analysis",
+            });
+            classifiedNorms.add(normMerchant);
+            subscriptionClassificationCache.set(normMerchant, {
+              isRecurring: true,
+              canonicalName: t2.merchantName,
+              category: "Services",
+            });
+            break;
+          }
+        }
+      }
+    }
 
-          await prisma.scheduledEvent.create({
-            data: {
-              userId,
-              title: `${matchedProvider.name}`,
-              amount: tx.amount,
-              date: eventDateStr,
-              dayOfMonth,
-              type: "outgoing",
-              category: matchedProvider.category,
-              counterparty: formattedCp,
-              status: initialStatus,
-            },
-          });
+    // Step 4B: AI Zero-Shot Recurring Inference for Unclassified Transactions
+    const unclassifiedCandidates: Array<{ merchantName: string; amount: number; memo?: string }> = [];
+    for (const tx of completedTxs) {
+      const norm = normalizeMerchant(tx.merchantName);
+      if (classifiedNorms.has(norm)) continue;
 
-          report.newSubscriptionsCount++;
-          report.reconciledEventTitles.push(matchedProvider.name);
-
-          // Update in-memory tracker
-          existingEvents.push({
-            id: `temp_${Date.now()}`,
-            userId,
-            title: matchedProvider.name,
+      if (subscriptionClassificationCache.has(norm)) {
+        const cached = subscriptionClassificationCache.get(norm)!;
+        if (cached.isRecurring) {
+          const txDate = new Date(tx.timestamp);
+          dynamicallyDetected.push({
+            merchantName: tx.merchantName,
+            canonicalName: cached.canonicalName,
+            category: cached.category,
             amount: tx.amount,
+            dayOfMonth: txDate.getDate() || 15,
+            timestamp: tx.timestamp,
+            confidence: 0.92,
+            source: "gemini_inference",
+          });
+          classifiedNorms.add(norm);
+        }
+        continue;
+      }
+
+      unclassifiedCandidates.push({
+        merchantName: tx.merchantName,
+        amount: tx.amount,
+        memo: tx.memo,
+      });
+    }
+
+    if (unclassifiedCandidates.length > 0) {
+      const aiResults = await classifySubscriptionsWithGemini(unclassifiedCandidates);
+      for (const [norm, classification] of aiResults.entries()) {
+        subscriptionClassificationCache.set(norm, classification);
+
+        if (classification.isRecurring) {
+          const matchedTx = completedTxs.find((t) => normalizeMerchant(t.merchantName) === norm);
+          if (matchedTx) {
+            const txDate = new Date(matchedTx.timestamp);
+            dynamicallyDetected.push({
+              merchantName: matchedTx.merchantName,
+              canonicalName: classification.canonicalName,
+              category: classification.category,
+              amount: matchedTx.amount,
+              dayOfMonth: txDate.getDate() || 15,
+              timestamp: matchedTx.timestamp,
+              confidence: 0.92,
+              source: "gemini_inference",
+            });
+            classifiedNorms.add(norm);
+          }
+        }
+      }
+    }
+
+    // Step 4C: Semantic Linguistic Heuristic Fallback
+    for (const tx of completedTxs) {
+      const norm = normalizeMerchant(tx.merchantName);
+      if (classifiedNorms.has(norm)) continue;
+
+      const isSemanticMatch =
+        RECURRING_SEMANTIC_INDICATORS.test(tx.merchantName) ||
+        (tx.memo && RECURRING_SEMANTIC_INDICATORS.test(tx.memo));
+
+      if (isSemanticMatch) {
+        const txDate = new Date(tx.timestamp);
+        dynamicallyDetected.push({
+          merchantName: tx.merchantName,
+          canonicalName: tx.merchantName,
+          category: "Services",
+          amount: tx.amount,
+          dayOfMonth: txDate.getDate() || 15,
+          timestamp: tx.timestamp,
+          confidence: 0.85,
+          source: "heuristic_indicator",
+        });
+        classifiedNorms.add(norm);
+      }
+    }
+
+    // Step 4D: Persist Detected Subscriptions to User's Calendar
+    for (const sub of dynamicallyDetected) {
+      const normSubName = normalizeMerchant(sub.canonicalName);
+      const existingForSub = existingEvents.find((e) => {
+        const cp = normalizeMerchant(e.counterparty || "");
+        const title = normalizeMerchant(e.title);
+        return cp.includes(normSubName) || title.includes(normSubName) || normSubName.includes(title);
+      });
+
+      const dayOfMonth = sub.dayOfMonth;
+      const eventDateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(
+        dayOfMonth
+      ).padStart(2, "0")}`;
+      const isFutureInCurrentMonth = dayOfMonth > todayDay;
+
+      if (!existingForSub) {
+        const startDateStr = new Date(sub.timestamp).toISOString().slice(0, 10);
+        const formattedCp = formatCounterpartyWithLifecycle(sub.canonicalName, startDateStr);
+        const initialStatus = isFutureInCurrentMonth ? "scheduled" : "completed";
+
+        await prisma.scheduledEvent.create({
+          data: {
+            userId,
+            title: sub.canonicalName,
+            amount: sub.amount,
             date: eventDateStr,
             dayOfMonth,
             type: "outgoing",
-            category: matchedProvider.category,
+            category: sub.category,
             counterparty: formattedCp,
             status: initialStatus,
-            createdAt: new Date(),
-            updatedAt: new Date(),
+          },
+        });
+
+        report.newSubscriptionsCount++;
+        report.reconciledEventTitles.push(sub.canonicalName);
+
+        existingEvents.push({
+          id: `temp_${Date.now()}_${Math.random()}`,
+          userId,
+          title: sub.canonicalName,
+          amount: sub.amount,
+          date: eventDateStr,
+          dayOfMonth,
+          type: "outgoing",
+          category: sub.category,
+          counterparty: formattedCp,
+          status: initialStatus,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      } else {
+        const evtDate = new Date(existingForSub.date);
+        const isPastMonth =
+          evtDate.getFullYear() < currentYear ||
+          (evtDate.getFullYear() === currentYear && evtDate.getMonth() < currentMonth);
+
+        if (isPastMonth || isFutureInCurrentMonth) {
+          const hasTxInCurrentMonth = completedTxs.some((t) => {
+            const d = new Date(t.timestamp);
+            return (
+              d.getFullYear() === currentYear &&
+              d.getMonth() === currentMonth &&
+              Math.abs(t.amount - existingForSub.amount) < 0.05 &&
+              normalizeMerchant(t.merchantName) === normSubName
+            );
           });
-        } else {
-          // If existing event is from a previous month or has a future day in the current month, update its cycle
-          const evtDate = new Date(existingForProvider.date);
-          const isPastMonth =
-            evtDate.getFullYear() < currentYear ||
-            (evtDate.getFullYear() === currentYear && evtDate.getMonth() < currentMonth);
 
-          if (isPastMonth || isFutureInCurrentMonth) {
-            // Check if there is an actual completed transaction in current month
-            const hasTxInCurrentMonth = completedTxs.some((t) => {
-              const d = new Date(t.timestamp);
-              return (
-                d.getFullYear() === currentYear &&
-                d.getMonth() === currentMonth &&
-                Math.abs(t.amount - existingForProvider.amount) < 0.05 &&
-                matchedProvider.pattern.test(t.merchantName)
-              );
-            });
-
-            const updatedStatus = isFutureInCurrentMonth && !hasTxInCurrentMonth ? "scheduled" : "completed";
-            await prisma.scheduledEvent.update({
-              where: { id: existingForProvider.id },
-              data: {
-                date: eventDateStr,
-                dayOfMonth,
-                status: updatedStatus,
-              },
-            });
-            existingForProvider.date = eventDateStr;
-            existingForProvider.status = updatedStatus;
-          }
+          const updatedStatus = isFutureInCurrentMonth && !hasTxInCurrentMonth ? "scheduled" : "completed";
+          await prisma.scheduledEvent.update({
+            where: { id: existingForSub.id },
+            data: {
+              date: eventDateStr,
+              dayOfMonth,
+              status: updatedStatus,
+            },
+          });
+          existingForSub.date = eventDateStr;
+          existingForSub.status = updatedStatus;
         }
       }
     }
