@@ -3,6 +3,7 @@ import { paypalClient } from "@/lib/paypal/client";
 import { verifySessionCookie } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { loadUserCategorizationContext, categorizeTransactionsBatch } from "@/lib/services/categorizer";
+import type { TransactionRow } from "@/components/grid/TransactionGrid";
 import { z } from "zod";
 
 const TransactionsQuerySchema = z.object({
@@ -71,9 +72,13 @@ export async function GET(req: NextRequest) {
     const userId = userRecord?.id || verified?.id;
 
     let categoryMap = new Map<string, { category: string }>();
+    const overrideLookupMap = new Map<string, string>();
     if (userId) {
       try {
         const catContext = await loadUserCategorizationContext(userId);
+        for (const o of catContext.overrides ?? []) {
+          overrideLookupMap.set(o.transactionId, o.categoryName);
+        }
         categoryMap = await categorizeTransactionsBatch(
           scopedTxs.map((t) => ({ id: t.id, merchantName: t.merchantName, amount: t.amount })),
           catContext
@@ -84,7 +89,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Map to TransactionRow format expected by the frontend
-    const formatted = scopedTxs.map((t) => {
+    const formatted: TransactionRow[] = scopedTxs.map((t) => {
       const dateObj = new Date(t.timestamp);
       const isToday = new Date().toDateString() === dateObj.toDateString();
       const timeStr = dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -119,8 +124,87 @@ export async function GET(req: NextRequest) {
         debtor_name: debtorDisplay,
         amount: t.amount,
         status: rowStatus,
+        direction: "outgoing" as const,
       };
     });
+
+    // Query settled split reimbursements received by this organizer and prepend to ledger
+    if (userId) {
+      try {
+        const settledItems = await prisma.splitItem.findMany({
+          where: {
+            status: "PAID",
+            splitRecord: { userId },
+          },
+          include: {
+            splitRecord: true,
+          },
+          orderBy: { createdAt: "desc" },
+        });
+
+        for (const item of settledItems) {
+          const rawItems = (item.splitRecord.itemsJson as Array<Record<string, unknown>>) || [];
+          const meta = rawItems.find(
+            (r) =>
+              r.participantEmail === item.participantEmail ||
+              r.participantName === item.participantName
+          );
+
+          const settledReason =
+            (meta?.settledReason as string) ||
+            (item.splitRecord.description ? `${item.splitRecord.description} split share` : "");
+          const isAdjusted = Boolean(meta?.isAdjusted);
+          const origAmt = Number(meta?.originalAmount) || item.amount;
+
+          let reasonMemo = `${item.splitRecord.description} split settlement`;
+          if (settledReason && !settledReason.toLowerCase().includes("paid in full")) {
+            reasonMemo += ` — Reason: "${settledReason}"`;
+          }
+          if (isAdjusted) {
+            reasonMemo += ` (Adjusted from $${origAmt.toFixed(2)})`;
+          }
+
+          const dateObj = new Date(meta?.settledAt ? String(meta.settledAt) : item.createdAt);
+          const isToday = new Date().toDateString() === dateObj.toDateString();
+          const timeStr = dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+          const displayDate = isToday ? `Today, ${timeStr}` : `${dateObj.toLocaleDateString([], { month: "short", day: "numeric" })}, ${timeStr}`;
+
+          // Check if user explicitly overridden category for this settled transaction
+          const explicitOverride =
+            overrideLookupMap.get(`stl_${item.id}`) ||
+            overrideLookupMap.get(item.id) ||
+            (item.paypalInvoiceId ? overrideLookupMap.get(item.paypalInvoiceId) : undefined);
+
+          let category = explicitOverride || "Personal Reimbursement";
+          if (!explicitOverride) {
+            // Inherit parent category (Travel, Dining, etc.) to offset category expense
+            const desc = item.splitRecord.description.toLowerCase();
+            if (desc.includes("hotel") || desc.includes("flight") || desc.includes("travel") || desc.includes("vista")) {
+              category = "Travel";
+            } else if (desc.includes("dinner") || desc.includes("bistro") || desc.includes("food") || desc.includes("dining")) {
+              category = "Dining";
+            } else if (desc.includes("grocer")) {
+              category = "Groceries";
+            }
+          }
+
+          formatted.unshift({
+            id: `stl_${item.id}`,
+            date: displayDate,
+            merchant: item.participantName,
+            memo: reasonMemo,
+            splitAllocation: "split",
+            category,
+            debtor_name: `Split (${item.participantName})`,
+            amount: item.amount,
+            status: "settled",
+            direction: "incoming",
+          });
+        }
+      } catch (stlErr) {
+        console.warn("[Settled Splits Query Warning]", stlErr);
+      }
+    }
 
     return NextResponse.json({
       success: true,
