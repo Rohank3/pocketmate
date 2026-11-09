@@ -93,7 +93,12 @@ export default function FinancialStudio({
     >();
 
     transactions
-      .filter((t) => t.debtor_name && t.debtor_name !== "Self" && t.debtor_name !== "—")
+      .filter((t) => {
+        if (!t.debtor_name) return false;
+        const d = t.debtor_name.toLowerCase().trim();
+        if (d === "—" || d === "self" || d.includes("self") || d === "unassigned") return false;
+        return t.splitAllocation === "split" || (!d.includes("self") && d !== "shared split");
+      })
       .forEach((t) => {
         const name = t.debtor_name;
         let entry = debtors.get(name);

@@ -41,10 +41,16 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
 }) => {
   const [loading, setLoading] = useState(false);
   const [completed, setCompleted] = useState<string | false>(false);
+  const [isCancelled, setIsCancelled] = useState(false);
 
   const isPayout = cardData.action === "DISPATCH_PAYOUT";
   const isInvoiceReview = cardData.type === "incoming_invoice_review";
   const totalAmount = cardData.totalAmount ?? cardData.amount ?? 0;
+
+  const handleCancel = () => {
+    setIsCancelled(true);
+    onCancel?.();
+  };
 
   const handleConfirm = async () => {
     setLoading(true);
@@ -69,6 +75,18 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
       setLoading(false);
     }
   };
+
+  if (isCancelled) {
+    return (
+      <div className="my-3 p-3.5 rounded-xl border border-zinc-800 bg-zinc-950/70 text-xs text-zinc-400 flex items-center justify-between shadow-md">
+        <div className="flex items-center gap-2.5">
+          <XCircle className="w-4 h-4 text-zinc-500 shrink-0" />
+          <span className="font-medium text-zinc-300">Action cancelled.</span>
+          <span className="text-zinc-500">No funds transferred or invoices dispatched.</span>
+        </div>
+      </div>
+    );
+  }
 
   if (completed) {
     let successTitle = "Action Executed Successfully";
@@ -217,7 +235,7 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
       {/* Actions */}
       <div className="pt-3 border-t border-zinc-800 flex items-center justify-end gap-2">
         <button
-          onClick={onCancel}
+          onClick={handleCancel}
           disabled={loading}
           className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 active:bg-zinc-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
         >
