@@ -23,6 +23,8 @@ import {
   X,
   AlertCircle,
   Loader2,
+  User,
+  Users,
 } from "lucide-react";
 import { GridMutationState } from "@/types/agent";
 import type { CategoryItem } from "@/components/categories/CategoryControlBar";
@@ -43,6 +45,8 @@ export interface TransactionRow {
   id: string;
   date: string;
   merchant: string;
+  memo?: string;
+  splitAllocation?: "self" | "split" | "owed";
   category: string;
   debtor_name: string;
   amount: number;
@@ -132,18 +136,29 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
     {
       field: "merchant",
       headerName: "Merchant / Memo",
-      flex: 1.5,
+      flex: 1.6,
       filter: true,
       cellRenderer: (params: ICellRendererParams<TransactionRow, string>) => {
         const isDisputed = params.data?.status === "disputed";
+        const memo = params.data?.memo;
+        const merchant = params.value || "PayPal Commercial Transfer";
+        const showMemo = memo && memo.toLowerCase() !== merchant.toLowerCase();
+
         return (
-          <div className="flex items-center gap-2">
-            <span className={`font-medium ${isDisputed ? "text-amber-400 font-semibold" : "text-zinc-100"}`}>
-              {params.value}
-            </span>
-            {isDisputed && (
-              <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded">
-                Mismatch Flag
+          <div className="flex flex-col justify-center py-0.5 leading-tight overflow-hidden">
+            <div className="flex items-center gap-1.5 truncate">
+              <span className={`font-semibold truncate ${isDisputed ? "text-amber-400" : "text-zinc-100"}`}>
+                {merchant}
+              </span>
+              {isDisputed && (
+                <span className="shrink-0 text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.2 rounded font-normal">
+                  Mismatch Flag
+                </span>
+              )}
+            </div>
+            {showMemo && (
+              <span className="text-[11px] text-zinc-400 font-normal truncate mt-0.5" title={memo}>
+                {memo}
               </span>
             )}
           </div>
@@ -190,13 +205,41 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
     {
       field: "debtor_name",
       headerName: "Debtor / Split",
-      width: 140,
+      width: 145,
       filter: true,
-      cellRenderer: (params: ICellRendererParams<TransactionRow, string>) => (
-        <span className="text-zinc-300 font-mono text-xs">
-          {params.value || "—"}
-        </span>
-      ),
+      cellRenderer: (params: ICellRendererParams<TransactionRow, string>) => {
+        const isSplit =
+          params.data?.splitAllocation === "split" ||
+          params.value?.toLowerCase().includes("split") ||
+          params.data?.memo?.toLowerCase().includes("split") ||
+          params.data?.memo?.toLowerCase().includes("share");
+
+        if (isSplit) {
+          const splitLabel =
+            params.value && !params.value.toLowerCase().includes("self") && params.value !== "Shared Split"
+              ? `Split (${params.value})`
+              : "Shared Split";
+          return (
+            <span
+              title="Multi-party shared expense with split allocation"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-500/15 text-blue-300 border border-blue-500/30 font-sans"
+            >
+              <Users className="w-3 h-3 text-blue-400 shrink-0" />
+              <span className="truncate">{splitLabel}</span>
+            </span>
+          );
+        }
+
+        return (
+          <span
+            title="Personal single-party expense (100% Dave Chen)"
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 font-sans"
+          >
+            <User className="w-3 h-3 text-zinc-500 shrink-0" />
+            <span>100% Self</span>
+          </span>
+        );
+      },
     },
     {
       field: "amount",
@@ -213,13 +256,16 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
     {
       field: "status",
       headerName: "Settlement Status",
-      width: 130,
+      width: 140,
       filter: true,
       cellRenderer: (params: ICellRendererParams<TransactionRow, string>) => {
         const val = params.value;
         if (val === "settled") {
           return (
-            <span className="flex items-center gap-1.5 text-emerald-400 text-xs font-medium">
+            <span
+              title="Settled: Payment successfully completed and cleared via PayPal Sandbox Wallet"
+              className="flex items-center gap-1.5 text-emerald-400 text-xs font-medium cursor-help"
+            >
               <CheckCircle2 className="w-3.5 h-3.5" />
               Settled
             </span>
@@ -227,14 +273,20 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
         }
         if (val === "disputed") {
           return (
-            <span className="flex items-center gap-1.5 text-amber-400 text-xs font-medium">
+            <span
+              title="Disputed: Transaction flagged for audit discrepancy or unverified surcharge"
+              className="flex items-center gap-1.5 text-amber-400 text-xs font-medium cursor-help"
+            >
               <ShieldAlert className="w-3.5 h-3.5" />
               Disputed
             </span>
           );
         }
         return (
-          <span className="flex items-center gap-1.5 text-zinc-400 text-xs font-medium">
+          <span
+            title="Pending: Awaiting counterparty payment or authorization clearance"
+            className="flex items-center gap-1.5 text-zinc-400 text-xs font-medium cursor-help"
+          >
             <Clock className="w-3.5 h-3.5" />
             Pending
           </span>
