@@ -749,59 +749,39 @@ export async function reclassifyTransactionWithScope(
   };
 }
 
-function getSemanticTaxonomyFallback(
+/**
+ * Algorithmic token-stem fallback if AI service is offline.
+ * Zero hardcoded merchant or brand names.
+ */
+function getAlgorithmicStemFallback(
   anchorMerchant: string,
-  targetCategory: string,
   candidateTransactions: Array<{ id: string; merchantName: string; amount: number }>
 ): string[] {
   const normAnchor = normalizeMerchant(anchorMerchant);
-  const targetLower = targetCategory.toLowerCase().trim();
-
-  // Keyword maps for standard consumer budget taxonomies
-  const taxonomyKeywords: Record<string, string[]> = {
-    shopping: ["target", "amazon", "nexus", "walmart", "zara", "h&m", "store", "retail", "clothing", "apparel", "vintage", "guitar", "shoes", "mall", "boutique", "shop"],
-    dining: ["dining", "restaurant", "cafe", "starbucks", "chipotle", "bistro", "food", "tacos", "burger", "pizza", "coffee", "lunch", "dinner", "capitalgrille", "sweetwater", "grill"],
-    groceries: ["grocery", "groceries", "market", "wholefoods", "whole foods", "trader", "traderjoes", "trader joes", "safeway", "kroger", "supermarket", "food market"],
-    travel: ["travel", "hotel", "flight", "airline", "uber", "lyft", "gas", "fuel", "shell", "shelloil", "lodging", "roma", "vista", "marriott", "tolls", "eurostar", "airalo", "transit", "fleetfuel"],
-    entertainment: ["entertainment", "netflix", "spotify", "movie", "theatre", "cinema", "amc", "amctheatres", "game", "nintendo", "steampowered", "steam", "discord", "concert", "tickets", "tix", "bowlero"],
-    services: ["services", "service", "openai", "chatgpt", "github", "google", "workspace", "adobe", "contract", "design", "consulting"],
-    utilities: ["utilities", "utility", "aws", "amazonwebservices", "cloudflare", "hosting", "storage", "googlecloudstorage", "cloud"],
-  };
-
-  const matchedKeywords = taxonomyKeywords[targetLower] || [];
+  const anchorWords = normAnchor.split(" ").filter((w) => w.length >= 4);
+  if (anchorWords.length === 0) return [];
 
   return candidateTransactions
     .filter((t) => {
       const normCandidate = normalizeMerchant(t.merchantName);
-      // 1. Check if candidate shares a significant root word with anchor merchant
-      const anchorWords = normAnchor.split(" ").filter((w) => w.length >= 4);
-      for (const word of anchorWords) {
-        if (normCandidate.includes(word)) return true;
-      }
-
-      // 2. Check if candidate matches target category taxonomy keywords
-      for (const kw of matchedKeywords) {
-        if (normCandidate.includes(kw)) return true;
-      }
-
-      return false;
+      return anchorWords.some((word) => normCandidate.includes(word));
     })
     .map((t) => t.id);
 }
 
 /**
- * Prompts Gemini AI to find semantically similar vendor transactions in the active ledger.
+ * Prompts Gemini AI to dynamically find semantically similar vendor transactions in the active ledger.
  */
 async function findSemanticallySimilarTransactionsWithGemini(
   anchorMerchant: string,
   targetCategory: string,
   candidateTransactions: Array<{ id: string; merchantName: string; amount: number }>
 ): Promise<string[]> {
-  const fallback = getSemanticTaxonomyFallback(anchorMerchant, targetCategory, candidateTransactions);
+  const stemFallback = getAlgorithmicStemFallback(anchorMerchant, candidateTransactions);
 
   const apiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY_SECONDARY;
   if (!apiKey || apiKey === "your-gemini-api-key") {
-    return fallback;
+    return stemFallback;
   }
 
   const prompt = `
@@ -835,20 +815,18 @@ Return ONLY valid JSON with an array of matching transaction IDs:
       timeoutMs: 12000,
     });
 
-    if (!res.ok) return fallback;
+    if (!res.ok) return stemFallback;
     const data = await res.json();
     const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!rawText) return fallback;
+    if (!rawText) return stemFallback;
 
     const parsed = JSON.parse(rawText) as { similarTransactionIds?: string[] };
     if (Array.isArray(parsed.similarTransactionIds) && parsed.similarTransactionIds.length > 0) {
-      // Merge AI matches with any strong taxonomy fallback matches
-      const combined = new Set<string>([...parsed.similarTransactionIds, ...fallback]);
-      return Array.from(combined);
+      return parsed.similarTransactionIds;
     }
-    return fallback;
+    return stemFallback;
   } catch {
-    return fallback;
+    return stemFallback;
   }
 }
 

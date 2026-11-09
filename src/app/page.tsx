@@ -755,47 +755,24 @@ export default function Home() {
         setTransactions(updatedTxs);
         void loadCategories();
 
-        // Check if there are remaining uncategorized items across the ledger
-        const remainingUncat = updatedTxs.filter(
-          (t) =>
-            t.category?.toLowerCase() === "uncategorized" ||
-            !t.category ||
-            t.category === "—"
-        );
-
-        if (remainingUncat.length > 0) {
-          const nextTx = remainingUncat[0];
-          const text = `${nextTx.merchant} ${nextTx.memo || ""}`.toLowerCase();
-          let suggestedCat = "Dining";
-          if (text.includes("hotel") || text.includes("vista") || text.includes("uber") || text.includes("flight") || text.includes("travel")) {
-            suggestedCat = "Travel";
-          } else if (text.includes("wholefoods") || text.includes("trader") || text.includes("market") || text.includes("grocer")) {
-            suggestedCat = "Groceries";
-          } else if (text.includes("target") || text.includes("amazon") || text.includes("store") || text.includes("shop")) {
-            suggestedCat = "Shopping";
-          } else if (text.includes("netflix") || text.includes("spotify") || text.includes("bowlero") || text.includes("amc") || text.includes("cinema")) {
-            suggestedCat = "Entertainment";
-          } else if (text.includes("aws") || text.includes("cloud") || text.includes("github") || text.includes("openai")) {
-            suggestedCat = "Utilities";
-          } else if (categories.length > 0) {
-            suggestedCat = categories[0].name;
-          }
-
+        // Check if there are remaining uncategorized items across the ledger via Gemini AI
+        if (data.nextSuggestion) {
+          const next = data.nextSuggestion;
           setMessages((prev) => [
             ...prev,
             {
               id: `asst_triage_next_${Date.now()}`,
               role: "assistant",
-              content: `Reclassified **${merchantName}** as *${targetCategory}*. **${remainingUncat.length} unclassified transaction(s) remaining** in your ledger. Next up: **${nextTx.merchant}** ($${nextTx.amount.toFixed(2)}).`,
+              content: `Reclassified **${merchantName}** as *${targetCategory}*. **${next.remainingCount} unclassified transaction(s) remaining** in your ledger. Next up: **${next.merchantName}** ($${next.amount.toFixed(2)}).`,
               actionCard: {
                 action: "CATEGORY_TRIAGE",
                 type: "category_triage",
-                transactionId: nextTx.id,
-                merchantName: nextTx.merchant,
-                amount: nextTx.amount,
-                suggestedCategory: suggestedCat,
-                confidence: 0.85,
-                reasoning: `Found ${remainingUncat.length} unclassified transactions. Review '${nextTx.merchant}' to assign scope.`,
+                transactionId: next.transactionId,
+                merchantName: next.merchantName,
+                amount: next.amount,
+                suggestedCategory: next.suggestedCategory,
+                confidence: next.confidence,
+                reasoning: next.reasoning,
               },
             },
           ]);
