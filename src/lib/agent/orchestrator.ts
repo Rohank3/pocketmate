@@ -310,7 +310,16 @@ export async function handleDynamicAutonomousResponse(
   // --------------------------------------------------------------------------
   const isTriageResponse =
     /^(1|2|3|4|5)$/.test(p.trim()) ||
-    ["travel", "dining", "shopping", "groceries", "entertainment"].includes(p.trim());
+    ["travel", "dining", "shopping", "groceries", "entertainment", "services", "utilities", "software"].includes(p.trim()) ||
+    /(?:mark|tag|set|categorize|make it|put as|put in)\s+(?:as\s+)?(dining|groceries|shopping|entertainment|travel|services|utilities|software)/i.test(p.trim());
+
+  // --------------------------------------------------------------------------
+  // E. Explicit Payment Reminder Intent (Sending reminder invoice to a debtor)
+  // e.g. "Draft a PayPal payment reminder for Dave Chen for $65.00"
+  // --------------------------------------------------------------------------
+  const isPaymentReminderIntent =
+    (p.includes("reminder") || p.includes("remind")) &&
+    (p.includes("draft") || p.includes("send") || p.includes("dispatch") || p.includes("friendly") || p.includes("owed") || p.includes("for $") || p.includes("to "));
 
   // Direct Peer Settlement / Transfer via PayPal Payouts API
   const isPayoutIntent =
@@ -321,7 +330,8 @@ export async function handleDynamicAutonomousResponse(
       p.includes("reimburse") ||
       (p.includes("settle") && !p.includes("split"))) &&
     !p.includes("invoice") &&
-    !p.includes("bill me");
+    !p.includes("bill me") &&
+    !isPaymentReminderIntent;
 
   if (isInvoiceReviewIntent) {
     const effectiveUserId = handlers.userId || "demo_user";
@@ -664,8 +674,10 @@ ${optionsLines}
         const idx = parseInt(cleanInput, 10) - 1;
         chosenCategory = activeCatNames[idx] || activeCatNames[0] || "General";
       } else {
-        const matchedActive = activeCatNames.find((c) => c.toLowerCase() === cleanInput.toLowerCase());
-        chosenCategory = matchedActive || cleanInput.charAt(0).toUpperCase() + cleanInput.slice(1).toLowerCase();
+        const phraseMatch = cleanInput.match(/(?:mark|tag|set|categorize|make it|put as|put in)\s+(?:as\s+)?([a-z0-9\s]+)/i);
+        const candidateWord = phraseMatch ? phraseMatch[1].trim() : cleanInput;
+        const matchedActive = activeCatNames.find((c) => c.toLowerCase() === candidateWord.toLowerCase());
+        chosenCategory = matchedActive || candidateWord.charAt(0).toUpperCase() + candidateWord.slice(1).toLowerCase();
       }
 
       // Persist category override
@@ -745,7 +757,73 @@ ${optionsLines}
     }
   }
 
-  // 1. Direct Peer Settlement / Transfer via PayPal Payouts API
+  // 1. Explicit Payment Reminder Intent (Sending invoice reminder to a counterparty/debtor)
+  // e.g. "Draft a PayPal payment reminder for Dave Chen for $65.00"
+  else if (isPaymentReminderIntent) {
+    const dollarMatch = prompt.match(/\$([0-9]+(?:\.[0-9]{1,2})?)/) || prompt.match(/(\d+(?:\.\d+)?)\s*(?:dollars?|usd)/i);
+    const reminderAmount = dollarMatch ? parseFloat(dollarMatch[1]) : 65.0;
+
+    let targetName = "";
+    const nameMatch =
+      prompt.match(/reminder\s+(?:to|for)\s+([A-Za-z0-9\s&]+?)(?:\s+for|\s+at|\s+\$|owed|$)/i) ||
+      prompt.match(/(?:remind|invoice)\s+([A-Za-z0-9\s&]+?)(?:\s+for|\s+at|\s+\$|about|$)/i);
+    if (nameMatch && nameMatch[1]?.trim()) {
+      targetName = nameMatch[1].trim();
+    }
+
+    if (!targetName) {
+      targetName = "Dave Chen";
+    }
+
+    // Safety check: Prevent user from invoicing themselves
+    if (targetName.toLowerCase().includes("self")) {
+      reply = `You cannot send a payment reminder to yourself (**${targetName}**). Payment reminders are for friends and counterparties with outstanding split balances.`;
+      await handlers.onTextDelta?.(reply);
+      return {
+        reply,
+        gridMutation: null,
+        actionCard: null,
+        executedTools,
+        activePersona: persona,
+      };
+    }
+
+    const matchedContact = await resolveContact(targetName, handlers.userId);
+    const recipientEmail = matchedContact
+      ? matchedContact.email
+      : targetName.includes("@")
+      ? targetName
+      : `${targetName.toLowerCase().replace(/\s+/g, ".")}@personal.example.com`;
+    const recipientName = matchedContact ? matchedContact.name : targetName;
+
+    const invArgs = {
+      recipients: [
+        {
+          email: recipientEmail,
+          name: recipientName,
+          amount: reminderAmount,
+          description: `Payment reminder for split balance (${recipientName})`,
+        },
+      ],
+      isConfirmed: false,
+    };
+
+    const invResult = (await executeAgentTool("dispatch_paypal_invoices", invArgs)) as Record<string, unknown>;
+    executedTools.push({ name: "dispatch_paypal_invoices", args: invArgs, result: invResult });
+    handlers.onToolCall?.("dispatch_paypal_invoices", invArgs, invResult);
+    actionCard = invResult;
+    handlers.onActionCard?.(actionCard);
+
+    gridMutation = {
+      filter: { debtor_name: recipientName },
+      statusMessage: `Payment Reminder: Drafted $${reminderAmount.toFixed(2)} reminder invoice for ${recipientName}.`,
+    };
+    handlers.onGridMutation?.(gridMutation);
+
+    reply = `### 📨 Payment Reminder Drafted: **${recipientName}**\n\n• **Recipient:** ${recipientName} (\`${recipientEmail}\`)\n• **Outstanding Balance:** **$${reminderAmount.toFixed(2)} USD**\n• **Rail:** PayPal Invoicing API (Payment Reminder)\n\nPlease review the invoice reminder card below and tap **Confirm & Send Invoices** to dispatch the notification directly to ${recipientName}.`;
+  }
+
+  // 2. Direct Peer Settlement / Transfer via PayPal Payouts API
   // e.g. "Pay Dave $50", "Send $30 to Sarah", "Transfer $45 to Dave Chen", "Settle $65 with Dave"
   else if (isPayoutIntent) {
     const dollarMatch = prompt.match(/\$([0-9]+(\.[0-9]{1,2})?)/) || prompt.match(/(\d+(\.\d+)?)\s*(?:dollars?|usd)/i);
@@ -1212,7 +1290,65 @@ ${optionsLines}
       ? `\n\n📌 **${autoResult.uncategorizedRemaining} transaction(s)** remain in **Uncategorized** for your review.`
       : "\n\n✨ All scanned transactions are now fully categorized across your active budgets.";
 
-    reply = `🧠 **AI Auto-Categorization Complete**\n\n${autoResult.message}${detailList ? `\n\n${detailList}` : ""}${remainingText}`;
+    let triagePrompt = "";
+    if (autoResult.uncategorizedRemaining > 0) {
+      const effectiveUserId = handlers.userId || "demo_user";
+      const filterEmail = effectiveUserId.includes("@") ? effectiveUserId : undefined;
+      const liveTxs = await paypalClient.fetchRecentTransactions(720, filterEmail).catch(() => []);
+
+      let existingOverrides: Array<{ transactionId: string; categoryName: string }> = [];
+      try {
+        existingOverrides = await prisma.transactionCategoryOverride.findMany({
+          where: { userId: effectiveUserId },
+          select: { transactionId: true, categoryName: true },
+        });
+      } catch (dbErr) {
+        console.warn("[Triage DB Warning]", dbErr);
+      }
+
+      const overriddenIds = new Set(
+        existingOverrides
+          .filter((o) => o.categoryName.toLowerCase() !== "uncategorized")
+          .map((o) => o.transactionId)
+      );
+
+      const uncategorizedTxs = liveTxs.filter((t) => !overriddenIds.has(t.id));
+
+      if (uncategorizedTxs.length > 0) {
+        const nextTx = uncategorizedTxs[0];
+
+        const userCategories = await prisma.budgetCategory.findMany({
+          where: { userId: effectiveUserId },
+          select: { name: true },
+          orderBy: { createdAt: "asc" },
+        }).catch(() => []);
+
+        const activeCatNames = userCategories.length > 0
+          ? userCategories.map((c) => c.name)
+          : ["Dining", "Groceries", "Shopping", "Entertainment", "Travel"];
+
+        const optionsLines = activeCatNames
+          .slice(0, 5)
+          .map((name, i) => `• Reply **${i + 1}** for **${name}**`)
+          .join("\n");
+
+        gridMutation = {
+          highlightRowId: nextTx.id,
+          filter: { category: "Uncategorized" },
+          statusMessage: `Step-by-Step Triage (1 of ${uncategorizedTxs.length}): Reviewing ${nextTx.merchantName} ($${nextTx.amount.toFixed(2)})`,
+        };
+        handlers.onGridMutation?.(gridMutation);
+
+        const dateStr = new Date(nextTx.timestamp).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+        const memoLine = nextTx.memo && nextTx.memo.toLowerCase() !== nextTx.merchantName.toLowerCase()
+          ? `• **Memo / Item:** ${nextTx.memo}\n`
+          : "";
+
+        triagePrompt = `\n\n---\n### 🔍 Step-by-Step Triage (1 of ${uncategorizedTxs.length} remaining)\n\nI've highlighted the next uncategorized item on your AG Grid ledger:\n\n• **Merchant / Payee:** **${nextTx.merchantName}**\n• **Amount:** **$${nextTx.amount.toFixed(2)} USD**\n${memoLine}• **Date:** ${dateStr}\n\n**Choose how to categorize this item:**\n${optionsLines}\n• Or reply with any custom category name!`;
+      }
+    }
+
+    reply = `🧠 **AI Auto-Categorization Complete**\n\n${autoResult.message}${detailList ? `\n\n${detailList}` : ""}${triagePrompt || remainingText}`;
   }
   // 7. Interactive AG Grid Ledger Exploration
   else if (!p.includes("categor") && (p.includes("unsettled") || p.includes("debts") || p.includes("group by") || (p.includes("show") && (p.includes("ledger") || p.includes("grid"))))) {
@@ -1286,13 +1422,13 @@ ${optionsLines}
       reply = `✅ **Learned Merchant Rule Saved!**\n\nI've recorded a persistent rule: any past and future transactions from **${merchantTarget}** will now automatically categorize into **${categoryTarget}**.\n\nYour ledger has been filtered to show your updated **${categoryTarget}** items.`;
     }
   }
-  // 8. Scheduled Item Analysis & Payment Reminders
+  // 8. Scheduled Item Analysis (Bills, Subscriptions, Calendar items)
   else if (
-    p.includes("scheduled") ||
-    p.includes("reminder") ||
-    p.includes("bill") ||
-    p.includes("due") ||
-    p.includes("checkpoint")
+    (p.includes("scheduled") ||
+      (p.includes("bill") && !p.includes("bistro")) ||
+      p.includes("checkpoint") ||
+      (p.includes("due") && !p.includes("debtor") && !p.includes("owed"))) &&
+    !isPaymentReminderIntent
   ) {
     // Extract query title from prompt (e.g. from quotes or title keywords)
     const quoteMatch = prompt.match(/["'“]([^"'”]+)["'”]/);
@@ -1329,7 +1465,7 @@ ${optionsLines}
       }
     }
 
-    if (!targetEvent && userEvents.length > 0) {
+    if (!targetEvent && !queryTitle && userEvents.length > 0) {
       targetEvent = userEvents[0];
     }
 
