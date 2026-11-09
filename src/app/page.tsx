@@ -221,9 +221,13 @@ export default function Home() {
         const userData = await userRes.json();
         if (isSubscribed && userData.user) {
           setCurrentUser(userData.user);
+        } else if (isSubscribed) {
+          setIsLoginModalOpen(true);
         }
       } catch {
-        // ignore
+        if (isSubscribed) {
+          setIsLoginModalOpen(true);
+        }
       }
 
       try {
@@ -618,6 +622,8 @@ export default function Home() {
     void loadTransactions("personal");
     void loadCategories();
     void loadEvents();
+    void loadSplits();
+    setIsLoginModalOpen(false);
 
     setMessages((prev) => [
       ...prev,
@@ -637,15 +643,16 @@ export default function Home() {
     }
     SandboxStore.setCurrentUser(null);
     setCurrentUser(null);
-    setActiveScope("all");
-    void loadTransactions("all");
+    setTransactions([]);
+    setSplits([]);
+    setEvents([]);
+    setIsLoginModalOpen(true);
     setMessages((prev) => [
       ...prev,
       {
         id: `asst_logout_${Date.now()}`,
         role: "assistant",
-        content:
-          "You have signed out of PayPal Sandbox. Click **Log in with PayPal** to reconnect with any Sandbox buyer or merchant account.",
+        content: "🔒 **Signed out.** Please select a Sandbox profile or log in with PayPal to continue.",
       },
     ]);
   };
@@ -887,6 +894,8 @@ export default function Home() {
     const paid = SandboxStore.settleInvoice(invoiceId);
     if (paid) {
       setInvoices(SandboxStore.getInvoices());
+      void loadTransactions(activeScope);
+      void loadSplits();
       setMessages((prev) => [
         ...prev,
         {
@@ -1283,25 +1292,6 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Guest Mode Indicator Banner (Shown when user is not signed in) */}
-      {!currentUser && (
-        <div className="mb-6 p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs shadow-sm">
-          <div className="flex items-center gap-2.5">
-            <span className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
-            <p className="text-zinc-300">
-              <span className="font-semibold text-zinc-100">Viewing Master Developer Sandbox Ledger:</span> Currently displaying transactions belonging to the master sandbox merchant account. Sign in to switch to your individual Sandbox Buyer or Merchant profile.
-            </p>
-          </div>
-          <button
-            onClick={() => setIsLoginModalOpen(true)}
-            className="px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 font-semibold border border-blue-500/30 self-start sm:self-auto cursor-pointer transition-colors shrink-0"
-          >
-            Sign In with Sandbox User
-          </button>
-        </div>
-      )}
-
-
       {/* 4 Functional Everyday Actionable Financial Metrics Row with Interactive Hover Flyouts */}
       <FunctionalMetricsRow
         categories={categories}
@@ -1522,9 +1512,13 @@ export default function Home() {
 
       {/* PayPal Sandbox Login & Session Switch Modal */}
       <PayPalLoginModal
-        isOpen={isLoginModalOpen}
+        isOpen={isLoginModalOpen || !currentUser}
         currentUser={currentUser}
-        onClose={() => setIsLoginModalOpen(false)}
+        onClose={() => {
+          if (currentUser) {
+            setIsLoginModalOpen(false);
+          }
+        }}
         onLogin={handleUserLogin}
         onLogout={handleUserLogout}
       />
