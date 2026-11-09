@@ -685,9 +685,24 @@ export async function executeAgentTool(
       }
 
       // Live write dispatch
+      let senderInfo: { name?: string; email?: string } | undefined = undefined;
+      if (userId) {
+        try {
+          const userRec = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { name: true, email: true },
+          });
+          if (userRec) {
+            senderInfo = { name: userRec.name || "Dave Chen", email: userRec.email };
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       const results = [];
       for (const r of recipients) {
-        const res = await paypalClient.dispatchInvoice(r);
+        const res = await paypalClient.dispatchInvoice(r, senderInfo);
         results.push(res);
         if (userId && r.email) {
           try {
@@ -866,9 +881,24 @@ export async function executeAgentTool(
 
       const invoiceResults = [];
       if (dispatchInvoices) {
+        let senderInfo: { name?: string; email?: string } | undefined = undefined;
+        if (userId) {
+          try {
+            const userRec = await prisma.user.findUnique({
+              where: { id: userId },
+              select: { name: true, email: true },
+            });
+            if (userRec) {
+              senderInfo = { name: userRec.name || "Dave Chen", email: userRec.email };
+            }
+          } catch {
+            // ignore
+          }
+        }
+
         for (const r of recipients) {
           try {
-            const res = await paypalClient.dispatchInvoice(r);
+            const res = await paypalClient.dispatchInvoice(r, senderInfo);
             invoiceResults.push(res);
           } catch (invErr) {
             console.warn("[Dispatch Invoice in Split Error]", invErr);
