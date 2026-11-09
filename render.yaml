@@ -39,3 +39,21 @@ services:
         sync: false
       - key: NEXT_PUBLIC_BRYNTUM_LICENSE_KEY
         sync: false
+
+  # ----------------------------------------------------------------------------
+  # Cron Job: Multi-User Autonomous Reconcile & Bill Alert Sweep (Daily at Midnight)
+  # ----------------------------------------------------------------------------
+  - type: cron
+    name: pocketmate-eod-sweep
+    runtime: node
+    plan: free
+    region: oregon
+    schedule: "0 0 * * *"
+    buildCommand: "npm install --production"
+    startCommand: "curl -fsS -X GET https://pocketmate.onrender.com/api/cron/sweep -H \"Authorization: Bearer $CRON_SECRET\" || true"
+    envVars:
+      - key: CRON_SECRET
+        fromService:
+          type: web
+          name: pocketmate
+          envVarKey: CRON_SECRET

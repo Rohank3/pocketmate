@@ -456,8 +456,31 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
       });
     }
 
+    // F. Upcoming bills due in the next 48 hours
+    const now = new Date();
+    const todayDay = now.getDate();
+    const billsDueSoon = events.filter((e) => {
+      if (e.type !== "outgoing" || e.status === "completed") return false;
+      const day = e.dayOfMonth || (e.date ? parseInt(e.date.slice(8, 10)) : 15);
+      const diff = day - todayDay;
+      return diff >= 0 && diff <= 2;
+    });
+
+    billsDueSoon.forEach((b) => {
+      queue.push({
+        id: `bill_due_${b.id}`,
+        type: "debt_owed",
+        title: `Bill Due in 48h: ${b.title}`,
+        description: `$${b.amount.toFixed(2)} due on ${b.date || `day ${b.dayOfMonth}`}.`,
+        amount: b.amount,
+        severity: "high",
+        prompt: `PocketMate, review upcoming bill "${b.title}" for $${b.amount.toFixed(2)} due soon.`,
+        buttonLabel: "Review Bill",
+      });
+    });
+
     return queue;
-  }, [transactions, categoryBars, personalDebtBills]);
+  }, [transactions, categoryBars, personalDebtBills, events]);
 
   return (
     <div ref={containerRef} className="relative mb-6">

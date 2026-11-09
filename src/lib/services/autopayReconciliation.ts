@@ -9,17 +9,48 @@ interface SubscriptionMatcher {
 }
 
 const KNOWN_SUBSCRIPTION_PROVIDERS: SubscriptionMatcher[] = [
+  // Housing, Rent & Property
+  { pattern: /rent|landlord|realty|property management|apartment|lease/i, name: "Apartment Rent & Housing", category: "Rent" },
+
+  // Electricity & Power Utilities
+  { pattern: /electric|power|edison|national grid|pge|coned|pacific gas|duke energy/i, name: "Electric & Power Utility", category: "Utilities" },
+
+  // Water, Gas & Sanitation
+  { pattern: /water company|gas company|sewer|sanitation|city water/i, name: "Water & Gas Utility", category: "Utilities" },
+
+  // Telecom, Mobile & Broadband Internet
+  { pattern: /broadband|internet|verizon|at&t|comcast|xfinity|t-mobile|spectrum|airalo/i, name: "High-Speed Internet & Mobile", category: "Utilities" },
+
+  // Insurance Premiums
+  { pattern: /insurance|geico|state farm|progressive|allstate|lemonade|metlife/i, name: "Insurance Premium", category: "Services" },
+
+  // Gym, Fitness & Wellness
+  { pattern: /gym|fitness|equinox|planet fitness|anytime fitness|crossfit|yoga/i, name: "Gym & Fitness Membership", category: "Personal" },
+
+  // Software, Cloud & Developer Infrastructure
   { pattern: /aws|amazon web services/i, name: "AWS Cloud Infrastructure", category: "Utilities" },
   { pattern: /cloudflare/i, name: "Cloudflare", category: "Utilities" },
-  { pattern: /netflix/i, name: "Netflix", category: "Entertainment" },
-  { pattern: /spotify/i, name: "Spotify", category: "Entertainment" },
-  { pattern: /digital services|streaming/i, name: "Streaming & Digital Services", category: "Entertainment" },
   { pattern: /openai|chatgpt/i, name: "OpenAI ChatGPT Plus", category: "Services" },
   { pattern: /github/i, name: "GitHub Copilot", category: "Services" },
   { pattern: /google|workspace/i, name: "Google Workspace", category: "Services" },
   { pattern: /adobe/i, name: "Adobe Creative Cloud", category: "Software" },
+  { pattern: /slack/i, name: "Slack Pro", category: "Services" },
+  { pattern: /figma/i, name: "Figma Professional", category: "Software" },
+  { pattern: /dropbox/i, name: "Dropbox Storage", category: "Services" },
+  { pattern: /notion/i, name: "Notion Plus", category: "Services" },
+  { pattern: /zoom/i, name: "Zoom One", category: "Services" },
+
+  // Streaming & Entertainment
+  { pattern: /netflix/i, name: "Netflix", category: "Entertainment" },
+  { pattern: /spotify/i, name: "Spotify", category: "Entertainment" },
+  { pattern: /digital services|streaming/i, name: "Streaming & Digital Services", category: "Entertainment" },
   { pattern: /apple/i, name: "Apple Services", category: "Entertainment" },
   { pattern: /hulu|disney/i, name: "Disney / Hulu", category: "Entertainment" },
+  { pattern: /youtube/i, name: "YouTube Premium", category: "Entertainment" },
+  { pattern: /hbo|max/i, name: "Max (HBO)", category: "Entertainment" },
+
+  // Generic Autopay & Recurring Billing
+  { pattern: /autopay|recurring|membership fee/i, name: "Recurring Subscription", category: "Services" },
 ];
 
 export interface ReconciliationReport {

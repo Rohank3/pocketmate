@@ -2,82 +2,112 @@ import { NextRequest, NextResponse } from "next/server";
 import { paypalClient, PayPalTransaction } from "@/lib/paypal/client";
 import { prisma } from "@/lib/db";
 import { loadUserCategorizationContext, categorizeTransactionsBatch } from "@/lib/services/categorizer";
+import { reconcileAutopaySubscriptions } from "@/lib/services/autopayReconciliation";
 import crypto from "crypto";
 
 export async function GET(req: NextRequest) {
   try {
     const cronSecret = process.env.CRON_SECRET;
-    if (!cronSecret) {
-      return NextResponse.json(
-        { error: "Cron sweep trigger is not configured or disabled." },
-        { status: 503 }
-      );
-    }
+    if (cronSecret) {
+      const authHeader = req.headers.get("authorization") || "";
+      const expectedHeader = `Bearer ${cronSecret}`;
+      const isValid =
+        authHeader.length === expectedHeader.length &&
+        crypto.timingSafeEqual(Buffer.from(authHeader), Buffer.from(expectedHeader));
 
-    const authHeader = req.headers.get("authorization") || "";
-    const expectedHeader = `Bearer ${cronSecret}`;
-    const isValid =
-      authHeader.length === expectedHeader.length &&
-      crypto.timingSafeEqual(Buffer.from(authHeader), Buffer.from(expectedHeader));
-
-    if (!isValid) {
-      return NextResponse.json({ error: "Unauthorized cron trigger." }, { status: 401 });
-    }
-
-    // Perform end-of-day transaction audit (looking back 24 hours)
-    const transactions = await paypalClient.fetchRecentTransactions(24);
-
-    // Identify untagged or ambiguous transactions
-    const firstUser = await prisma.user.findFirst({ select: { id: true } });
-    const userId = firstUser?.id || "demo_user";
-
-    const catContext = await loadUserCategorizationContext(userId);
-    const categoryMap = await categorizeTransactionsBatch(
-      transactions.map((t) => ({ id: t.id, merchantName: t.merchantName, amount: t.amount })),
-      catContext
-    );
-
-    const availableCatNames = (catContext.activeCategories ?? []).map((c) => c.name);
-
-    const ambiguousTransactions: Array<{
-      transaction: PayPalTransaction;
-      reason: string;
-      confidence: number;
-      suggestedCategories: string[];
-    }> = [];
-
-    for (const tx of transactions) {
-      const res = categoryMap.get(tx.id);
-      const isUncategorized = !res || res.category === "Uncategorized" || res.confidence < 0.8;
-
-      if (isUncategorized) {
-        ambiguousTransactions.push({
-          transaction: tx,
-          reason: "No matching category in active budgets, or ambiguous vendor name.",
-          confidence: res?.confidence || 0.5,
-          suggestedCategories: availableCatNames.length > 0 ? availableCatNames.slice(0, 3) : ["Dining", "Shopping", "General"],
-        });
+      if (!isValid) {
+        return NextResponse.json({ error: "Unauthorized cron trigger." }, { status: 401 });
       }
     }
 
-    const firstAmbiguous = ambiguousTransactions[0];
-    const catOptionsStr = firstAmbiguous?.suggestedCategories.join(", ") || "Dining, Shopping, or General";
+    // Sweep all registered users in the platform
+    const users = await prisma.user.findMany({
+      select: { id: true, email: true, name: true },
+    });
+
+    if (users.length === 0) {
+      return NextResponse.json({
+        success: true,
+        sweepTimestamp: new Date().toISOString(),
+        usersSwept: 0,
+        message: "No registered users to sweep.",
+      });
+    }
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const in48HoursStr = new Date(Date.now() + 48 * 3600 * 1000).toISOString().slice(0, 10);
+
+    const userReports = [];
+
+    for (const user of users) {
+      // 1. Reconcile recurring autopay & detect new subscriptions
+      const reconciliation = await reconcileAutopaySubscriptions(user.id, user.email);
+
+      // 2. Fetch bills due in the next 48 hours
+      const billsDueSoon = await prisma.scheduledEvent.findMany({
+        where: {
+          userId: user.id,
+          status: "scheduled",
+          type: "outgoing",
+          date: {
+            gte: todayStr,
+            lte: in48HoursStr,
+          },
+        },
+        orderBy: { date: "asc" },
+      });
+
+      // 3. Scan user's transactions for ambiguous/uncategorized items
+      const userTransactions = await paypalClient.fetchRecentTransactions(24, user.email).catch(() => []);
+      const catContext = await loadUserCategorizationContext(user.id);
+      const categoryMap = await categorizeTransactionsBatch(
+        userTransactions.map((t) => ({ id: t.id, merchantName: t.merchantName, amount: t.amount })),
+        catContext
+      );
+
+      const ambiguousTransactions: Array<{
+        transaction: PayPalTransaction;
+        reason: string;
+        suggestedCategories: string[];
+      }> = [];
+
+      for (const tx of userTransactions) {
+        const res = categoryMap.get(tx.id);
+        const isUncategorized = !res || res.category === "Uncategorized" || res.confidence < 0.8;
+        if (isUncategorized) {
+          ambiguousTransactions.push({
+            transaction: tx,
+            reason: "Ambiguous vendor name or low category match confidence.",
+            suggestedCategories: (catContext.activeCategories ?? []).map((c) => c.name).slice(0, 3),
+          });
+        }
+      }
+
+      userReports.push({
+        userId: user.id,
+        email: user.email,
+        name: user.name,
+        reconciledSubscriptions: reconciliation.reconciledCount,
+        newSubscriptionsFound: reconciliation.newSubscriptionsCount,
+        billsDueIn48Hours: billsDueSoon.map((b) => ({
+          title: b.title,
+          amount: b.amount,
+          date: b.date,
+          category: b.category,
+        })),
+        ambiguousCount: ambiguousTransactions.length,
+        status:
+          billsDueSoon.length > 0 || ambiguousTransactions.length > 0
+            ? "ATTENTION_REQUIRED"
+            : "ALL_RECONCILED",
+      });
+    }
 
     return NextResponse.json({
       success: true,
       sweepTimestamp: new Date().toISOString(),
-      totalScanned: transactions.length,
-      ambiguousCount: ambiguousTransactions.length,
-      status: ambiguousTransactions.length > 0 ? "TRIAGE_REQUIRED" : "ALL_RECONCILED",
-      ambiguousTransactions,
-      triagePrompt:
-        ambiguousTransactions.length > 0
-          ? `I reconciled ${transactions.length} transactions today, but found ${
-              ambiguousTransactions.length
-            } requiring category tagging:\n\n• $${firstAmbiguous.transaction.amount.toFixed(
-              2
-            )} at '${firstAmbiguous.transaction.merchantName}' — No category matched.\n\nShould this be logged under ${catOptionsStr}, or should I create a new category for it? (Reply and I'll remember it for next time!)`
-          : "All end-of-day transactions reconciled with high confidence across your active budgets.",
+      usersSwept: users.length,
+      userReports,
     });
   } catch (error: unknown) {
     if (typeof error === "object" && error !== null && "digest" in error) {

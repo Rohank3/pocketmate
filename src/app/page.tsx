@@ -290,6 +290,38 @@ export default function Home() {
     };
   }, [loadCategories, loadEvents, loadSplits, loadTransactions]);
 
+  // Request & Trigger Web Notifications for bills due in <= 48 hours
+  useEffect(() => {
+    if (typeof window === "undefined" || !("Notification" in window) || events.length === 0) return;
+
+    if (Notification.permission === "default") {
+      void Notification.requestPermission();
+    } else if (Notification.permission === "granted") {
+      const todayDay = new Date().getDate();
+      const urgentBills = events.filter((e) => {
+        if (e.type !== "outgoing" || e.status === "completed") return false;
+        const day = e.dayOfMonth || (e.date ? parseInt(e.date.slice(8, 10)) : 15);
+        const diff = day - todayDay;
+        return diff >= 0 && diff <= 2;
+      });
+
+      if (urgentBills.length > 0) {
+        const notifKey = `pm_bill_alert_${new Date().toISOString().slice(0, 10)}`;
+        if (!sessionStorage.getItem(notifKey)) {
+          sessionStorage.setItem(notifKey, "true");
+          const b = urgentBills[0];
+          try {
+            new Notification("PocketMate: Bill Due Soon", {
+              body: `Reminder: ${b.title} ($${b.amount.toFixed(2)}) is due within 48 hours.`,
+            });
+          } catch {
+            // ignore
+          }
+        }
+      }
+    }
+  }, [events]);
+
   // Load messages for a specific thread (local cache first, then API if authenticated)
   const loadThreadMessages = useCallback(async (threadId: string, user?: UserAccount | null) => {
     // 1. Read from localStorage
