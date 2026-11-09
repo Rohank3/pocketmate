@@ -188,6 +188,12 @@ export default function BudgetScheduler({
     });
   }, [events, filterType, selectedCategory]);
 
+  // Current date string for strict future completion prevention
+  const todayDateStr = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }, []);
+
   // Helper to determine if a scheduled item belongs to a calendar day
   const doesEventMatchDay = (e: ScheduledEvent, cellDateStr: string, cellDay: number) => {
     return isEventActiveOnDate(e, cellDateStr, cellDay, "monthly");
@@ -206,9 +212,17 @@ export default function BudgetScheduler({
 
   const upcomingBills = useMemo(() => {
     return monthEvents
-      .filter((e) => e.type === "outgoing" && e.status !== "completed")
+      .filter((e) => {
+        if (e.type !== "outgoing") return false;
+        const dayOfMonth = e.dayOfMonth || (e.date ? parseInt(e.date.slice(8, 10)) : 15);
+        const isCurrentMonthViewed =
+          new Date().getFullYear() === viewYear && new Date().getMonth() === viewMonth;
+        const isFutureDay = isCurrentMonthViewed && dayOfMonth > new Date().getDate();
+        if (isFutureDay) return true;
+        return e.status !== "completed";
+      })
       .reduce((sum, e) => sum + e.amount, 0);
-  }, [monthEvents]);
+  }, [monthEvents, viewYear, viewMonth]);
 
   const upcomingReceivables = useMemo(() => {
     return monthEvents
@@ -598,7 +612,7 @@ export default function BudgetScheduler({
                     {cell.events.map((evt) => {
                       const isIncoming = evt.type === "incoming";
                       const isOutgoing = evt.type === "outgoing";
-                      const isCompleted = evt.status === "completed";
+                      const isCompleted = evt.status === "completed" && cell.dateStr <= todayDateStr;
 
                       return (
                         <div
@@ -892,7 +906,7 @@ export default function BudgetScheduler({
                     {selectedDayEvents.map((evt) => {
                       const isIncoming = evt.type === "incoming";
                       const isOutgoing = evt.type === "outgoing";
-                      const isCompleted = evt.status === "completed";
+                      const isCompleted = evt.status === "completed" && (selectedDayModal ? selectedDayModal.dateStr <= todayDateStr : true);
                       const lifecycle = extractLifecycle(evt.counterparty, evt.date);
 
                       return (

@@ -60,9 +60,31 @@ export async function reconcileAutopaySubscriptions(
 
     // 3. Auto-Reconcile: Match open scheduled bills with completed PayPal transactions
     for (const evt of existingEvents) {
+      const evtDate = new Date(evt.date);
+      const isFuture = evtDate.getTime() > Date.now();
+
+      // If an event is scheduled for a future date, it cannot be completed yet
+      if (isFuture) {
+        if (evt.status === "completed") {
+          await prisma.scheduledEvent.update({
+            where: { id: evt.id },
+            data: { status: "scheduled" },
+          });
+          evt.status = "scheduled";
+        }
+        continue;
+      }
+
       if (evt.status === "completed" || evt.type !== "outgoing") continue;
 
+      // Only match with completed transactions from the SAME month & year as the event
       const matchingTx = completedTxs.find((tx) => {
+        const txDate = new Date(tx.timestamp);
+        const sameMonthYear =
+          txDate.getFullYear() === evtDate.getFullYear() &&
+          txDate.getMonth() === evtDate.getMonth();
+        if (!sameMonthYear) return false;
+
         // Amount match tolerance within 5 cents
         const amountMatches = Math.abs(tx.amount - evt.amount) < 0.05;
 
@@ -99,6 +121,11 @@ export async function reconcileAutopaySubscriptions(
       where: { userId },
     });
 
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    const todayDay = now.getDate();
+
     // 4. Auto-Detect: Identify recurring subscriptions from transaction history
     for (const tx of completedTxs) {
       const mName = tx.merchantName;
@@ -108,54 +135,88 @@ export async function reconcileAutopaySubscriptions(
 
       if (matchedProvider) {
         // Check if an event already exists for this provider
-        const alreadyScheduled = existingEvents.some((e) => {
+        const existingForProvider = existingEvents.find((e) => {
           const cp = (e.counterparty || "").toLowerCase();
           const title = e.title.toLowerCase();
           const target = matchedProvider.name.toLowerCase();
           return cp.includes(target) || title.includes(target) || matchedProvider.pattern.test(title);
         });
 
-        if (!alreadyScheduled) {
-          const txDate = new Date(tx.timestamp);
-          const dayOfMonth = txDate.getDate() || 15;
-          const yr = txDate.getFullYear() || new Date().getFullYear();
-          const mo = String(txDate.getMonth() + 1).padStart(2, "0");
-          const dateStr = `${yr}-${mo}-${String(dayOfMonth).padStart(2, "0")}`;
+        const txDate = new Date(tx.timestamp);
+        const dayOfMonth = txDate.getDate() || 15;
+        const eventDateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(dayOfMonth).padStart(2, "0")}`;
+        const isFutureInCurrentMonth = dayOfMonth > todayDay;
+
+        if (!existingForProvider) {
           const startDateStr = txDate.toISOString().slice(0, 10);
           const formattedCp = formatCounterpartyWithLifecycle(matchedProvider.name, startDateStr);
+
+          // If day of month is in the future for current month, initial status is "scheduled", NOT "completed"!
+          const initialStatus = isFutureInCurrentMonth ? "scheduled" : "completed";
 
           await prisma.scheduledEvent.create({
             data: {
               userId,
               title: `${matchedProvider.name}`,
               amount: tx.amount,
-              date: dateStr,
+              date: eventDateStr,
               dayOfMonth,
               type: "outgoing",
               category: matchedProvider.category,
               counterparty: formattedCp,
-              status: "completed", // Settled for this billing cycle
+              status: initialStatus,
             },
           });
 
           report.newSubscriptionsCount++;
           report.reconciledEventTitles.push(matchedProvider.name);
 
-          // Update in-memory tracker to prevent duplicate creations in same loop
+          // Update in-memory tracker
           existingEvents.push({
             id: `temp_${Date.now()}`,
             userId,
             title: matchedProvider.name,
             amount: tx.amount,
-            date: dateStr,
+            date: eventDateStr,
             dayOfMonth,
             type: "outgoing",
             category: matchedProvider.category,
-            counterparty: matchedProvider.name,
-            status: "completed",
+            counterparty: formattedCp,
+            status: initialStatus,
             createdAt: new Date(),
             updatedAt: new Date(),
           });
+        } else {
+          // If existing event is from a previous month or has a future day in the current month, update its cycle
+          const evtDate = new Date(existingForProvider.date);
+          const isPastMonth =
+            evtDate.getFullYear() < currentYear ||
+            (evtDate.getFullYear() === currentYear && evtDate.getMonth() < currentMonth);
+
+          if (isPastMonth || isFutureInCurrentMonth) {
+            // Check if there is an actual completed transaction in current month
+            const hasTxInCurrentMonth = completedTxs.some((t) => {
+              const d = new Date(t.timestamp);
+              return (
+                d.getFullYear() === currentYear &&
+                d.getMonth() === currentMonth &&
+                Math.abs(t.amount - existingForProvider.amount) < 0.05 &&
+                matchedProvider.pattern.test(t.merchantName)
+              );
+            });
+
+            const updatedStatus = isFutureInCurrentMonth && !hasTxInCurrentMonth ? "scheduled" : "completed";
+            await prisma.scheduledEvent.update({
+              where: { id: existingForProvider.id },
+              data: {
+                date: eventDateStr,
+                dayOfMonth,
+                status: updatedStatus,
+              },
+            });
+            existingForProvider.date = eventDateStr;
+            existingForProvider.status = updatedStatus;
+          }
         }
       }
     }
