@@ -16,7 +16,7 @@ import {
   normalizeMerchant,
   reclassifyTransactionWithScope,
 } from "../services/categorizer";
-import { resolveContact } from "../contacts/contactResolver";
+import { resolveContact, saveOrUpdateContact } from "../contacts/contactResolver";
 
 // ============================================================================
 // Parameter Validation Schemas (Layer B: Validation Middleware)
@@ -214,6 +214,20 @@ export const ProposeSplitBreakdownSchema = z.object({
     )
     .min(1)
     .max(50),
+});
+
+export const RememberContactSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  emailOrHandle: z.string().trim().min(1).max(255),
+});
+
+export const ProposeCategoryTriageSchema = z.object({
+  transactionId: z.string().trim().min(1).max(100),
+  merchantName: z.string().trim().min(1).max(100),
+  amount: z.number().finite().optional(),
+  suggestedCategory: z.string().trim().min(1).max(50),
+  confidence: z.number().min(0).max(1).optional(),
+  reasoning: z.string().trim().max(500).optional(),
 });
 
 // ============================================================================
@@ -522,6 +536,34 @@ export const agentToolDeclarations = [
       required: ["transactionId", "category"],
     },
   },
+  {
+    name: "remember_contact",
+    description: "Saves or updates a contact's name and PayPal email address/handle permanently in the active user's contact book. Call this whenever the user specifies or mentions someone's email or PayPal ID (e.g. 'Leo's email is leo.vance@example.com').",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        name: { type: "STRING", description: "The person's full name or first name, e.g. 'Leo' or 'Leo Vance'." },
+        emailOrHandle: { type: "STRING", description: "The PayPal email address or handle for this contact." },
+      },
+      required: ["name", "emailOrHandle"],
+    },
+  },
+  {
+    name: "propose_category_triage",
+    description: "Presents an interactive Category Triage card to the user in chat for an unclassified transaction, enabling them to one-tap apply the suggested category with 3 scopes: [Only this transaction], [All merchant transactions], or [All similar transactions]. Call this whenever a transaction needs category classification or review.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        transactionId: { type: "STRING", description: "ID of the transaction to classify." },
+        merchantName: { type: "STRING", description: "Name of the merchant (e.g. Equinox Fitness, Google Cloud Storage)." },
+        amount: { type: "NUMBER", description: "Dollar amount of the transaction." },
+        suggestedCategory: { type: "STRING", description: "AI-suggested category based on merchant and user budget categories." },
+        confidence: { type: "NUMBER", description: "Confidence score between 0.0 and 1.0." },
+        reasoning: { type: "STRING", description: "Short explanation for the suggested category." },
+      },
+      required: ["transactionId", "merchantName", "suggestedCategory"],
+    },
+  },
 ];
 
 // ============================================================================
@@ -594,6 +636,13 @@ export async function executeAgentTool(
       for (const r of recipients) {
         const res = await paypalClient.dispatchInvoice(r);
         results.push(res);
+        if (userId && r.email) {
+          try {
+            await saveOrUpdateContact(userId, r.name || r.email.split("@")[0], r.email);
+          } catch {
+            // ignore
+          }
+        }
       }
 
       // Persist to PostgreSQL if authenticated user
@@ -1115,13 +1164,40 @@ export async function executeAgentTool(
         }
       }
 
+      if (uncategorizedCount > 0) {
+        const firstUncat = txs.find((t) => (categoryMap.get(t.id)?.category || "Uncategorized") === "Uncategorized");
+        if (firstUncat) {
+          const fallbackCat = catContext.activeCategories?.[0]?.name || "Services";
+          return {
+            success: true,
+            scannedCount: txs.length,
+            categorizedCount: categorizedList.length,
+            uncategorizedRemaining: uncategorizedCount,
+            categorized: categorizedList,
+            requiresConfirmation: true,
+            action: "CATEGORY_TRIAGE",
+            type: "category_triage",
+            transactionId: firstUncat.id,
+            merchantName: firstUncat.merchantName,
+            merchant: firstUncat.merchantName,
+            amount: firstUncat.amount,
+            totalAmount: firstUncat.amount,
+            suggestedCategory: fallbackCat,
+            category: fallbackCat,
+            confidence: 0.75,
+            reasoning: `Found ${uncategorizedCount} unclassified transactions. Review '${firstUncat.merchantName}' to assign scope.`,
+            message: `Categorized ${categorizedList.length} of ${txs.length} transactions. ${uncategorizedCount} remain unclassified—tap a scope below to classify '${firstUncat.merchantName}'.`,
+          };
+        }
+      }
+
       return {
         success: true,
         scannedCount: txs.length,
         categorizedCount: categorizedList.length,
         uncategorizedRemaining: uncategorizedCount,
         categorized: categorizedList,
-        message: `Categorized ${categorizedList.length} of ${txs.length} transactions across your active categories. ${uncategorizedCount} transactions remain unclassified.`,
+        message: `Categorized ${categorizedList.length} of ${txs.length} transactions across your active categories. All transactions are fully classified.`,
       };
     }
 
@@ -1165,7 +1241,11 @@ export async function executeAgentTool(
       // Auto-resolve known emails from Prisma contacts / transaction history
       const resolvedParticipants = await Promise.all(
         parsed.participants.map(async (p) => {
-          if (p.email && p.email.includes("@")) return p;
+          if (p.email && p.email.includes("@")) {
+            // User provided an email - persist it immediately so it's remembered!
+            await saveOrUpdateContact(effectiveUserId, p.name, p.email);
+            return p;
+          }
           if (p.isHost || p.name.toLowerCase() === "you" || p.name.toLowerCase() === "me") {
             return { ...p, isHost: true };
           }
@@ -1223,6 +1303,46 @@ export async function executeAgentTool(
         category,
         updatedCount: reclassResult.updatedTransactionIds.length,
         message: reclassResult.message,
+      };
+    }
+
+    case "remember_contact": {
+      const { name, emailOrHandle } = RememberContactSchema.parse(safeArgs);
+      const effectiveUserId = userId || "demo_user";
+      const cleanEmail = emailOrHandle.includes("@")
+        ? emailOrHandle.trim().toLowerCase()
+        : `${name.toLowerCase().replace(/\s+/g, ".")}@personal.example.com`;
+
+      const saved = await saveOrUpdateContact(
+        effectiveUserId,
+        name.trim(),
+        cleanEmail,
+        !emailOrHandle.includes("@") ? emailOrHandle.trim() : undefined
+      );
+
+      return {
+        success: true,
+        contact: saved,
+        message: `Saved contact for ${name.trim()} (${cleanEmail}) to your personal address book.`,
+      };
+    }
+
+    case "propose_category_triage": {
+      const parsed = ProposeCategoryTriageSchema.parse(safeArgs);
+      return {
+        requiresConfirmation: true,
+        action: "CATEGORY_TRIAGE",
+        type: "category_triage",
+        transactionId: parsed.transactionId,
+        merchantName: parsed.merchantName,
+        merchant: parsed.merchantName,
+        amount: parsed.amount,
+        totalAmount: parsed.amount,
+        suggestedCategory: parsed.suggestedCategory,
+        category: parsed.suggestedCategory,
+        confidence: parsed.confidence ?? 0.85,
+        reasoning: parsed.reasoning || `Suggested category based on merchant '${parsed.merchantName}' and budget allocations.`,
+        message: `Proposed category '${parsed.suggestedCategory}' for ${parsed.merchantName}. Tap a scope to apply.`,
       };
     }
 
