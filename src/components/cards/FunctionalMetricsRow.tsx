@@ -14,6 +14,7 @@ import {
   ArrowRight,
   Sparkles,
   CreditCard,
+  Tag,
 } from "lucide-react";
 import type { CategoryItem } from "@/components/categories/CategoryControlBar";
 import type { TransactionRow } from "@/components/grid/TransactionGrid";
@@ -29,6 +30,7 @@ export interface FunctionalMetricsRowProps {
   onNavigateTab: (tab: "transactions" | "insights" | "upcoming") => void;
   onFilterLedger: (debtorName?: string, categoryName?: string) => void;
   onSendChatMessage: (prompt: string) => void;
+  onOpenReviewModal?: () => void;
 }
 
 interface DebtorSummary {
@@ -58,6 +60,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
   onNavigateTab,
   onFilterLedger,
   onSendChatMessage,
+  onOpenReviewModal,
 }) => {
   const [activeFlyout, setActiveFlyout] = useState<number | null>(null);
   const [pinnedFlyout, setPinnedFlyout] = useState<number | null>(null);
@@ -175,14 +178,16 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
   // 2. CARD 2: FRIENDS OWE YOU
   // ==========================================
   const { debtorList, totalFriendsOwe, totalPendingCount } = useMemo(() => {
-    const debtorPendingTxs = transactions.filter(
-      (t) =>
+    const debtorPendingTxs = transactions.filter((t) => {
+      if (!t.debtor_name) return false;
+      const d = t.debtor_name.toLowerCase().trim();
+      // Exclude self expenses and non-split items
+      if (d === "—" || d === "self" || d.includes("self") || d === "unassigned") return false;
+      return (
         (t.status === "pending" || t.status === "disputed" || t.status === "unresolved") &&
-        t.debtor_name &&
-        t.debtor_name !== "Self" &&
-        t.debtor_name !== "—" &&
-        t.debtor_name !== "Unassigned"
-    );
+        (t.splitAllocation === "split" || (!d.includes("self") && d !== "shared split"))
+      );
+    });
 
     const map = new Map<string, DebtorSummary>();
     debtorPendingTxs.forEach((t) => {
@@ -232,10 +237,16 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
+    const todayDay = now.getDate();
 
     // Outgoing events for the current month
     const outgoingEvents = events.filter((e) => {
-      if (e.type !== "outgoing" || e.status === "completed") return false;
+      if (e.type !== "outgoing") return false;
+      const dayOfMonth = e.dayOfMonth || (e.date ? parseInt(e.date.slice(8, 10)) : 15);
+      const isFutureDay = dayOfMonth > todayDay;
+      // Future dates this month are strictly upcoming bills
+      if (isFutureDay) return true;
+      if (e.status === "completed") return false;
       if (e.date) {
         const d = new Date(e.date);
         return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
@@ -968,15 +979,30 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                         )}
                       </div>
 
-                      {/* Interactive Button to take action */}
-                      <div className="flex justify-end pt-1">
+                      {/* Interactive Button(s) to take action */}
+                      <div className="flex items-center justify-end gap-2 pt-1">
+                        {item.type === "uncategorized" && onOpenReviewModal && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onOpenReviewModal();
+                              setActiveFlyout(null);
+                              setPinnedFlyout(null);
+                            }}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded bg-zinc-800 hover:bg-blue-600 text-zinc-300 hover:text-white text-xs font-medium transition-all shadow-sm cursor-pointer"
+                            title="Open interactive categorization popup"
+                          >
+                            <Tag className="w-3 h-3 text-blue-400" />
+                            <span>Review in Popup ↗</span>
+                          </button>
+                        )}
                         <button
                           onClick={() => {
                             onSendChatMessage(item.prompt);
                             setActiveFlyout(null);
                             setPinnedFlyout(null);
                           }}
-                          className="flex items-center gap-1 px-2.5 py-1 rounded bg-zinc-800 hover:bg-rose-600 text-zinc-200 hover:text-white text-xs font-medium transition-all shadow-sm"
+                          className="flex items-center gap-1 px-2.5 py-1 rounded bg-zinc-800 hover:bg-rose-600 text-zinc-200 hover:text-white text-xs font-medium transition-all shadow-sm cursor-pointer"
                         >
                           <Sparkles className="w-3 h-3 text-rose-400 group-hover:text-white" />
                           <span>{item.buttonLabel}</span>

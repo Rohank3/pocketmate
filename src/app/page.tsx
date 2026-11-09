@@ -10,6 +10,7 @@ import { GridMutationState } from "@/types/agent";
 import { CategoryControlBar, CategoryItem } from "@/components/categories/CategoryControlBar";
 import { PayPalLoginModal } from "@/components/auth/PayPalLoginModal";
 import { InvoiceActionModal } from "@/components/cards/InvoiceActionModal";
+import { UncategorizedReviewModal } from "@/components/modals/UncategorizedReviewModal";
 import { FunctionalMetricsRow } from "@/components/cards/FunctionalMetricsRow";
 import { SandboxStore } from "@/lib/sandbox/sandboxStore";
 import { UserAccount, InvoiceRecord } from "@/types/sandboxUser";
@@ -88,6 +89,7 @@ export default function Home() {
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
   const [activeScope, setActiveScope] = useState<"personal" | "all">("personal");
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [activeInvoiceForAction, setActiveInvoiceForAction] = useState<InvoiceRecord | null>(null);
   const [, setInvoices] = useState<InvoiceRecord[]>([]);
 
@@ -1264,6 +1266,7 @@ export default function Home() {
         onSendChatMessage={(prompt) => {
           void handleSendMessage(prompt);
         }}
+        onOpenReviewModal={() => setIsReviewModalOpen(true)}
       />
 
       {/* Main Split-View Workspace */}
@@ -1424,6 +1427,7 @@ export default function Home() {
                       selectedCategory={selectedCategory}
                       categories={categories}
                       onReclassifyTransaction={handleReclassifyTransaction}
+                      onOpenReviewModal={() => setIsReviewModalOpen(true)}
                     />
                   )}
                 </div>
@@ -1468,6 +1472,15 @@ export default function Home() {
         onPay={handlePayInvoice}
         onDecline={handleDeclineInvoice}
         onRequestAdjustment={handleAdjustmentRequest}
+      />
+
+      {/* Interactive Uncategorized Transactions Review & Triage Modal */}
+      <UncategorizedReviewModal
+        isOpen={isReviewModalOpen}
+        onClose={() => setIsReviewModalOpen(false)}
+        transactions={transactions}
+        categories={categories}
+        onAssignCategory={handleReclassifyTransaction}
       />
     </main>
   );

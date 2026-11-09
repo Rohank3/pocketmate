@@ -68,6 +68,7 @@ interface TransactionGridProps {
     targetCategory: string,
     scope: ReclassifyScope
   ) => Promise<{ success: boolean; message: string; updatedTransactionIds: string[] }>;
+  onOpenReviewModal?: () => void;
 }
 
 export const TransactionGrid: React.FC<TransactionGridProps> = ({
@@ -77,6 +78,7 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
   categories = [],
   onSelectRow,
   onReclassifyTransaction,
+  onOpenReviewModal,
 }) => {
   // Reclassification modal state
   const [activeTxForEdit, setActiveTxForEdit] = useState<TransactionRow | null>(null);
@@ -344,12 +346,40 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
           )}
         </div>
 
-        {gridMutation?.statusMessage && (
-          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/10 border border-blue-500/20 text-blue-300 rounded-md text-xs">
-            <Sparkles className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
-            <span>{gridMutation.statusMessage}</span>
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {onOpenReviewModal &&
+            rowData.some(
+              (r) => r.category?.toLowerCase() === "uncategorized" || !r.category || r.category === "—"
+            ) && (
+              <button
+                type="button"
+                onClick={onOpenReviewModal}
+                className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 rounded-md text-xs font-semibold transition-all cursor-pointer"
+                title="Open interactive review and triage popup"
+              >
+                <Tag className="w-3.5 h-3.5 text-amber-400" />
+                <span>
+                  Triage (
+                  {
+                    rowData.filter(
+                      (r) =>
+                        r.category?.toLowerCase() === "uncategorized" ||
+                        !r.category ||
+                        r.category === "—"
+                    ).length
+                  }
+                  ) ↗
+                </span>
+              </button>
+            )}
+
+          {gridMutation?.statusMessage && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/10 border border-blue-500/20 text-blue-300 rounded-md text-xs">
+              <Sparkles className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
+              <span>{gridMutation.statusMessage}</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Grid container with modern AG Grid Theming API */}
