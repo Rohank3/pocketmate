@@ -20,6 +20,23 @@ const ActionToConfirmSchema = z.discriminatedUnion("action", [
       .max(50),
   }),
   z.object({
+    action: z.literal("PROPOSE_SPLIT_BREAKDOWN"),
+    recipients: z
+      .array(
+        z.object({
+          email: z.string().trim().email().max(255),
+          name: z.string().trim().max(100).optional(),
+          amount: z.number().finite().positive().max(50000),
+          description: z.string().trim().min(1).max(255),
+        })
+      )
+      .min(1)
+      .max(50),
+    participants: z.array(z.record(z.string(), z.unknown())).optional(),
+    totalAmount: z.number().optional(),
+    merchant: z.string().optional(),
+  }),
+  z.object({
     action: z.literal("DISPATCH_PAYOUT"),
     recipientEmail: z.string().trim().email().max(255).optional(),
     recipients: z
@@ -87,7 +104,7 @@ export async function POST(req: NextRequest) {
     const userId = (authenticatedUser ? authenticatedUser.id : await getUserIdFromRequest(req)) ?? undefined;
 
     // Handle single-tap confirmation of an action card (Layer D)
-    if (actionToConfirm && actionToConfirm.action === "DISPATCH_INVOICES") {
+    if (actionToConfirm && (actionToConfirm.action === "DISPATCH_INVOICES" || actionToConfirm.action === "PROPOSE_SPLIT_BREAKDOWN")) {
       if (!authenticatedUser && process.env.PAYPAL_ENVIRONMENT === "live") {
         return NextResponse.json(
           { error: "Unauthorized: Active authenticated session required to dispatch live invoices." },
