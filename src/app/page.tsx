@@ -98,11 +98,14 @@ export default function Home() {
   const [splits, setSplits] = useState<Array<{
     id: string;
     description: string;
+    itemsJson?: unknown;
     items?: Array<{
+      id?: string;
       participantName: string;
       participantEmail?: string;
       amount: number;
       status: string;
+      paypalInvoiceId?: string;
     }>;
   }>>([]);
 
@@ -746,10 +749,66 @@ export default function Home() {
       const data = await res.json();
       if (data.success && Array.isArray(data.updatedTransactionIds)) {
         const idSet = new Set(data.updatedTransactionIds);
-        setTransactions((prev) =>
-          prev.map((t) => (idSet.has(t.id) ? { ...t, category: targetCategory } : t))
+        const updatedTxs = transactions.map((t) =>
+          idSet.has(t.id) ? { ...t, category: targetCategory } : t
         );
+        setTransactions(updatedTxs);
         void loadCategories();
+
+        // Check if there are remaining uncategorized items across the ledger
+        const remainingUncat = updatedTxs.filter(
+          (t) =>
+            t.category?.toLowerCase() === "uncategorized" ||
+            !t.category ||
+            t.category === "—"
+        );
+
+        if (remainingUncat.length > 0) {
+          const nextTx = remainingUncat[0];
+          const text = `${nextTx.merchant} ${nextTx.memo || ""}`.toLowerCase();
+          let suggestedCat = "Dining";
+          if (text.includes("hotel") || text.includes("vista") || text.includes("uber") || text.includes("flight") || text.includes("travel")) {
+            suggestedCat = "Travel";
+          } else if (text.includes("wholefoods") || text.includes("trader") || text.includes("market") || text.includes("grocer")) {
+            suggestedCat = "Groceries";
+          } else if (text.includes("target") || text.includes("amazon") || text.includes("store") || text.includes("shop")) {
+            suggestedCat = "Shopping";
+          } else if (text.includes("netflix") || text.includes("spotify") || text.includes("bowlero") || text.includes("amc") || text.includes("cinema")) {
+            suggestedCat = "Entertainment";
+          } else if (text.includes("aws") || text.includes("cloud") || text.includes("github") || text.includes("openai")) {
+            suggestedCat = "Utilities";
+          } else if (categories.length > 0) {
+            suggestedCat = categories[0].name;
+          }
+
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `asst_triage_next_${Date.now()}`,
+              role: "assistant",
+              content: `Reclassified **${merchantName}** as *${targetCategory}*. **${remainingUncat.length} unclassified transaction(s) remaining** in your ledger. Next up: **${nextTx.merchant}** ($${nextTx.amount.toFixed(2)}).`,
+              actionCard: {
+                action: "CATEGORY_TRIAGE",
+                type: "category_triage",
+                transactionId: nextTx.id,
+                merchantName: nextTx.merchant,
+                amount: nextTx.amount,
+                suggestedCategory: suggestedCat,
+                confidence: 0.85,
+                reasoning: `Found ${remainingUncat.length} unclassified transactions. Review '${nextTx.merchant}' to assign scope.`,
+              },
+            },
+          ]);
+        } else {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `asst_triage_complete_${Date.now()}`,
+              role: "assistant",
+              content: `🎉 **All transactions classified!** Every item in your ledger has been categorized and your budget spending caps are up to date.`,
+            },
+          ]);
+        }
       }
       return data;
     } catch (err) {

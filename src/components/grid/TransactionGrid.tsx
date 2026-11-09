@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useRef, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
 import {
   ColDef,
@@ -52,6 +52,7 @@ export interface TransactionRow {
   amount: number;
   status: "settled" | "pending" | "disputed" | "unresolved";
   invoiceStatus?: string;
+  direction?: "incoming" | "outgoing";
 }
 
 export type ReclassifyScope = "single" | "merchant" | "similar";
@@ -82,6 +83,8 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
   onOpenReviewModal,
   onClearMutation,
 }) => {
+  const gridRef = useRef<AgGridReact<TransactionRow>>(null);
+
   // Filter dismissal state to prevent user from being trapped in triage/search filter
   const [isFilterDismissed, setIsFilterDismissed] = useState<boolean>(false);
   const [lastMutationState, setLastMutationState] = useState<GridMutationState | null | undefined>(gridMutation);
@@ -126,6 +129,11 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
         selectedNewCategory,
         selectedScope
       );
+
+      // Force AG Grid to refresh cells immediately with updated rowData
+      if (gridRef.current?.api) {
+        gridRef.current.api.refreshCells({ force: true });
+      }
 
       setActionFeedback(res.message || "Category updated successfully!");
       setTimeout(() => {
@@ -260,11 +268,20 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
       width: 110,
       filter: "agNumberColumnFilter",
       sortable: true,
-      cellRenderer: (params: ICellRendererParams<TransactionRow, number>) => (
-        <span className="font-semibold text-zinc-100">
-          ${Number(params.value ?? 0).toFixed(2)}
-        </span>
-      ),
+      cellRenderer: (params: ICellRendererParams<TransactionRow, number>) => {
+        const isIncome =
+          params.data?.direction === "incoming" ||
+          (params.data?.memo && params.data.memo.toLowerCase().includes("settlement"));
+        return (
+          <span
+            className={`font-semibold font-mono ${
+              isIncome ? "text-emerald-400 font-bold" : "text-zinc-100"
+            }`}
+          >
+            {isIncome ? "+" : ""}${Number(params.value ?? 0).toFixed(2)}
+          </span>
+        );
+      },
     },
     {
       field: "status",
@@ -340,6 +357,12 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
     });
   }, [rowData, gridMutation, selectedCategory, isFilterDismissed]);
 
+  useEffect(() => {
+    if (gridRef.current?.api) {
+      gridRef.current.api.refreshCells({ force: true });
+    }
+  }, [filteredData]);
+
   return (
     <div className="flex flex-col h-full bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-2xl relative">
       {/* Top Banner / Reactive Agent Feedback */}
@@ -410,6 +433,7 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
       {/* Grid container with modern AG Grid Theming API */}
       <div className="flex-1 w-full min-h-[380px]">
         <AgGridReact
+          ref={gridRef}
           theme={darkTheme}
           rowData={filteredData}
           columnDefs={columnDefs}

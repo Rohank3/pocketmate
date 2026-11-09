@@ -15,6 +15,7 @@ import {
   Sparkles,
   CreditCard,
   Tag,
+  RotateCcw,
 } from "lucide-react";
 import type { CategoryItem } from "@/components/categories/CategoryControlBar";
 import type { TransactionRow } from "@/components/grid/TransactionGrid";
@@ -29,11 +30,14 @@ export interface FunctionalMetricsRowProps {
   splits?: Array<{
     id: string;
     description: string;
+    itemsJson?: unknown;
     items?: Array<{
+      id?: string;
       participantName: string;
       participantEmail?: string;
       amount: number;
       status: string;
+      paypalInvoiceId?: string;
     }>;
   }>;
   activeScope: "personal" | "all";
@@ -48,6 +52,21 @@ interface DebtorSummary {
   totalOwed: number;
   count: number;
   sampleMerchant: string;
+}
+
+export interface SettledSplitSummary {
+  id: string;
+  splitRecordId: string;
+  name: string;
+  email: string;
+  amountPaid: number;
+  originalAmount: number;
+  difference: number;
+  isAdjusted: boolean;
+  status: "PAID" | "CANCELLED";
+  reason?: string;
+  sampleMerchant: string;
+  invoiceId?: string;
 }
 
 interface ActionQueueItem {
@@ -188,14 +207,19 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
   // ==========================================
   // 2. CARD 2: FRIENDS OWE YOU (Backed by SplitRecord / SplitItem & Transaction Splits)
   // ==========================================
-  const { debtorList, totalFriendsOwe, totalPendingCount } = useMemo(() => {
+  const { debtorList, settledList, totalFriendsOwe, totalPendingCount } = useMemo(() => {
     const currentName = currentUser?.name?.toLowerCase().trim() || "";
     const currentEmail = currentUser?.email?.toLowerCase().trim() || "";
 
     const map = new Map<string, DebtorSummary>();
+    const settledList: SettledSplitSummary[] = [];
 
     // 1. Incorporate SplitRecord & SplitItem entities
     splits.forEach((split) => {
+      const rawItems = Array.isArray(split.itemsJson)
+        ? (split.itemsJson as Array<Record<string, unknown>>)
+        : [];
+
       split.items?.forEach((item) => {
         const pNameLower = item.participantName.toLowerCase().trim();
         const pEmailLower = (item.participantEmail || "").toLowerCase().trim();
@@ -204,10 +228,49 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
           pNameLower === "—" ||
           pNameLower.includes("self") ||
           (currentName && pNameLower === currentName) ||
-          (currentEmail && pEmailLower === currentEmail) ||
-          item.status === "PAID" ||
-          item.status === "CANCELLED"
+          (currentEmail && pEmailLower === currentEmail)
         ) {
+          return;
+        }
+
+        // If item is PAID or CANCELLED, collect it into settledList
+        if (item.status === "PAID" || item.status === "CANCELLED") {
+          const meta = rawItems.find(
+            (m) =>
+              (m.participantEmail &&
+                pEmailLower &&
+                (m.participantEmail as string).toLowerCase().trim() === pEmailLower) ||
+              (m.participantName &&
+                (m.participantName as string).toLowerCase().trim() === pNameLower)
+          );
+
+          const amountPaid = typeof meta?.amountPaid === "number" ? meta.amountPaid : item.amount;
+          const originalAmount =
+            typeof meta?.originalAmount === "number" ? meta.originalAmount : item.amount;
+          const difference =
+            typeof meta?.difference === "number"
+              ? meta.difference
+              : Math.max(0, originalAmount - amountPaid);
+          const isAdjusted = meta?.isAdjusted === true || difference > 0.01;
+          const reason =
+            typeof meta?.settledReason === "string" ? meta.settledReason : undefined;
+
+          settledList.push({
+            id: item.id || `${split.id}-${item.participantName}`,
+            splitRecordId: split.id,
+            name: item.participantName,
+            email: item.participantEmail || "",
+            amountPaid,
+            originalAmount,
+            difference,
+            isAdjusted,
+            status: item.status as "PAID" | "CANCELLED",
+            reason,
+            sampleMerchant: split.description || "Shared Split Expense",
+            invoiceId:
+              item.paypalInvoiceId ||
+              (typeof meta?.invoiceId === "string" ? meta.invoiceId : undefined),
+          });
           return;
         }
 
@@ -259,7 +322,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
     const sum = list.reduce((acc, d) => acc + d.totalOwed, 0);
     const count = list.reduce((acc, d) => acc + d.count, 0);
 
-    return { debtorList: list, totalFriendsOwe: sum, totalPendingCount: count };
+    return { debtorList: list, settledList, totalFriendsOwe: sum, totalPendingCount: count };
   }, [transactions, splits, currentUser]);
 
   // ==========================================
@@ -660,7 +723,9 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
               </p>
               <p className="text-[11px] text-zinc-400 mt-0.5 truncate">
                 {debtorList.length > 0
-                  ? `${debtorList.length} friend${debtorList.length > 1 ? "s" : ""} (${totalPendingCount} pending splits)`
+                  ? `${debtorList.length} friend${debtorList.length > 1 ? "s" : ""} (${totalPendingCount} pending split${totalPendingCount > 1 ? "s" : ""})`
+                  : settledList.length > 0
+                  ? `$0.00 Owed · ${settledList.length} recently settled`
                   : "All balances settled"}
               </p>
             </div>
@@ -691,8 +756,8 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
               </div>
 
               {/* Debtor List */}
-              <div className="mt-3 flex flex-col gap-2.5 max-h-60 overflow-y-auto pr-1">
-                {debtorList.length === 0 ? (
+              <div className="mt-3 flex flex-col gap-2.5 max-h-72 overflow-y-auto pr-1">
+                {debtorList.length === 0 && settledList.length === 0 ? (
                   <div className="py-6 text-center">
                     <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-2 opacity-80" />
                     <p className="text-xs font-semibold text-zinc-200">All Balances Settled!</p>
@@ -701,59 +766,177 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                     </p>
                   </div>
                 ) : (
-                  debtorList.map((debtor) => (
-                    <div
-                      key={debtor.name}
-                      className="p-2.5 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition-colors flex items-center justify-between gap-3"
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-7 h-7 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center font-bold text-xs shrink-0">
-                          {debtor.name.charAt(0).toUpperCase()}
+                  <>
+                    {debtorList.map((debtor) => (
+                      <div
+                        key={debtor.name}
+                        className="p-2.5 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition-colors flex items-center justify-between gap-3"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-7 h-7 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center font-bold text-xs shrink-0">
+                            {debtor.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-zinc-200 truncate">{debtor.name}</p>
+                            <p className="text-[10px] text-zinc-400 truncate">
+                              {debtor.count} pending item{debtor.count > 1 ? "s" : ""} · {debtor.sampleMerchant}
+                            </p>
+                          </div>
                         </div>
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold text-zinc-200 truncate">{debtor.name}</p>
-                          <p className="text-[10px] text-zinc-400 truncate">
-                            {debtor.count} pending item{debtor.count > 1 ? "s" : ""} · {debtor.sampleMerchant}
-                          </p>
-                        </div>
-                      </div>
 
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-xs font-bold font-mono text-amber-400">
-                          ${debtor.totalOwed.toFixed(2)}
-                        </span>
-                        <div className="flex items-center gap-1">
-                          {/* 1-Click Filter Ledger */}
-                          <button
-                            title="Filter ledger for this debtor"
-                            onClick={() => {
-                              onFilterLedger(debtor.name);
-                              onNavigateTab("transactions");
-                              setActiveFlyout(null);
-                              setPinnedFlyout(null);
-                            }}
-                            className="p-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors"
-                          >
-                            <Filter className="w-3 h-3" />
-                          </button>
-                          {/* 1-Click Send Reminder via PocketMate */}
-                          <button
-                            title="Ask PocketMate to draft payment reminder"
-                            onClick={() => {
-                              onSendChatMessage(
-                                `PocketMate, please draft and send a friendly payment reminder to ${debtor.name} for $${debtor.totalOwed.toFixed(2)} owed on split expenses.`
-                              );
-                              setActiveFlyout(null);
-                              setPinnedFlyout(null);
-                            }}
-                            className="p-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 transition-colors"
-                          >
-                            <Send className="w-3 h-3" />
-                          </button>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-xs font-bold font-mono text-amber-400">
+                            ${debtor.totalOwed.toFixed(2)}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            {/* 1-Click Filter Ledger */}
+                            <button
+                              title="Filter ledger for this debtor"
+                              onClick={() => {
+                                onFilterLedger(debtor.name);
+                                onNavigateTab("transactions");
+                                setActiveFlyout(null);
+                                setPinnedFlyout(null);
+                              }}
+                              className="p-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                            >
+                              <Filter className="w-3 h-3" />
+                            </button>
+                            {/* 1-Click Send Reminder via PocketMate */}
+                            <button
+                              title="Ask PocketMate to draft payment reminder"
+                              onClick={() => {
+                                onSendChatMessage(
+                                  `PocketMate, please draft and send a friendly payment reminder to ${debtor.name} for $${debtor.totalOwed.toFixed(2)} owed on split expenses.`
+                                );
+                                setActiveFlyout(null);
+                                setPinnedFlyout(null);
+                              }}
+                              className="p-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 transition-colors cursor-pointer"
+                            >
+                              <Send className="w-3 h-3" />
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))
+                    ))}
+
+                    {/* Recently Settled Section */}
+                    {settledList.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-zinc-800">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                            Recently Settled
+                          </span>
+                          <span className="text-[10px] font-mono text-emerald-400">
+                            {settledList.length} settled
+                          </span>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          {settledList.map((item) => (
+                            <div
+                              key={item.id}
+                              className="p-2.5 rounded-lg bg-zinc-900/90 border border-zinc-800 flex flex-col gap-2"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center font-bold text-xs shrink-0">
+                                    {item.name.charAt(0).toUpperCase()}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-1.5">
+                                      <p className="text-xs font-semibold text-zinc-200 truncate">{item.name}</p>
+                                      <span
+                                        className={`text-[9px] px-1.5 py-0.2 rounded font-medium ${
+                                          item.status === "CANCELLED"
+                                            ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                                            : item.isAdjusted
+                                            ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                                            : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                                        }`}
+                                      >
+                                        {item.status === "CANCELLED"
+                                          ? "Declined"
+                                          : item.isAdjusted
+                                          ? "Adjusted"
+                                          : "Paid Full"}
+                                      </span>
+                                    </div>
+                                    <p className="text-[10px] text-zinc-400 truncate">{item.sampleMerchant}</p>
+                                  </div>
+                                </div>
+
+                                <div className="text-right shrink-0">
+                                  <span className="text-xs font-bold font-mono text-emerald-400">
+                                    +${item.amountPaid.toFixed(2)}
+                                  </span>
+                                  {item.isAdjusted && (
+                                    <p className="text-[9px] font-mono text-zinc-500 line-through">
+                                      ${item.originalAmount.toFixed(2)}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Stated Reason */}
+                              {item.reason && (
+                                <div className="px-2 py-1 rounded bg-zinc-950/70 border border-zinc-800/80 text-[10px] text-zinc-400 italic">
+                                  &ldquo;{item.reason}&rdquo;
+                                </div>
+                              )}
+
+                              {/* Action buttons if adjusted or declined */}
+                              {(item.isAdjusted || item.status === "CANCELLED") && (
+                                <div className="flex items-center gap-1.5 pt-1 border-t border-zinc-800/60 justify-end">
+                                  <button
+                                    onClick={() => {
+                                      onSendChatMessage(
+                                        `PocketMate, accept the adjusted payment from ${item.name} for ${item.sampleMerchant}`
+                                      );
+                                      setActiveFlyout(null);
+                                      setPinnedFlyout(null);
+                                    }}
+                                    className="px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                                  >
+                                    Accept
+                                  </button>
+                                  {item.difference > 0 && (
+                                    <button
+                                      onClick={() => {
+                                        onSendChatMessage(
+                                          `PocketMate, please request the remaining $${item.difference.toFixed(
+                                            2
+                                          )} from ${item.name} for ${item.sampleMerchant}`
+                                        );
+                                        setActiveFlyout(null);
+                                        setPinnedFlyout(null);
+                                      }}
+                                      className="px-2 py-0.5 rounded text-[10px] font-medium bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 transition-colors cursor-pointer"
+                                    >
+                                      Request ${item.difference.toFixed(2)}
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => {
+                                      onSendChatMessage(
+                                        `PocketMate, please reinvoke and rebalance the split for ${item.sampleMerchant}`
+                                      );
+                                      setActiveFlyout(null);
+                                      setPinnedFlyout(null);
+                                    }}
+                                    className="px-2 py-0.5 rounded text-[10px] font-medium bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/30 flex items-center gap-1 transition-colors cursor-pointer"
+                                  >
+                                    <RotateCcw className="w-2.5 h-2.5" />
+                                    Reinvoke Split
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 
