@@ -26,6 +26,7 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
   isOpen,
   currentUser,
   onClose,
+  onLogin,
   onLogout,
 }) => {
   const [showOAuthHelp, setShowOAuthHelp] = useState(false);

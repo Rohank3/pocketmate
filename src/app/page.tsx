@@ -97,6 +97,16 @@ export default function Home() {
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [events, setEvents] = useState<ScheduledEvent[]>([]);
+  const [splits, setSplits] = useState<Array<{
+    id: string;
+    description: string;
+    items?: Array<{
+      participantName: string;
+      participantEmail?: string;
+      amount: number;
+      status: string;
+    }>;
+  }>>([]);
 
   // Load scheduled bills & events from database
   const loadEvents = useCallback(async () => {
@@ -105,6 +115,19 @@ export default function Home() {
       const evData = await evRes.json();
       if (evData.events) {
         setEvents(evData.events);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // Load split records from database
+  const loadSplits = useCallback(async () => {
+    try {
+      const res = await fetch("/api/splits");
+      const data = await res.json();
+      if (data.success && Array.isArray(data.splits)) {
+        setSplits(data.splits);
       }
     } catch {
       // ignore
@@ -125,13 +148,14 @@ export default function Home() {
         }
         // Refresh scheduled events so newly reconciled/detected bills reflect immediately
         void loadEvents();
+        void loadSplits();
       }
     } catch (err) {
       console.error(err);
     } finally {
       setIsLoadingTransactions(false);
     }
-  }, [activeScope, loadEvents]);
+  }, [activeScope, loadEvents, loadSplits]);
 
   // 1-Click orchestrate realistic PayPal Sandbox transactions & invoices
   const handleSeedSandboxTransactions = async () => {
@@ -143,6 +167,7 @@ export default function Home() {
         setTransactions(data.transactions);
         await loadTransactions(activeScope);
         await loadEvents();
+        await loadSplits();
         setMessages((prev) => [
           ...prev,
           {
@@ -213,6 +238,7 @@ export default function Home() {
 
       await loadCategories();
       await loadEvents();
+      await loadSplits();
 
       if (isSubscribed) {
         setInvoices(SandboxStore.getInvoices());
@@ -262,7 +288,7 @@ export default function Home() {
       window.removeEventListener("focus", onFocus);
       clearInterval(interval);
     };
-  }, [loadCategories, loadEvents, loadTransactions]);
+  }, [loadCategories, loadEvents, loadSplits, loadTransactions]);
 
   // Load messages for a specific thread (local cache first, then API if authenticated)
   const loadThreadMessages = useCallback(async (threadId: string, user?: UserAccount | null) => {
@@ -1098,11 +1124,21 @@ export default function Home() {
 
       // Reload live transactions from PayPal Sandbox REST API
       await loadTransactions(activeScope);
+      await loadSplits();
+      await loadEvents();
     } catch (err) {
       console.error(err);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleCancelAction = (messageId: string) => {
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageId ? { ...m, actionCard: undefined } : m
+      )
+    );
   };
 
   // User pending incoming bill detection for top alert banner
@@ -1250,6 +1286,7 @@ export default function Home() {
         transactions={transactions}
         events={events}
         currentUser={currentUser}
+        splits={splits}
         activeScope={activeScope}
         onNavigateTab={(tab) => setActiveRightTab(tab)}
         onFilterLedger={(debtorName, categoryName) => {
@@ -1281,6 +1318,7 @@ export default function Home() {
             onSendMessage={handleSendMessage}
             onUploadReceipt={handleUploadReceipt}
             onConfirmAction={handleConfirmAction}
+            onCancelAction={handleCancelAction}
             onNewChat={handleNewChat}
             onSelectThread={handleSelectThread}
             onRenameThread={handleRenameThread}
@@ -1437,6 +1475,8 @@ export default function Home() {
               <FinancialStudio
                 categories={categories}
                 transactions={transactions}
+                currentUser={currentUser}
+                splits={splits}
                 onActionClick={handleSendMessage}
               />
             )}

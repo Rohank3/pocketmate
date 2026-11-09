@@ -12,10 +12,22 @@ import {
 } from "lucide-react";
 import type { CategoryItem } from "@/components/categories/CategoryControlBar";
 import type { TransactionRow } from "@/components/grid/TransactionGrid";
+import type { UserAccount } from "@/types/sandboxUser";
 
 export interface FinancialStudioProps {
   categories?: CategoryItem[];
   transactions?: TransactionRow[];
+  currentUser?: UserAccount | null;
+  splits?: Array<{
+    id: string;
+    description: string;
+    items?: Array<{
+      participantName: string;
+      participantEmail?: string;
+      amount: number;
+      status: string;
+    }>;
+  }>;
   onActionClick?: (message: string) => void;
 }
 
@@ -27,6 +39,8 @@ export default function FinancialStudio({
     { id: "cat_shopping", name: "Shopping", monthlyCap: 200, color: "#ec4899" },
   ],
   transactions = [],
+  currentUser = null,
+  splits = [],
   onActionClick,
 }: FinancialStudioProps) {
   const [hoveredSlice, setHoveredSlice] = useState<string | null>(null);
@@ -85,18 +99,60 @@ export default function FinancialStudio({
     };
   }, [categories, transactions]);
 
-  // 2. Calculate Debtor / Split Balances
+  // 2. Calculate Debtor / Split Balances (backed by SplitRecord & SplitItem + transaction splits)
   const debtorAnalytics = useMemo(() => {
     const debtors = new Map<
       string,
       { name: string; amount: number; count: number; status: string; txs: string[] }
     >();
 
+    const currentName = currentUser?.name?.toLowerCase().trim() || "";
+    const currentEmail = currentUser?.email?.toLowerCase().trim() || "";
+
+    // 2a. Backed by SplitRecord & SplitItem entities
+    splits.forEach((split) => {
+      split.items?.forEach((item) => {
+        const pNameLower = item.participantName.toLowerCase().trim();
+        const pEmailLower = (item.participantEmail || "").toLowerCase().trim();
+
+        if (
+          pNameLower === "—" ||
+          pNameLower.includes("self") ||
+          (currentName && pNameLower === currentName) ||
+          (currentEmail && pEmailLower === currentEmail)
+        ) {
+          return;
+        }
+
+        const name = item.participantName;
+        const isPaid = item.status === "PAID";
+        let entry = debtors.get(name);
+        if (!entry) {
+          entry = {
+            name,
+            amount: 0,
+            count: 0,
+            status: isPaid ? "settled" : "pending",
+            txs: [],
+          };
+          debtors.set(name, entry);
+        }
+        entry.amount += item.amount;
+        entry.count += 1;
+        entry.txs.push(split.description || "Shared Split Expense");
+        if (!isPaid && entry.status !== "disputed") {
+          entry.status = "pending";
+        }
+      });
+    });
+
+    // 2b. Debtor pending transactions (excluding current user / self)
     transactions
       .filter((t) => {
         if (!t.debtor_name) return false;
         const d = t.debtor_name.toLowerCase().trim();
         if (d === "—" || d === "self" || d.includes("self") || d === "unassigned") return false;
+        if (currentName && (d === currentName || d.includes(currentName))) return false;
         return t.splitAllocation === "split" || (!d.includes("self") && d !== "shared split");
       })
       .forEach((t) => {
@@ -131,7 +187,7 @@ export default function FinancialStudio({
       list,
       totalReceivables,
     };
-  }, [transactions]);
+  }, [transactions, splits, currentUser]);
 
   // SVG Donut calculation
   const donutSlices = useMemo(() => {

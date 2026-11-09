@@ -38,6 +38,7 @@ interface ChatPanelProps {
   onSendMessage: (text: string) => void;
   onUploadReceipt: (file: File) => void;
   onConfirmAction: (cardData: ActionCardData) => Promise<void>;
+  onCancelAction?: (messageId: string) => void;
   onNewChat?: () => void;
   onSelectThread?: (threadId: string) => void;
   onRenameThread?: (threadId: string, newTitle: string) => Promise<void> | void;
@@ -52,6 +53,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   onSendMessage,
   onUploadReceipt,
   onConfirmAction,
+  onCancelAction,
   onNewChat,
   onSelectThread,
   onRenameThread,
@@ -530,7 +532,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                 <ActionConfirmCard
                   cardData={m.actionCard}
                   onConfirm={onConfirmAction}
-                  onCancel={() => {}}
+                  onCancel={() => onCancelAction?.(m.id)}
                 />
               )}
             </div>

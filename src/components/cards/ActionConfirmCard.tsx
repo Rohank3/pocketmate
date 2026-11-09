@@ -4,8 +4,9 @@ import React, { useState } from "react";
 import { Send, CheckCircle, XCircle, Loader2, CreditCard, Users, ShieldAlert } from "lucide-react";
 
 export interface ActionCardData {
-  action?: "DISPATCH_INVOICES" | "DISPATCH_PAYOUT" | string;
+  action?: "DISPATCH_INVOICES" | "DISPATCH_PAYOUT" | "CREATE_SPLIT" | string;
   type?: string;
+  category?: string;
   invoiceId?: string;
   merchant?: string;
   totalRecipients?: number;
@@ -34,6 +35,17 @@ interface ActionConfirmCardProps {
   onCancel: () => void;
 }
 
+const TRANSFER_PURPOSES = [
+  "Personal Reimbursement",
+  "Dining",
+  "Groceries",
+  "Travel",
+  "Rent",
+  "Utilities",
+  "Services",
+  "General",
+] as const;
+
 export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
   cardData,
   onConfirm,
@@ -42,6 +54,9 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
   const [loading, setLoading] = useState(false);
   const [completed, setCompleted] = useState<string | false>(false);
   const [isCancelled, setIsCancelled] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>(
+    cardData.category || "Personal Reimbursement"
+  );
 
   const isPayout = cardData.action === "DISPATCH_PAYOUT";
   const isInvoiceReview = cardData.type === "incoming_invoice_review";
@@ -55,7 +70,10 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
   const handleConfirm = async () => {
     setLoading(true);
     try {
-      await onConfirm(cardData);
+      await onConfirm({
+        ...cardData,
+        category: isPayout ? selectedCategory : cardData.category,
+      });
       setCompleted(isPayout ? "transferred" : "dispatched");
     } catch (err) {
       console.error(err);
@@ -231,6 +249,34 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
           </div>
         ))}
       </div>
+
+      {/* Transfer Purpose Dropdown (for Personal / P2P Transfers) */}
+      {isPayout && (
+        <div className="pb-3 border-t border-zinc-800/80 pt-3">
+          <div className="flex items-center justify-between mb-1.5">
+            <label
+              htmlFor="transfer-purpose-select"
+              className="text-[11px] font-medium text-zinc-400 flex items-center gap-1.5"
+            >
+              <span>Payment Purpose / Ledger Category</span>
+            </label>
+            <span className="text-[10px] text-blue-400 font-medium">Categorized on Transfer</span>
+          </div>
+          <select
+            id="transfer-purpose-select"
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            disabled={loading}
+            className="w-full bg-zinc-950 border border-zinc-700 hover:border-zinc-600 focus:border-blue-500 rounded-lg px-3 py-2 text-xs text-zinc-100 outline-none transition-colors disabled:opacity-50 cursor-pointer"
+          >
+            {TRANSFER_PURPOSES.map((purpose) => (
+              <option key={purpose} value={purpose} className="bg-zinc-900 text-zinc-100">
+                {purpose}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Actions */}
       <div className="pt-3 border-t border-zinc-800 flex items-center justify-end gap-2">

@@ -26,6 +26,16 @@ export interface FunctionalMetricsRowProps {
   transactions: TransactionRow[];
   events: ScheduledEvent[];
   currentUser: UserAccount | null;
+  splits?: Array<{
+    id: string;
+    description: string;
+    items?: Array<{
+      participantName: string;
+      participantEmail?: string;
+      amount: number;
+      status: string;
+    }>;
+  }>;
   activeScope: "personal" | "all";
   onNavigateTab: (tab: "transactions" | "insights" | "upcoming") => void;
   onFilterLedger: (debtorName?: string, categoryName?: string) => void;
@@ -56,6 +66,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
   transactions,
   events,
   currentUser,
+  splits = [],
   activeScope,
   onNavigateTab,
   onFilterLedger,
@@ -175,21 +186,59 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
     }, [transactions, categories]);
 
   // ==========================================
-  // 2. CARD 2: FRIENDS OWE YOU
+  // 2. CARD 2: FRIENDS OWE YOU (Backed by SplitRecord / SplitItem & Transaction Splits)
   // ==========================================
   const { debtorList, totalFriendsOwe, totalPendingCount } = useMemo(() => {
+    const currentName = currentUser?.name?.toLowerCase().trim() || "";
+    const currentEmail = currentUser?.email?.toLowerCase().trim() || "";
+
+    const map = new Map<string, DebtorSummary>();
+
+    // 1. Incorporate SplitRecord & SplitItem entities
+    splits.forEach((split) => {
+      split.items?.forEach((item) => {
+        const pNameLower = item.participantName.toLowerCase().trim();
+        const pEmailLower = (item.participantEmail || "").toLowerCase().trim();
+
+        if (
+          pNameLower === "—" ||
+          pNameLower.includes("self") ||
+          (currentName && pNameLower === currentName) ||
+          (currentEmail && pEmailLower === currentEmail) ||
+          item.status === "PAID" ||
+          item.status === "CANCELLED"
+        ) {
+          return;
+        }
+
+        const name = item.participantName;
+        const existing = map.get(name);
+        if (existing) {
+          existing.totalOwed += item.amount;
+          existing.count += 1;
+        } else {
+          map.set(name, {
+            name,
+            totalOwed: item.amount,
+            count: 1,
+            sampleMerchant: split.description || "Shared Split Expense",
+          });
+        }
+      });
+    });
+
+    // 2. Incorporate pending transaction debtors (excluding self / current user)
     const debtorPendingTxs = transactions.filter((t) => {
       if (!t.debtor_name) return false;
       const d = t.debtor_name.toLowerCase().trim();
-      // Exclude self expenses and non-split items
       if (d === "—" || d === "self" || d.includes("self") || d === "unassigned") return false;
+      if (currentName && (d === currentName || d.includes(currentName))) return false;
       return (
         (t.status === "pending" || t.status === "disputed" || t.status === "unresolved") &&
         (t.splitAllocation === "split" || (!d.includes("self") && d !== "shared split"))
       );
     });
 
-    const map = new Map<string, DebtorSummary>();
     debtorPendingTxs.forEach((t) => {
       const name = t.debtor_name;
       const existing = map.get(name);
@@ -211,7 +260,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
     const count = list.reduce((acc, d) => acc + d.count, 0);
 
     return { debtorList: list, totalFriendsOwe: sum, totalPendingCount: count };
-  }, [transactions]);
+  }, [transactions, splits, currentUser]);
 
   // ==========================================
   // 3. CARD 3: UPCOMING BILLS DUE (MONTHLY)
