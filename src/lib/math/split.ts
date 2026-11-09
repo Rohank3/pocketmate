@@ -325,3 +325,96 @@ export function calculatePercentageSplit(
     breakdownReport: breakdownLines.join("\n"),
   };
 }
+
+export interface DifferentialParticipant {
+  name: string;
+  emailOrHandle: string;
+  customAmount?: number;
+  percentage?: number;
+}
+
+/**
+ * Computes a differential split where some participants have custom fixed shares/percentages
+ * and the remaining balance is divided evenly among the rest, guaranteed penny-conserved.
+ */
+export function calculateDifferentialSplit(
+  totalAmount: number,
+  participants: DifferentialParticipant[],
+  memoContext?: string
+): DeterministicSplitResult {
+  if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+    throw new Error("Total amount must be a positive finite number.");
+  }
+  if (participants.length === 0) {
+    throw new Error("Cannot split among zero participants.");
+  }
+
+  const totalCents = toCents(totalAmount);
+  const withCustom = participants.filter((p) => p.customAmount !== undefined || p.percentage !== undefined);
+  const withoutCustom = participants.filter((p) => p.customAmount === undefined && p.percentage === undefined);
+
+  let allocatedCents = 0;
+  const allocations: SplitAllocation[] = [];
+
+  // Calculate explicit shares first
+  for (const p of withCustom) {
+    let cents = 0;
+    if (p.customAmount !== undefined) {
+      cents = toCents(p.customAmount);
+    } else if (p.percentage !== undefined) {
+      cents = Math.round((p.percentage / 100) * totalCents);
+    }
+    allocatedCents += cents;
+    allocations.push({
+      name: p.name,
+      emailOrHandle: p.emailOrHandle,
+      amount: toDollars(cents),
+      cents,
+      itemizedSummary: memoContext ?? `Custom share: $${toDollars(cents).toFixed(2)}`,
+    });
+  }
+
+  // Distribute remaining cents evenly across remaining participants
+  const remainingCents = Math.max(0, totalCents - allocatedCents);
+  const countRemaining = withoutCustom.length > 0 ? withoutCustom.length : 1;
+  const baseCents = Math.floor(remainingCents / countRemaining);
+  const rem = remainingCents % countRemaining;
+
+  withoutCustom.forEach((p, idx) => {
+    const cents = baseCents + (idx < rem ? 1 : 0);
+    allocations.push({
+      name: p.name,
+      emailOrHandle: p.emailOrHandle,
+      amount: toDollars(cents),
+      cents,
+      itemizedSummary: memoContext ?? `Even share of remainder: $${toDollars(cents).toFixed(2)}`,
+    });
+  });
+
+  // Verify penny conservation
+  const sumAllocatedCents = allocations.reduce((acc, curr) => acc + curr.cents, 0);
+  const diffCents = totalCents - sumAllocatedCents;
+  if (diffCents !== 0 && allocations.length > 0) {
+    allocations[0].cents += diffCents;
+    allocations[0].amount = toDollars(allocations[0].cents);
+  }
+
+  // Preserve original participant ordering
+  const orderedAllocations = participants.map((p) => {
+    return allocations.find((a) => a.name.toLowerCase() === p.name.toLowerCase()) || allocations[0];
+  });
+
+  const breakdownLines = [
+    `Total: $${toDollars(totalCents).toFixed(2)} split among ${participants.length} people:`,
+    ...orderedAllocations.map((a) => `• ${a.name} (${a.emailOrHandle}): $${a.amount.toFixed(2)}`),
+  ];
+
+  return {
+    totalAmount: toDollars(totalCents),
+    totalCents,
+    participantCount: participants.length,
+    allocations: orderedAllocations,
+    discrepancyCents: 0,
+    breakdownReport: breakdownLines.join("\n"),
+  };
+}

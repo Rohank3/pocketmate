@@ -7,9 +7,7 @@ import { prisma } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
 import { loadUserCategorizationContext, categorizeTransactionsBatch } from "@/lib/services/categorizer";
 import {
-  calculateEqualSplit,
-  calculateUnequalSplit,
-  calculatePercentageSplit,
+  calculateDifferentialSplit,
 } from "@/lib/math/split";
 
 export interface AgentMessage {
@@ -316,8 +314,17 @@ export async function handleDynamicAutonomousResponse(
   // --------------------------------------------------------------------------
   const isTriageResponse =
     /^(1|2|3|4|5)$/.test(p.trim()) ||
-    ["travel", "dining", "shopping", "groceries", "entertainment", "services", "utilities", "software"].includes(p.trim()) ||
-    /(?:mark|tag|set|categorize|make it|put as|put in)\s+(?:as\s+)?(dining|groceries|shopping|entertainment|travel|services|utilities|software)/i.test(p.trim());
+    ["travel", "dining", "shopping", "groceries", "entertainment", "services", "utilities", "software", "miscellaneous", "mislenious"].includes(p.trim()) ||
+    /(?:mark|tag|set|categorize|make it|put as|put in)\s+/i.test(p.trim()) ||
+    (p.trim().split(/\s+/).length <= 3 &&
+      !p.includes("split") &&
+      !p.includes("bill") &&
+      !p.includes("remind") &&
+      !p.includes("pay ") &&
+      !p.includes("invoice") &&
+      !p.includes("due") &&
+      !p.includes("cap") &&
+      !p.includes("overspend"));
 
   // --------------------------------------------------------------------------
   // E. Explicit Payment Reminder Intent (Sending reminder invoice to a debtor)
@@ -1093,6 +1100,48 @@ ${optionsLines}
       splitMemo = `Shared Expense ($${splitAmount.toFixed(2)})`;
     }
 
+    // Dynamic Transaction Lookup: If bill/merchant is mentioned or amount is missing, query live PayPal transactions
+    let matchedTransaction: { id: string; merchantName: string; amount: number; memo?: string } | null = null;
+    const looksLikeTransactionRef =
+      splitAmount === 0 ||
+      p.includes("bill") ||
+      p.includes("hotel") ||
+      p.includes("grand") ||
+      p.includes("dinner") ||
+      p.includes("uber") ||
+      p.includes("bistro") ||
+      p.includes("bowlero") ||
+      p.includes("charge");
+
+    if (looksLikeTransactionRef) {
+      try {
+        const liveTxs = await paypalClient.fetchRecentTransactions(720);
+        // Find best matching transaction in ledger
+        for (const tx of liveTxs) {
+          const m = tx.merchantName.toLowerCase();
+          const memo = (tx.memo || "").toLowerCase();
+          const tokens = m.split(/[\s-_]+/).filter((w) => w.length > 2);
+          if (
+            p.includes(m) ||
+            tokens.some((t) => p.includes(t)) ||
+            (memo && memo.length > 2 && p.includes(memo))
+          ) {
+            matchedTransaction = tx;
+            break;
+          }
+        }
+      } catch (err) {
+        console.warn("[Split Transaction Lookup Warning]", err);
+      }
+
+      if (matchedTransaction) {
+        splitAmount = matchedTransaction.amount;
+        splitMemo = matchedTransaction.memo
+          ? `${matchedTransaction.merchantName} (${matchedTransaction.memo})`
+          : `${matchedTransaction.merchantName} Bill Split`;
+      }
+    }
+
     // Check if temporal query (e.g. "last 3 hours", "last 24 hours")
     const hoursMatch = prompt.match(/(\d+)\s*(?:hours|hrs)/i);
     const hoursBack = hoursMatch ? parseFloat(hoursMatch[1]) : 3;
@@ -1109,75 +1158,81 @@ ${optionsLines}
       if (txResult.transactions && txResult.transactions.length > 0) {
         splitAmount = txResult.transactions.reduce((sum, t) => sum + t.amount, 0);
         splitMemo = txResult.transactions.map((t) => `${t.merchantName} ($${t.amount.toFixed(0)})`).join(", ");
-      } else {
-        splitAmount = 200.0;
-        splitMemo = "Bar ($65), Bowling ($85), Diner ($50)";
       }
     }
 
     if (splitAmount === 0) {
-      splitAmount = 120.0;
+      reply = `I couldn't detect a total amount or matching transaction to split. Please mention the bill name or dollar amount (e.g. *"split $480 Grand Vista hotel bill with Mark, Oliver and Leo"*).`;
+      await handlers.onTextDelta?.(reply);
+      return {
+        reply,
+        gridMutation: null,
+        actionCard: null,
+        executedTools,
+        activePersona: persona,
+      };
     }
 
-    // Check for custom unequal allocations or percentages: e.g. "Alex owes 800, Sam 700" or "Alex: 50, Sam: 30"
+    // -------------------------------------------------------------------------
+    // Comprehensive Participant Extraction: Supports lists ("among me, mark, oliver and leo")
+    // and differential conditions ("Leo only owes 60, split the rest evenly among the three of us")
+    // -------------------------------------------------------------------------
     const disambiguationNotes: string[] = [];
-    const unequalRegex = /([A-Za-z]+)\s*(?:owes|pays|takes|has|:|owed)?\s*(?:[₹$]|rs\.?)?\s*([0-9]+(?:\.[0-9]{1,2})?)\s*(%|dollars?|usd|inr)?/gi;
-    const foundUnequal = Array.from(prompt.matchAll(unequalRegex)).filter((m) => {
-      const w = m[1].toLowerCase();
-      return !["i", "we", "split", "paid", "spent", "total", "last", "for", "with", "between", "the", "and", "hrs", "hours"].includes(w);
-    });
 
-    let isPercentageSplit = false;
-    let isCustomUnequalSplit = false;
+    // 1. Check for group clause introduced by among / with / between / across
+    const groupClauseMatch = prompt.match(/(?:among|with|between|across)\s+([^.]+?)(?:\.|\s*,\s*(?:where|cuz|leo|only)|\s+only|\s+where|\s+cuz|\s+and\s+split|\s+split|\s+to|$)/i);
+    if (groupClauseMatch) {
+      const rawGroup = groupClauseMatch[1]
+        .replace(/and\s+/gi, ",")
+        .split(",")
+        .map((n) => n.trim())
+        .filter((n) => n.length > 0 && !/^\d+\s*ways?$/i.test(n));
 
-    if (foundUnequal.length > 0) {
-      for (const m of foundUnequal) {
-        const pName = m[1].trim();
-        const pVal = parseFloat(m[2]);
-        const isPct = m[3] === "%";
+      for (const rawName of rawGroup) {
+        const clean = rawName.replace(/[.,]/g, "").trim();
+        if (!clean) continue;
+        if (clean.toLowerCase() === "me" || clean.toLowerCase() === "i" || clean.toLowerCase() === "myself") {
+          // Already have Host
+          continue;
+        }
 
-        const matchedAcc = await resolveContact(pName, handlers.userId);
-        const contactEmail = matchedAcc ? matchedAcc.email : `${pName.toLowerCase().replace(/\s+/g, ".")}@personal.example.com`;
-        const contactName = matchedAcc ? matchedAcc.name : pName;
+        const matchedAcc = await resolveContact(clean, handlers.userId);
+        const contactEmail = matchedAcc ? matchedAcc.email : clean.includes("@") ? clean : `${clean.toLowerCase().replace(/\s+/g, ".")}@personal.example.com`;
+        const contactName = matchedAcc ? matchedAcc.name : clean.charAt(0).toUpperCase() + clean.slice(1);
 
-        if (isPct) {
-          isPercentageSplit = true;
-          participantsList.push({ name: contactName, emailOrHandle: contactEmail, percentage: pVal });
-        } else {
-          isCustomUnequalSplit = true;
-          participantsList.push({ name: contactName, emailOrHandle: contactEmail, customAmount: pVal });
+        if (!participantsList.some((p) => p.name.toLowerCase() === contactName.toLowerCase())) {
+          participantsList.push({ name: contactName, emailOrHandle: contactEmail });
         }
       }
-    } else {
-      // Standard equal extraction with names e.g. "with Alex, Dave, and Sam"
-      const withMatch = prompt.match(/(?:with|across|between)\s+([^.]+)/i);
-      if (withMatch) {
-        const rawNames = withMatch[1]
-          .replace(/and\s+/gi, ",")
-          .split(",")
-          .map((n) => n.trim().replace(/^me$/i, ""))
-          .filter((n) => n.length > 1 && !/^\d+\s*ways?$/i.test(n));
+    }
 
-        for (const name of rawNames) {
-          const clean = name.replace(/[.,]/g, "").trim();
-          if (clean) {
-            const matchedAcc = await resolveContact(clean, handlers.userId);
-            if (matchedAcc) {
-              participantsList.push({
-                name: matchedAcc.name,
-                emailOrHandle: matchedAcc.email,
-              });
-              disambiguationNotes.push(`Found ${matchedAcc.name} (${matchedAcc.email}) in ${matchedAcc.source === "database_contact" ? "contacts" : "past transactions"}.`);
-            } else if (clean.includes("@")) {
-              participantsList.push({ name: clean.split("@")[0].replace(/[._]/g, " "), emailOrHandle: clean });
-            } else {
-              participantsList.push({
-                name: clean,
-                emailOrHandle: `${clean.toLowerCase().replace(/\s+/g, ".")}@personal.example.com`,
-              });
-            }
-          }
-        }
+    // 2. Check for individual custom amounts or percentages: e.g. "Leo only owes 60", "Alex owes 800"
+    const unequalRegex = /([A-Za-z]+)\s*(?:only\s+)?(?:owes|pays|takes|has|:|owed)?\s*(?:[₹$]|rs\.?)?\s*([0-9]+(?:\.[0-9]{1,2})?)\s*(%|dollars?|usd|inr)?/gi;
+    const foundUnequal = Array.from(prompt.matchAll(unequalRegex)).filter((m) => {
+      const w = m[1].toLowerCase();
+      return !["i", "we", "split", "paid", "spent", "total", "last", "for", "with", "between", "the", "and", "hrs", "hours", "me", "cuz", "only"].includes(w);
+    });
+
+    for (const m of foundUnequal) {
+      const pName = m[1].trim();
+      const pVal = parseFloat(m[2]);
+      const isPct = m[3] === "%";
+
+      const matchedAcc = await resolveContact(pName, handlers.userId);
+      const contactEmail = matchedAcc ? matchedAcc.email : `${pName.toLowerCase().replace(/\s+/g, ".")}@personal.example.com`;
+      const contactName = matchedAcc ? matchedAcc.name : pName.charAt(0).toUpperCase() + pName.slice(1);
+
+      const existing = participantsList.find((p) => p.name.toLowerCase() === contactName.toLowerCase());
+      if (existing) {
+        if (isPct) existing.percentage = pVal;
+        else existing.customAmount = pVal;
+      } else {
+        participantsList.push({
+          name: contactName,
+          emailOrHandle: contactEmail,
+          customAmount: isPct ? undefined : pVal,
+          percentage: isPct ? pVal : undefined,
+        });
       }
     }
 
@@ -1190,36 +1245,13 @@ ${optionsLines}
       participantsList.push({ name: `Participant ${idx}`, emailOrHandle: `participant${idx}@example.com` });
     }
 
-    // Execute split mathematics
-    let splitAllocations: Array<{ name: string; emailOrHandle: string; amount: number }>;
-    if (isPercentageSplit) {
-      const pShares = participantsList.map((p) => ({
-        name: p.name,
-        emailOrHandle: p.emailOrHandle,
-        percentage: p.percentage ?? 100 / participantsList.length,
-      }));
-      const pRes = calculatePercentageSplit(splitAmount, pShares, splitMemo);
-      splitAllocations = pRes.allocations;
-    } else if (isCustomUnequalSplit) {
-      const uShares = participantsList.map((p) => ({
-        name: p.name,
-        emailOrHandle: p.emailOrHandle,
-        amount: p.customAmount ?? splitAmount / participantsList.length,
-      }));
-      const uRes = calculateUnequalSplit(splitAmount, uShares, splitMemo);
-      splitAllocations = uRes.allocations;
-    } else {
-      const eShares = participantsList.map((p) => ({
-        name: p.name,
-        emailOrHandle: p.emailOrHandle,
-      }));
-      const eRes = calculateEqualSplit(splitAmount, eShares, splitMemo);
-      splitAllocations = eRes.allocations;
-    }
+    // Execute differential penny-locked split mathematics
+    const diffResult = calculateDifferentialSplit(splitAmount, participantsList, splitMemo);
+    const splitAllocations = diffResult.allocations;
 
     const nonHostAllocs = splitAllocations.filter((a) => !a.name.toLowerCase().includes("host"));
 
-    // Prepare PayPal invoices for participants
+    // Prepare authentic PayPal invoices for participants (direct peer-to-peer)
     const recipients = nonHostAllocs.map((a) => ({
       email: a.emailOrHandle.includes("@") ? a.emailOrHandle : `${a.name.toLowerCase().replace(/\s+/g, ".")}@personal.example.com`,
       name: a.name,

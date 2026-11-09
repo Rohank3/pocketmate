@@ -192,9 +192,8 @@ export async function POST(req: NextRequest) {
         try {
           const systemPrompt = assembleSystemPrompt(persona);
           const primaryModel = process.env.GEMINI_MODEL || "gemini-3.5-flash";
-          let geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${primaryModel}:streamGenerateContent?key=${apiKey}&alt=sse`;
 
-          const formattedContents: Array<{ role: "user" | "model"; parts: [{ text: string }] }> = [];
+          const formattedContents: Array<{ role: "user" | "model"; parts: Array<Record<string, unknown>> }> = [];
           for (const m of messages) {
             const role = m.role === "assistant" ? "model" : "user";
             if (formattedContents.length === 0 && role === "model") {
@@ -204,7 +203,10 @@ export async function POST(req: NextRequest) {
               formattedContents.length > 0 &&
               formattedContents[formattedContents.length - 1].role === role
             ) {
-              formattedContents[formattedContents.length - 1].parts[0].text += `\n${m.content}`;
+              const prev = formattedContents[formattedContents.length - 1].parts[0] as { text?: string };
+              if (prev.text !== undefined) {
+                prev.text += `\n${m.content}`;
+              }
             } else {
               formattedContents.push({
                 role,
@@ -227,118 +229,171 @@ export async function POST(req: NextRequest) {
             },
           ];
 
-          const bodyPayload = {
-            systemInstruction: { parts: [{ text: systemPrompt }] },
-            contents: formattedContents,
-            tools: toolsPayload,
-            generationConfig: { temperature: 0.2 },
-          };
+          const contentsHistory: Array<{ role: "user" | "model"; parts: Array<Record<string, unknown>> }> = [
+            ...formattedContents,
+          ];
 
-          // 8-second timeout for streaming connection
-          const abortController = new AbortController();
-          const timeoutId = setTimeout(() => abortController.abort(), 8000);
-
-          let geminiRes = await fetch(geminiUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(bodyPayload),
-            signal: abortController.signal,
-          }).finally(() => clearTimeout(timeoutId));
-
-          if (!geminiRes.ok && (geminiRes.status === 429 || geminiRes.status === 503 || geminiRes.status === 404)) {
-            geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:streamGenerateContent?key=${apiKey}&alt=sse`;
-            geminiRes = await fetch(geminiUrl, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(bodyPayload),
-            });
-          }
-
-          if (!geminiRes.ok || !geminiRes.body) {
-            console.warn(`[Gemini SSE] HTTP ${geminiRes.status}. Falling back to dynamic autonomous engine.`);
-            await runDynamicFallback();
-            safeClose();
-            return;
-          }
-
-          const reader = geminiRes.body.getReader();
-          const decoder = new TextDecoder();
-          let buffer = "";
           let hasGeneratedText = false;
           let geminiAccumulatedText = "";
           let geminiLastActionCard: Record<string, unknown> | null = null;
           const geminiBadges: string[] = [];
           const liveExecutedTools: Array<{ name: string; result: Record<string, unknown> }> = [];
 
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
+          let activeModel = primaryModel;
+          let turnCount = 0;
+          const MAX_TURNS = 3;
 
-            const lines = buffer.split("\n");
-            buffer = lines.pop() || "";
+          while (turnCount < MAX_TURNS) {
+            turnCount++;
 
-            for (const line of lines) {
-              if (line.startsWith("data: ")) {
-                try {
-                  const chunkJson = JSON.parse(line.slice(6));
-                  const candidate = chunkJson.candidates?.[0];
-                  const parts = candidate?.content?.parts || [];
+            const bodyPayload = {
+              systemInstruction: { parts: [{ text: systemPrompt }] },
+              contents: contentsHistory,
+              tools: toolsPayload,
+              generationConfig: { temperature: 0.2 },
+            };
 
-                  for (const part of parts) {
-                    if (part.text) {
-                      hasGeneratedText = true;
-                      geminiAccumulatedText += part.text;
-                      sendEvent("text_delta", { text: part.text });
-                    } else if (part.functionCall) {
-                      const toolName = part.functionCall.name;
-                      const toolArgs = part.functionCall.args || {};
+            let geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:streamGenerateContent?key=${apiKey}&alt=sse`;
 
-                      geminiBadges.push(toolName);
-                      sendEvent("tool_start", { name: toolName });
-                      const toolResult = (await executeAgentTool(toolName, toolArgs, userId)) as Record<string, unknown>;
-                      liveExecutedTools.push({ name: toolName, result: toolResult });
-                      sendEvent("tool_call", { name: toolName, args: toolArgs, result: toolResult });
+            const abortController = new AbortController();
+            const timeoutId = setTimeout(() => abortController.abort(), 10000);
 
-                      if (toolName === "mutate_ag_grid" && toolResult.gridMutation) {
-                        sendEvent("grid_mutation", toolResult.gridMutation);
-                      }
+            let geminiRes: Response;
+            try {
+              geminiRes = await fetch(geminiUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(bodyPayload),
+                signal: abortController.signal,
+              }).finally(() => clearTimeout(timeoutId));
+            } catch (fetchErr) {
+              console.warn(`[Gemini SSE] Fetch error on model ${activeModel}:`, fetchErr);
+              activeModel = "gemini-3.1-flash-lite";
+              geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:streamGenerateContent?key=${apiKey}&alt=sse`;
+              geminiRes = await fetch(geminiUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(bodyPayload),
+              });
+            }
 
-                      if (toolName === "update_user_persona" && toolResult.activePersona) {
-                        sendEvent("persona_update", { persona: toolResult.activePersona });
-                      }
+            if (!geminiRes.ok && (geminiRes.status === 429 || geminiRes.status === 503 || geminiRes.status === 404)) {
+              activeModel = "gemini-3.1-flash-lite";
+              geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:streamGenerateContent?key=${apiKey}&alt=sse`;
+              geminiRes = await fetch(geminiUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(bodyPayload),
+              });
+            }
 
-                      if (toolResult.requiresConfirmation) {
-                        geminiLastActionCard = toolResult;
-                        sendEvent("action_card", toolResult);
+            if (!geminiRes.ok || !geminiRes.body) {
+              if (turnCount === 1) {
+                console.warn(`[Gemini SSE] HTTP ${geminiRes.status}. Falling back to dynamic autonomous engine.`);
+                await runDynamicFallback();
+                safeClose();
+                return;
+              } else {
+                break;
+              }
+            }
+
+            const reader = geminiRes.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = "";
+            const currentTurnFunctionCalls: Array<{ name: string; args: Record<string, unknown>; id?: string }> = [];
+            const currentTurnFunctionResponses: Array<{ name: string; response: Record<string, unknown> }> = [];
+
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+
+              const lines = buffer.split("\n");
+              buffer = lines.pop() || "";
+
+              for (const line of lines) {
+                if (line.startsWith("data: ")) {
+                  try {
+                    const chunkJson = JSON.parse(line.slice(6));
+                    const candidate = chunkJson.candidates?.[0];
+                    const parts = candidate?.content?.parts || [];
+
+                    for (const part of parts) {
+                      if (part.text) {
+                        hasGeneratedText = true;
+                        geminiAccumulatedText += part.text;
+                        sendEvent("text_delta", { text: part.text });
+                      } else if (part.functionCall) {
+                        const toolName = part.functionCall.name;
+                        const toolArgs = (part.functionCall.args || {}) as Record<string, unknown>;
+                        const toolCallId = part.functionCall.id as string | undefined;
+
+                        currentTurnFunctionCalls.push({ name: toolName, args: toolArgs, id: toolCallId });
+                        geminiBadges.push(toolName);
+                        sendEvent("tool_start", { name: toolName });
+                        const toolResult = (await executeAgentTool(toolName, toolArgs, userId)) as Record<string, unknown>;
+                        liveExecutedTools.push({ name: toolName, result: toolResult });
+                        currentTurnFunctionResponses.push({ name: toolName, response: toolResult });
+                        sendEvent("tool_call", { name: toolName, args: toolArgs, result: toolResult });
+
+                        if (toolName === "mutate_ag_grid" && toolResult.gridMutation) {
+                          sendEvent("grid_mutation", toolResult.gridMutation);
+                        }
+
+                        if (toolName === "update_user_persona" && toolResult.activePersona) {
+                          sendEvent("persona_update", { persona: toolResult.activePersona });
+                        }
+
+                        if (toolResult.requiresConfirmation) {
+                          geminiLastActionCard = toolResult;
+                          sendEvent("action_card", toolResult);
+                        }
                       }
                     }
+                  } catch {
+                    // Partial chunk in SSE buffer; continue
                   }
-                } catch {
-                  // Partial chunk in SSE buffer; continue
                 }
               }
             }
-          }
 
-          let fallbackSummary = "";
-          // If Gemini called tools without emitting final text, synthesize summary
-          if (!hasGeneratedText && liveExecutedTools.length > 0) {
-            const summaryParts: string[] = [];
-            for (const t of liveExecutedTools) {
-              if (t.name === "calculate_deterministic_split" && t.result.totalAmount) {
-                summaryParts.push(`Calculated split of $${t.result.totalAmount} with exact penny conservation.`);
-              } else if (t.name === "dispatch_paypal_invoices" && t.result.requiresConfirmation) {
-                summaryParts.push(`Prepared ${t.result.totalRecipients} PayPal invoices totaling $${t.result.totalAmount}. Review the card below and confirm dispatch.`);
-              } else if (t.name === "log_category_expense") {
-                summaryParts.push(`Logged $${t.result.amountLogged} to ${t.result.category}. ${(t.result.alert as string) || ""}`);
-              }
+            // If Gemini invoked tools during this turn, feed the execution results back for conversational continuation
+            if (currentTurnFunctionCalls.length > 0) {
+              contentsHistory.push({
+                role: "model",
+                parts: currentTurnFunctionCalls.map((fc) => ({
+                  functionCall: {
+                    name: fc.name,
+                    args: fc.args,
+                    ...(fc.id ? { id: fc.id } : {}),
+                  },
+                })),
+              });
+
+              contentsHistory.push({
+                role: "user",
+                parts: currentTurnFunctionResponses.map((fr) => ({
+                  functionResponse: {
+                    name: fr.name,
+                    response: fr.response,
+                  },
+                })),
+              });
+            } else {
+              // Model finished without additional tool calls
+              break;
             }
-            fallbackSummary = summaryParts.join(" ") || "Tools executed successfully.";
-            sendEvent("text_delta", { text: fallbackSummary });
           }
 
-          const finalAssistantMsg = geminiAccumulatedText || fallbackSummary || "Tools executed successfully.";
+          // If Gemini called tools without emitting final conversational text, run dynamic autonomous engine
+          if (!hasGeneratedText) {
+            await runDynamicFallback();
+            safeClose();
+            return;
+          }
+
+          const finalAssistantMsg = geminiAccumulatedText || "Response completed.";
           persistChatMessage(
             "assistant",
             finalAssistantMsg,
