@@ -273,7 +273,8 @@ ${JSON.stringify(
   const timeoutId = setTimeout(() => controller.abort(), 6000);
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    const model = process.env.GEMINI_MODEL || "gemini-flash-latest";
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -377,20 +378,92 @@ function heuristicCategoryMatch(
     return matched ? matched.name : null;
   };
 
-  if (m.includes("bar") || m.includes("diner") || m.includes("coffee") || m.includes("bistro") || m.includes("restaurant") || m.includes("cafe")) {
+  if (
+    m.includes("bar") ||
+    m.includes("diner") ||
+    m.includes("coffee") ||
+    m.includes("bistro") ||
+    m.includes("restaurant") ||
+    m.includes("cafe") ||
+    m.includes("chipotle") ||
+    m.includes("starbucks") ||
+    m.includes("taco") ||
+    m.includes("pizza") ||
+    m.includes("lunch") ||
+    m.includes("dinner") ||
+    m.includes("moreau")
+  ) {
     return findCat(["dining", "food", "restaurant", "meal"]);
   }
-  if (m.includes("target") || m.includes("grocer") || m.includes("market") || m.includes("whole foods") || m.includes("trader joe")) {
+  if (
+    m.includes("hotel") ||
+    m.includes("inn") ||
+    m.includes("resort") ||
+    m.includes("lodging") ||
+    m.includes("grand vista") ||
+    m.includes("roma") ||
+    m.includes("transit") ||
+    m.includes("metro") ||
+    m.includes("uber") ||
+    m.includes("lyft") ||
+    m.includes("flight") ||
+    m.includes("airline") ||
+    m.includes("shell") ||
+    m.includes("oil") ||
+    m.includes("gas") ||
+    m.includes("eurostar") ||
+    m.includes("airalo")
+  ) {
+    return findCat(["travel", "transport", "transit", "commute", "lodging"]) || findCat(["utilities", "living"]);
+  }
+  if (
+    m.includes("whole foods") ||
+    m.includes("trader joe") ||
+    m.includes("grocer") ||
+    m.includes("market") ||
+    m.includes("safeway") ||
+    m.includes("kroger")
+  ) {
     return findCat(["grocer", "food", "market", "shopping"]);
   }
-  if (m.includes("lane") || m.includes("bowling") || m.includes("movie") || m.includes("cinema") || m.includes("amc")) {
-    return findCat(["entertain", "fun", "leisure", "social"]);
+  if (
+    m.includes("target") ||
+    m.includes("amazon") ||
+    m.includes("zara") ||
+    m.includes("h&m") ||
+    m.includes("clothing") ||
+    m.includes("mall") ||
+    m.includes("shop")
+  ) {
+    return findCat(["shopping", "retail", "clothing"]) || findCat(["groceries", "living"]);
   }
-  if (m.includes("zara") || m.includes("h&m") || m.includes("clothing") || m.includes("mall")) {
-    return findCat(["shop", "retail", "clothing"]);
+  if (
+    m.includes("netflix") ||
+    m.includes("spotify") ||
+    m.includes("lane") ||
+    m.includes("bowling") ||
+    m.includes("bowlero") ||
+    m.includes("movie") ||
+    m.includes("cinema") ||
+    m.includes("amc") ||
+    m.includes("theatre") ||
+    m.includes("gaming") ||
+    m.includes("playstation") ||
+    m.includes("steam") ||
+    m.includes("equinox") ||
+    m.includes("fitness") ||
+    m.includes("gym")
+  ) {
+    return findCat(["entertain", "fun", "leisure", "social"]) || findCat(["subscriptions", "wellness", "health"]);
   }
-  if (m.includes("transit") || m.includes("metro") || m.includes("uber") || m.includes("lyft") || m.includes("flight") || m.includes("airline")) {
-    return findCat(["travel", "transport", "transit", "commute"]);
+  if (
+    m.includes("google cloud") ||
+    m.includes("storage") ||
+    m.includes("aws") ||
+    m.includes("github") ||
+    m.includes("hosting")
+  ) {
+    return findCat(["utilities", "subscription", "work", "tech"]) || findCat(["shopping"]);
   }
 
   return null;
@@ -651,7 +724,8 @@ Return ONLY valid JSON with an array of matching transaction IDs:
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 6000);
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    const model = process.env.GEMINI_MODEL || "gemini-flash-latest";
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

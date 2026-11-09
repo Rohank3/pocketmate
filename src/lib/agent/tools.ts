@@ -706,7 +706,15 @@ export async function executeAgentTool(
       const { hoursBack } = AutoCategorizeTransactionsSchema.parse(safeArgs);
       const effectiveUserId = userId || "demo_user";
 
-      const txs = await paypalClient.fetchRecentTransactions(hoursBack || 720);
+      let filterEmail: string | undefined = undefined;
+      if (effectiveUserId.includes("@")) {
+        filterEmail = effectiveUserId;
+      } else {
+        const u = await prisma.user.findUnique({ where: { id: effectiveUserId } });
+        if (u?.email) filterEmail = u.email;
+      }
+
+      const txs = await paypalClient.fetchRecentTransactions(hoursBack || 720, filterEmail);
       const catContext = await loadUserCategorizationContext(effectiveUserId);
       const categoryMap = await categorizeTransactionsBatch(
         txs.map((t) => ({ id: t.id, merchantName: t.merchantName, amount: t.amount })),
@@ -737,6 +745,26 @@ export async function executeAgentTool(
             confidence: res?.confidence || 0.85,
             source: res?.source || "gemini_ai",
           });
+
+          // Persist override to database so reload retains classification
+          try {
+            await prisma.transactionCategoryOverride.upsert({
+              where: {
+                userId_transactionId: {
+                  userId: effectiveUserId,
+                  transactionId: t.id,
+                },
+              },
+              update: { categoryName: cat },
+              create: {
+                userId: effectiveUserId,
+                transactionId: t.id,
+                categoryName: cat,
+              },
+            });
+          } catch (persistErr) {
+            console.warn("[AutoCategorize Persist Warning]", persistErr);
+          }
         }
       }
 
