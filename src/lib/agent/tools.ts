@@ -14,7 +14,9 @@ import {
   loadUserCategorizationContext,
   categorizeTransactionsBatch,
   normalizeMerchant,
+  reclassifyTransactionWithScope,
 } from "../services/categorizer";
+import { resolveContact } from "../contacts/contactResolver";
 
 // ============================================================================
 // Parameter Validation Schemas (Layer B: Validation Middleware)
@@ -189,8 +191,29 @@ export const SetMerchantCategoryRuleSchema = z.object({
 export const SetTransactionCategorySchema = z.object({
   transactionId: z.string().trim().min(1).max(100),
   category: z.string().trim().min(1).max(50),
+  scope: z.enum(["single", "merchant", "similar"] as const).optional(),
   rememberForMerchant: z.boolean().default(false).optional(),
   merchantName: z.string().trim().max(100).optional(),
+});
+
+export const ProposeSplitBreakdownSchema = z.object({
+  totalAmount: z.number().finite().positive().max(1000000),
+  merchantName: z.string().trim().min(1).max(100),
+  transactionId: z.string().trim().max(100).optional(),
+  memo: z.string().trim().max(255).optional(),
+  participants: z
+    .array(
+      z.object({
+        name: z.string().trim().min(1).max(100),
+        email: z.string().trim().max(255).optional().default(""),
+        amount: z.number().finite().positive().max(1000000),
+        isHost: z.boolean().default(false).optional(),
+        isLocked: z.boolean().default(false).optional(),
+        note: z.string().trim().max(255).optional(),
+      })
+    )
+    .min(1)
+    .max(50),
 });
 
 // ============================================================================
@@ -451,15 +474,50 @@ export const agentToolDeclarations = [
     },
   },
   {
+    name: "propose_split_breakdown",
+    description: "Proposes an interactive split breakdown to the user with exact amounts per participant. Call this whenever the user wants to split an expense, bill, or hotel/dining charge.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        totalAmount: { type: "NUMBER", description: "Total dollar amount of the expense being split." },
+        merchantName: { type: "STRING", description: "Name of the merchant or venue (e.g. Grand Vista Hotel)." },
+        transactionId: { type: "STRING", description: "Optional transaction ID of the expense in PayPal." },
+        memo: { type: "STRING", description: "Summary or description of the split breakdown." },
+        participants: {
+          type: "ARRAY",
+          items: {
+            type: "OBJECT",
+            properties: {
+              name: { type: "STRING", description: "Participant name (use 'You' or user's name for the host)." },
+              email: { type: "STRING", description: "Email address if known." },
+              amount: { type: "NUMBER", description: "Dollar amount allocated to this participant." },
+              isHost: { type: "BOOLEAN", description: "True if this person is the host who paid the initial bill." },
+              isLocked: { type: "BOOLEAN", description: "True if this participant has a fixed custom amount." },
+              note: { type: "STRING", description: "Note explaining differential stay or items." },
+            },
+            required: ["name", "amount"],
+          },
+          description: "List of all participants involved in the split (including the host and friends).",
+        },
+      },
+      required: ["totalAmount", "merchantName", "participants"],
+    },
+  },
+  {
     name: "set_transaction_category",
-    description: "Assigns a category to a specific transaction in the ledger, with an option to persist a rule for the merchant.",
+    description: "Assigns a category to a specific transaction in the ledger, with optional scope ('single' for only this transaction, 'merchant' for all transactions from this merchant, 'similar' for all semantically similar charges).",
     parameters: {
       type: "OBJECT",
       properties: {
         transactionId: { type: "STRING", description: "PayPal transaction ID." },
-        category: { type: "STRING", description: "Category name." },
+        category: { type: "STRING", description: "Target category name." },
+        scope: {
+          type: "STRING",
+          enum: ["single", "merchant", "similar"],
+          description: "Scope of reclassification: 'single', 'merchant', or 'similar'.",
+        },
         rememberForMerchant: { type: "BOOLEAN", description: "Whether to always categorize this merchant into this category in the future." },
-        merchantName: { type: "STRING", description: "Merchant name if rememberForMerchant is true." },
+        merchantName: { type: "STRING", description: "Merchant name if rememberForMerchant or scope is used." },
       },
       required: ["transactionId", "category"],
     },
@@ -536,6 +594,32 @@ export async function executeAgentTool(
       for (const r of recipients) {
         const res = await paypalClient.dispatchInvoice(r);
         results.push(res);
+      }
+
+      // Persist to PostgreSQL if authenticated user
+      if (userId) {
+        try {
+          const totalDispatchedAmount = recipients.reduce((sum, r) => sum + r.amount, 0);
+          await prisma.splitRecord.create({
+            data: {
+              userId,
+              totalAmount: totalDispatchedAmount,
+              status: "SENT",
+              description: recipients[0]?.description || "Shared Bill Split",
+              items: {
+                create: results.map((inv, idx) => ({
+                  participantName: recipients[idx]?.name || "Recipient",
+                  participantEmail: recipients[idx]?.email || "",
+                  amount: recipients[idx]?.amount || 0,
+                  paypalInvoiceId: inv.invoiceId,
+                  status: "SENT",
+                })),
+              },
+            },
+          });
+        } catch (dbErr) {
+          console.warn("[Split Record DB Persistence Warning]", dbErr);
+        }
       }
 
       return {
@@ -1074,55 +1158,71 @@ export async function executeAgentTool(
       };
     }
 
+    case "propose_split_breakdown": {
+      const parsed = ProposeSplitBreakdownSchema.parse(safeArgs);
+      const effectiveUserId = userId || "demo_user";
+
+      // Auto-resolve known emails from Prisma contacts / transaction history
+      const resolvedParticipants = await Promise.all(
+        parsed.participants.map(async (p) => {
+          if (p.email && p.email.includes("@")) return p;
+          if (p.isHost || p.name.toLowerCase() === "you" || p.name.toLowerCase() === "me") {
+            return { ...p, isHost: true };
+          }
+          const contact = await resolveContact(p.name, effectiveUserId);
+          return {
+            ...p,
+            email: contact?.email || p.email || "",
+          };
+        })
+      );
+
+      // Extract non-host recipients for invoice dispatching
+      const recipients = resolvedParticipants
+        .filter((p) => !p.isHost && p.name.toLowerCase() !== "you" && p.name.toLowerCase() !== "me")
+        .map((p) => ({
+          name: p.name,
+          email: p.email || "",
+          amount: p.amount,
+          description: p.note || `${parsed.merchantName} shared split`,
+        }));
+
+      return {
+        action: "PROPOSE_SPLIT_BREAKDOWN",
+        type: "split_breakdown",
+        totalAmount: parsed.totalAmount,
+        merchant: parsed.merchantName,
+        transactionId: parsed.transactionId,
+        memo: parsed.memo || `${parsed.merchantName} shared expense`,
+        participants: resolvedParticipants,
+        recipients,
+        requiresConfirmation: true,
+        message: `Prepared split breakdown for ${parsed.merchantName} ($${parsed.totalAmount.toFixed(2)} total). Review allocations or adjust inline below before sending invoices.`,
+      };
+    }
+
     case "set_transaction_category": {
-      const { transactionId, category, rememberForMerchant, merchantName } =
+      const { transactionId, category, scope, rememberForMerchant, merchantName } =
         SetTransactionCategorySchema.parse(safeArgs);
       const effectiveUserId = userId || "demo_user";
 
-      const override = await prisma.transactionCategoryOverride.upsert({
-        where: {
-          userId_transactionId: {
-            userId: effectiveUserId,
-            transactionId,
-          },
-        },
-        update: { categoryName: category },
-        create: {
-          userId: effectiveUserId,
-          transactionId,
-          categoryName: category,
-        },
-      });
+      const effectiveScope = scope || (rememberForMerchant ? "merchant" : "single");
 
-      let ruleResult = null;
-      if (rememberForMerchant && merchantName) {
-        const norm = normalizeMerchant(merchantName);
-        ruleResult = await prisma.merchantCategoryRule.upsert({
-          where: {
-            userId_merchantPattern: {
-              userId: effectiveUserId,
-              merchantPattern: norm,
-            },
-          },
-          update: { categoryName: category, isAutoLearned: false },
-          create: {
-            userId: effectiveUserId,
-            merchantPattern: norm,
-            categoryName: category,
-            isAutoLearned: false,
-          },
-        });
-      }
+      const reclassResult = await reclassifyTransactionWithScope({
+        userId: effectiveUserId,
+        transactionId,
+        merchantName: merchantName || "Merchant",
+        targetCategory: category,
+        scope: effectiveScope,
+      });
 
       return {
         success: true,
-        overrideId: override.id,
+        scope: effectiveScope,
         transactionId,
         category,
-        rememberedMerchant: Boolean(ruleResult),
-        message: `Transaction ${transactionId} assigned to '${category}'${
-          ruleResult ? ` and saved persistent rule for '${merchantName}'.` : "."
-        }`,
+        updatedCount: reclassResult.updatedTransactionIds.length,
+        message: reclassResult.message,
       };
     }
 
