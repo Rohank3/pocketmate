@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate",
-    "seed:paypal": "tsx scripts/seed-sandbox-simulation.ts"
+    "seed:paypal": "tsx scripts/seed-sandbox-simulation.ts",
+    "clean:paypal": "tsx scripts/seed-sandbox-simulation.ts --clean"
   },
   "dependencies": {
     "@bryntum/scheduler-enterprise": "^8.0.0",

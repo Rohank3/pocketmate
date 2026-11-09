@@ -1,12 +1,13 @@
 /**
- * PocketMate — Two-Phase PayPal Sandbox Simulation Seeder
+ * PocketMate — Two-Phase PayPal Sandbox Simulation Seeder & Teardown Engine
  * 
- * Phase 1: Pre-Flight Health Check (Token, Scopes, Identity, API readiness)
- * Phase 2: Full Ecosystem Seeding (All 18 accounts across 4 clusters)
+ * Capabilities:
+ * - Pre-Flight Health Check (Token, Scopes, Identity, API readiness)
+ * - Full Ecosystem Seeding (45+ real-world transactions across all 18 accounts in 4 clusters)
+ * - Safe Simulation Teardown (--clean): Cancels/deletes sandbox invoices & resets local/Neon DB state
  * 
  * Target Sandbox App:
  *   Authenticates dynamically using PAYPAL_CLIENT_ID & PAYPAL_CLIENT_SECRET from .env.local
- *   Zero database hardcoding — all data is written directly to PayPal Sandbox REST APIs.
  */
 
 import fs from "fs";
@@ -120,7 +121,7 @@ async function createPaidInvoice(payload: SeedInvoicePayload): Promise<string> {
       }))
     : [
         {
-          name: payload.note,
+          name: payload.invoicerName || "Purchase Item",
           quantity: "1",
           unit_amount: {
             currency_code: "USD",
@@ -142,7 +143,7 @@ async function createPaidInvoice(payload: SeedInvoicePayload): Promise<string> {
     body: JSON.stringify({
       detail: {
         currency_code: "USD",
-        note: payload.note,
+        note: payload.note || undefined,
         invoice_date: dateStr,
       },
       invoicer: {
@@ -300,7 +301,6 @@ async function runPhase1Preflight(): Promise<boolean> {
     console.log("  [✓] OAuth Bearer Token:      SUCCESS");
     console.log(`  [✓] App ID:                  ${tokenData.app_id}`);
 
-    // Check specific required scopes
     const scopes = tokenData.scope || "";
     const hasInvoicing = scopes.includes("invoicing");
     const hasPayouts = scopes.includes("payouts");
@@ -312,7 +312,6 @@ async function runPhase1Preflight(): Promise<boolean> {
     console.log(`  [${hasReporting ? "✓" : "⚠️"}] Reporting Permissions:    ${hasReporting ? "ENABLED" : "MISSING"}`);
     console.log(`  [${hasDisputes ? "✓" : "⚠️"}] Disputes Permissions:     ${hasDisputes ? "ENABLED" : "MISSING"}`);
 
-    // Check App Account Identity
     const userRes = await fetch(`${baseUrl}/v1/identity/oauth2/userinfo?schema=paypalv1.1`, {
       headers: {
         Authorization: `Bearer ${cachedAccessToken}`,
@@ -335,7 +334,7 @@ async function runPhase1Preflight(): Promise<boolean> {
 }
 
 // -----------------------------------------------------------------------------
-// PHASE 2: Full Ecosystem Seeding
+// PHASE 2: Full Ecosystem Seeding (45+ Real-World Transactions)
 // -----------------------------------------------------------------------------
 async function runPhase2Seeding(): Promise<void> {
   console.log("==================================================================");
@@ -347,7 +346,7 @@ async function runPhase2Seeding(): Promise<void> {
   // ---------------------------------------------------------------------------
   // [1/4] CLUSTER 1: The Social & Expense-Split Circle (Dave Chen as Main User)
   // ---------------------------------------------------------------------------
-  console.log("\n[1/4] 🍕 Seeding Cluster 1: The Social & Expense-Split Circle...");
+  console.log("\n[1/4] 🍕 Seeding Cluster 1: The Social & Expense-Split Circle (Dave Chen)...");
 
   // 1. Grand Vista Hotel ($480.00, 2 days ago) — THE UNSPLIT TEST TARGET!
   console.log("  • Seeding $480 Grand Vista Hotel charge for Dave Chen (Unsplit test target)...");
@@ -357,7 +356,7 @@ async function runPhase2Seeding(): Promise<void> {
     recipientName: "Dave Chen",
     recipientEmail: "dave.chen.pm@personal.example.com",
     amount: 480.00,
-    note: "", // Real hotel card debits have no custom user note
+    note: "", // Real hotel card debits have no custom note
     daysAgo: 2,
     items: [
       { name: "Room Folio #89124", quantity: "1", unitPrice: 480.00 },
@@ -365,31 +364,61 @@ async function runPhase2Seeding(): Promise<void> {
   });
   console.log(`    ✓ Grand Vista Hotel ($480.00) seeded [ID: ${hotelId}] — Zero split invoices created.`);
   totalInjected++;
-  await sleep(300);
+  await sleep(250);
 
-  // 2. Antoine Moreau Cafe ($115.00, 4 days ago) — RECEIPT SURCHARGE AUDIT TARGET!
-  console.log("  • Seeding $115 Antoine Moreau Cafe charge with $95 itemized breakdown ($20 tip/fee audit)...");
+  // 2. Antoine Moreau Bistro ($130.00, 4 days ago) — RECEIPT SURCHARGE AUDIT TARGET!
+  // Item total = $115.00 ($100 items + $5 tax + $10 tip), charged = $130.00 (triggers $15 dispute/audit tool)
+  console.log("  • Seeding $130 Antoine Moreau Bistro charge with $115 receipt breakdown ($15 audit)...");
   const cafeId = await createPaidInvoice({
-    invoicerName: "Antoine Moreau Cafe",
+    invoicerName: "Antoine Moreau Bistro",
     invoicerEmail: "antoine.moreau.cafe@business.example.com",
     recipientName: "Dave Chen",
     recipientEmail: "dave.chen.pm@personal.example.com",
-    amount: 115.00,
-    note: "", // Real restaurant card debits have no user note
+    amount: 130.00,
+    note: "", // Real restaurant card debits have no custom note
     daysAgo: 4,
     items: [
-      { name: "Chef's Artisanal Dinner Entree", quantity: "2", unitPrice: 35.00 }, // $70.00
-      { name: "Handcrafted Cocktail / Wine", quantity: "2", unitPrice: 9.00 },    // $18.00
-      { name: "Praline Chocolate Torte", quantity: "1", unitPrice: 7.00 },        // $7.00
-      // Sum = $95.00, Total charged = $115.00 (Leaves $20 discrepancy for PocketMate Receipt Audit!)
+      { name: "Artisanal Dinner Entree", quantity: "2", unitPrice: 38.00 },  // $76.00
+      { name: "Handcrafted Cocktail", quantity: "2", unitPrice: 12.00 },     // $24.00
+      { name: "Praline Chocolate Torte", quantity: "1", unitPrice: 15.00 },   // $15.00
+      // Sum = $115.00, Total charged = $130.00 (Leaves $15 surcharge for PocketMate Receipt Audit!)
     ],
   });
-  console.log(`    ✓ Antoine Moreau Cafe ($115.00) seeded [ID: ${cafeId}].`);
+  console.log(`    ✓ Antoine Moreau Bistro ($130.00) seeded [ID: ${cafeId}].`);
   totalInjected++;
-  await sleep(300);
+  await sleep(250);
 
-  // 3. Bidirectional P2P Contact Graph for Dave Chen (Realistic Casual / Shorthand / Blank Notes)
-  console.log("  • Seeding bidirectional P2P transfers for Dynamic Contact Graph (real casual notes)...");
+  // 3. Everyday Consumer Purchases for Dave Chen (Groceries, Coffee, Transit, Shopping)
+  console.log("  • Seeding realistic everyday living expenses for Dave Chen...");
+  const daveDailyExpenses = [
+    { merchant: "Whole Foods Market", email: "billing@wholefoods.example.com", amount: 78.45, daysAgo: 1 },
+    { merchant: "Trader Joe's #521", email: "billing@traderjoes.example.com", amount: 42.10, daysAgo: 3 },
+    { merchant: "Starbucks Coffee #1042", email: "billing@starbucks.example.com", amount: 6.85, daysAgo: 2 },
+    { merchant: "Chipotle Mexican Grill", email: "billing@chipotle.example.com", amount: 16.40, daysAgo: 4 },
+    { merchant: "Uber *Trip SD", email: "receipts@uber.example.com", amount: 24.50, daysAgo: 2 },
+    { merchant: "Shell Oil 4819", email: "billing@shelloil.example.com", amount: 46.00, daysAgo: 5 },
+    { merchant: "Target Superstore", email: "billing@target.example.com", amount: 52.30, daysAgo: 5 },
+    { merchant: "Amazon.com* Purchases", email: "orders@amazon.example.com", amount: 34.99, daysAgo: 6 },
+    { merchant: "AMC Theatres Century", email: "tickets@amctheatres.example.com", amount: 32.00, daysAgo: 8 },
+  ];
+
+  for (const exp of daveDailyExpenses) {
+    await createPaidInvoice({
+      invoicerName: exp.merchant,
+      invoicerEmail: exp.email,
+      recipientName: "Dave Chen",
+      recipientEmail: "dave.chen.pm@personal.example.com",
+      amount: exp.amount,
+      note: "",
+      daysAgo: exp.daysAgo,
+    });
+    totalInjected++;
+    await sleep(150);
+  }
+  console.log(`    ✓ Seeded ${daveDailyExpenses.length} daily living transactions for Dave Chen.`);
+
+  // 4. Bidirectional P2P Contact Graph for Dave Chen (Realistic Casual & Shorthand Notes)
+  console.log("  • Seeding bidirectional P2P transfers for Dynamic Contact Graph...");
   const p2pTransfers: SeedPayoutPayload[] = [
     {
       recipientEmail: "mark.spencer.pm@personal.example.com",
@@ -415,7 +444,7 @@ async function runPhase2Seeding(): Promise<void> {
     {
       recipientEmail: "dave.chen.pm@personal.example.com",
       amount: 18.00,
-      note: "", // Left blank as people often do in real life
+      note: "", // Blank note as humans often do
       senderName: "Oliver Wright",
       daysAgo: 10,
     },
@@ -427,11 +456,25 @@ async function runPhase2Seeding(): Promise<void> {
       daysAgo: 8,
     },
     {
+      recipientEmail: "dave.chen.pm@personal.example.com",
+      amount: 12.50,
+      note: "lunch share",
+      senderName: "Leo Vance",
+      daysAgo: 4,
+    },
+    {
       recipientEmail: "sofia.martinez.food@personal.example.com",
       amount: 28.00,
       note: "groceries",
       senderName: "Dave Chen",
       daysAgo: 5,
+    },
+    {
+      recipientEmail: "dave.chen.pm@personal.example.com",
+      amount: 14.00,
+      note: "tacos 🌮",
+      senderName: "Sofia Martinez",
+      daysAgo: 2,
     },
   ];
 
@@ -439,11 +482,11 @@ async function runPhase2Seeding(): Promise<void> {
     await dispatchP2PTransfer(p);
     console.log(`    ✓ P2P: ${p.senderName} -> ${p.recipientEmail} ($${p.amount.toFixed(2)}) [note: "${p.note}"]`);
     totalInjected++;
-    await sleep(250);
+    await sleep(200);
   }
 
-  // 4. Recurring Subscriptions for Dave Chen (Standard Merchant Descriptors, No Notes)
-  console.log("  • Seeding recurring subscriptions for Dave Chen (raw descriptors, empty notes)...");
+  // 5. Recurring Subscriptions for Dave Chen (Autopay Signals)
+  console.log("  • Seeding recurring subscriptions for Dave Chen (Upcoming Bills signals)...");
   const daveSubscriptions = [
     { name: "Netflix.com", invoicer: "Netflix.com", amount: 19.99, daysList: [3, 33, 63] },
     { name: "Spotify USA", invoicer: "Spotify USA", amount: 16.99, daysList: [12, 42, 72] },
@@ -459,7 +502,7 @@ async function runPhase2Seeding(): Promise<void> {
         recipientName: "Dave Chen",
         recipientEmail: "dave.chen.pm@personal.example.com",
         amount: sub.amount,
-        note: "", // Card processors do not write notes on subscription debits
+        note: "",
         daysAgo: d,
       });
       totalInjected++;
@@ -480,7 +523,7 @@ async function runPhase2Seeding(): Promise<void> {
     recipientName: "Elena Weber Tech",
     recipientEmail: "elena.weber.tech@business.example.com",
     amount: 1200.00,
-    note: "Design retainer deposit - Invoice #101",
+    note: "Invoice #101",
     daysAgo: 20,
   });
   await createPaidInvoice({
@@ -489,12 +532,21 @@ async function runPhase2Seeding(): Promise<void> {
     recipientName: "Elena Weber Tech",
     recipientEmail: "elena.weber.tech@business.example.com",
     amount: 3400.00,
-    note: "Q3 Brand Identity & Web App Wireframes",
+    note: "Invoice #102 - Q3 Milestone",
     daysAgo: 5,
   });
-  console.log("    ✓ Alex Morgan Studio -> Elena Weber Tech (B2B invoices $1,200 & $3,400).");
-  totalInjected += 2;
-  await sleep(300);
+  await createPaidInvoice({
+    invoicerName: "Alex Morgan Studio",
+    invoicerEmail: "alex.morgan.studio@business.example.com",
+    recipientName: "Elena Weber Tech",
+    recipientEmail: "elena.weber.tech@business.example.com",
+    amount: 850.00,
+    note: "Invoice #103 - Design Systems Support",
+    daysAgo: 12,
+  });
+  console.log("    ✓ Alex Morgan Studio -> Elena Weber Tech (3 B2B Invoices: $1,200, $3,400, $850).");
+  totalInjected += 3;
+  await sleep(250);
 
   // Chloe Dubois Design -> Weiming Tan Ventures
   await createPaidInvoice({
@@ -503,14 +555,23 @@ async function runPhase2Seeding(): Promise<void> {
     recipientName: "Weiming Tan Ventures",
     recipientEmail: "weiming.tan.ventures@business.example.com",
     amount: 3800.00,
-    note: "Branding & Pitch Deck Retainer",
+    note: "Retainer 11/26",
     daysAgo: 14,
   });
-  console.log("    ✓ Chloe Dubois Design -> Weiming Tan Ventures ($3,800 retainer).");
-  totalInjected++;
-  await sleep(300);
+  await createPaidInvoice({
+    invoicerName: "Chloe Dubois Design",
+    invoicerEmail: "chloe.dubois.design@business.example.com",
+    recipientName: "Weiming Tan Ventures",
+    recipientEmail: "weiming.tan.ventures@business.example.com",
+    amount: 1500.00,
+    note: "Pitch Deck Polish",
+    daysAgo: 3,
+  });
+  console.log("    ✓ Chloe Dubois Design -> Weiming Tan Ventures ($3,800 & $1,500 retainers).");
+  totalInjected += 2;
+  await sleep(250);
 
-  // Lukas Becker Developer Subscriptions
+  // Lukas Becker Developer Subscriptions & Payouts
   const devSubs = [
     { name: "GitHub", amount: 10.00, daysList: [5, 35] },
     { name: "OpenAI", amount: 20.00, daysList: [10, 40] },
@@ -524,14 +585,24 @@ async function runPhase2Seeding(): Promise<void> {
         recipientName: "Lukas Becker",
         recipientEmail: "lukas.becker.dev@personal.example.com",
         amount: s.amount,
-        note: "", // Automated recurring debit
+        note: "",
         daysAgo: d,
       });
       totalInjected++;
       await sleep(150);
     }
   }
-  console.log("    ✓ Lukas Becker (Developer stack subscriptions: Copilot, ChatGPT, AWS).");
+  await createPaidInvoice({
+    invoicerName: "DevForge Labs",
+    invoicerEmail: "payments@devforge.example.com",
+    recipientName: "Lukas Becker",
+    recipientEmail: "lukas.becker.dev@personal.example.com",
+    amount: 1400.00,
+    note: "Frontend Contract Milestone #2",
+    daysAgo: 8,
+  });
+  totalInjected++;
+  console.log("    ✓ Lukas Becker (Dev subscriptions + $1,400 freelance client payout).");
 
   // Elena Weber Enterprise SaaS
   await createPaidInvoice({
@@ -540,7 +611,7 @@ async function runPhase2Seeding(): Promise<void> {
     recipientName: "Elena Weber Tech",
     recipientEmail: "elena.weber.tech@business.example.com",
     amount: 450.00,
-    note: "", // Standard cloud bill
+    note: "",
     daysAgo: 10,
   });
   await createPaidInvoice({
@@ -552,9 +623,18 @@ async function runPhase2Seeding(): Promise<void> {
     note: "",
     daysAgo: 12,
   });
-  console.log("    ✓ Elena Weber Tech (AWS $450 & Cloudflare $200 SaaS).");
-  totalInjected += 2;
-  await sleep(300);
+  await createPaidInvoice({
+    invoicerName: "Google Workspace",
+    invoicerEmail: "workspace@google.example.com",
+    recipientName: "Elena Weber Tech",
+    recipientEmail: "elena.weber.tech@business.example.com",
+    amount: 72.00,
+    note: "",
+    daysAgo: 16,
+  });
+  console.log("    ✓ Elena Weber Tech (AWS $450, Cloudflare $200, Google Workspace $72).");
+  totalInjected += 3;
+  await sleep(250);
 
   // ---------------------------------------------------------------------------
   // [3/4] CLUSTER 3: Enterprise & Budget Surveillance
@@ -562,50 +642,47 @@ async function runPhase2Seeding(): Promise<void> {
   console.log("\n[3/4] 📊 Seeding Cluster 3: Enterprise & Budget Surveillance...");
 
   // Sarah Jenkins (Executive High-Spend)
-  await createPaidInvoice({
-    invoicerName: "Nexus Retail Commercial",
-    invoicerEmail: "nexus.retail.us@business.example.com",
-    recipientName: "Sarah Jenkins",
-    recipientEmail: "sarah.jenkins.exec@personal.example.com",
-    amount: 1450.00,
-    note: "",
-    daysAgo: 6,
-  });
-  await createPaidInvoice({
-    invoicerName: "Grand Luxe Airways",
-    invoicerEmail: "billing@grandluxe.example.com",
-    recipientName: "Sarah Jenkins",
-    recipientEmail: "sarah.jenkins.exec@personal.example.com",
-    amount: 850.00,
-    note: "",
-    daysAgo: 18,
-  });
-  console.log("    ✓ Sarah Jenkins (Executive spend: Nexus Hardware $1,450 & Flight $850).");
-  totalInjected += 2;
-  await sleep(300);
+  const sarahCharges = [
+    { merchant: "Nexus Retail Commercial", email: "nexus.retail.us@business.example.com", amount: 1450.00, daysAgo: 6 },
+    { merchant: "Grand Luxe Airways", email: "billing@grandluxe.example.com", amount: 850.00, daysAgo: 18 },
+    { merchant: "The Capital Grille", email: "dining@capitalgrille.example.com", amount: 240.00, daysAgo: 4 },
+    { merchant: "Marriott Downtown Marquis", email: "billing@marriott.example.com", amount: 380.00, daysAgo: 14 },
+  ];
+  for (const c of sarahCharges) {
+    await createPaidInvoice({
+      invoicerName: c.merchant,
+      invoicerEmail: c.email,
+      recipientName: "Sarah Jenkins",
+      recipientEmail: "sarah.jenkins.exec@personal.example.com",
+      amount: c.amount,
+      note: "",
+      daysAgo: c.daysAgo,
+    });
+    totalInjected++;
+    await sleep(150);
+  }
+  console.log("    ✓ Sarah Jenkins (Executive spend: Hardware $1,450, Flight $850, Dining $240, Hotel $380).");
 
   // Daan Vandijk Logistics
-  await createPaidInvoice({
-    invoicerName: "Nexus Retail Commercial",
-    invoicerEmail: "nexus.retail.us@business.example.com",
-    recipientName: "Daan Vandijk Logistics",
-    recipientEmail: "daan.vandijk.logistics@business.example.com",
-    amount: 2300.00,
-    note: "",
-    daysAgo: 8,
-  });
-  await createPaidInvoice({
-    invoicerName: "Fleet Fuel Services",
-    invoicerEmail: "billing@fleetfuel.example.com",
-    recipientName: "Daan Vandijk Logistics",
-    recipientEmail: "daan.vandijk.logistics@business.example.com",
-    amount: 620.00,
-    note: "",
-    daysAgo: 14,
-  });
-  console.log("    ✓ Daan Vandijk Logistics (Nexus Hardware $2,300 & Fleet Fuel $620).");
-  totalInjected += 2;
-  await sleep(300);
+  const daanCharges = [
+    { merchant: "Nexus Retail Commercial", email: "nexus.retail.us@business.example.com", amount: 2300.00, daysAgo: 8 },
+    { merchant: "Fleet Fuel Services", email: "billing@fleetfuel.example.com", amount: 620.00, daysAgo: 14 },
+    { merchant: "Interstate Highway Tolls", email: "billing@tolls.example.com", amount: 145.00, daysAgo: 9 },
+  ];
+  for (const c of daanCharges) {
+    await createPaidInvoice({
+      invoicerName: c.merchant,
+      invoicerEmail: c.email,
+      recipientName: "Daan Vandijk Logistics",
+      recipientEmail: "daan.vandijk.logistics@business.example.com",
+      amount: c.amount,
+      note: "",
+      daysAgo: c.daysAgo,
+    });
+    totalInjected++;
+    await sleep(150);
+  }
+  console.log("    ✓ Daan Vandijk Logistics (Nexus Hardware $2,300, Fleet Fuel $620, Tolls $145).");
 
   // ---------------------------------------------------------------------------
   // [4/4] CLUSTER 4: Isolated Real-World Archetypes
@@ -622,8 +699,17 @@ async function runPhase2Seeding(): Promise<void> {
     note: "",
     daysAgo: 15,
   });
-  console.log("    ✓ Camille Laurent (Art Gallery Purchase $1,850).");
-  totalInjected++;
+  await createPaidInvoice({
+    invoicerName: "Louvre Museum Boutique",
+    invoicerEmail: "boutique@louvre.example.com",
+    recipientName: "Camille Laurent",
+    recipientEmail: "camille.laurent.art@personal.example.com",
+    amount: 120.00,
+    note: "",
+    daysAgo: 7,
+  });
+  console.log("    ✓ Camille Laurent (Sculpture $1,850 & Museum Boutique $120).");
+  totalInjected += 2;
 
   // Liam Wilson
   await createPaidInvoice({
@@ -635,19 +721,19 @@ async function runPhase2Seeding(): Promise<void> {
     note: "",
     daysAgo: 11,
   });
-  console.log("    ✓ Liam Wilson (Music gear repair $180).");
-  totalInjected++;
+  await createPaidInvoice({
+    invoicerName: "Sweetwater Music Audio",
+    invoicerEmail: "orders@sweetwater.example.com",
+    recipientName: "Liam Wilson",
+    recipientEmail: "liam.wilson.music@personal.example.com",
+    amount: 65.00,
+    note: "",
+    daysAgo: 5,
+  });
+  console.log("    ✓ Liam Wilson (Guitar amp repair $180 & cables $65).");
+  totalInjected += 2;
 
   // Kenji Sato
-  await createPaidInvoice({
-    invoicerName: "Discord",
-    invoicerEmail: "billing@discord.example.com",
-    recipientName: "Kenji Sato",
-    recipientEmail: "kenji.sato.gaming@personal.example.com",
-    amount: 9.99,
-    note: "",
-    daysAgo: 8,
-  });
   await createPaidInvoice({
     invoicerName: "Steam Store",
     invoicerEmail: "help@steampowered.example.com",
@@ -657,8 +743,26 @@ async function runPhase2Seeding(): Promise<void> {
     note: "",
     daysAgo: 12,
   });
-  console.log("    ✓ Kenji Sato (Gaming & Discord subscriptions).");
-  totalInjected += 2;
+  await createPaidInvoice({
+    invoicerName: "Nintendo eShop",
+    invoicerEmail: "billing@nintendo.example.com",
+    recipientName: "Kenji Sato",
+    recipientEmail: "kenji.sato.gaming@personal.example.com",
+    amount: 39.99,
+    note: "",
+    daysAgo: 6,
+  });
+  await createPaidInvoice({
+    invoicerName: "Discord",
+    invoicerEmail: "billing@discord.example.com",
+    recipientName: "Kenji Sato",
+    recipientEmail: "kenji.sato.gaming@personal.example.com",
+    amount: 9.99,
+    note: "",
+    daysAgo: 8,
+  });
+  console.log("    ✓ Kenji Sato (Steam $69.99, Nintendo $39.99, Discord $9.99).");
+  totalInjected += 3;
 
   // Marco Rossi
   await createPaidInvoice({
@@ -679,24 +783,145 @@ async function runPhase2Seeding(): Promise<void> {
     note: "",
     daysAgo: 14,
   });
-  console.log("    ✓ Marco Rossi (Eurostar $220 & eSIM $35).");
-  totalInjected += 2;
+  await createPaidInvoice({
+    invoicerName: "Hotel Roma Termini",
+    invoicerEmail: "reservations@hotelroma.example.com",
+    recipientName: "Marco Rossi",
+    recipientEmail: "marco.rossi.travel@personal.example.com",
+    amount: 152.00,
+    note: "",
+    daysAgo: 6,
+  });
+  console.log("    ✓ Marco Rossi (Eurostar $220, Airalo eSIM $35, Hotel Roma $152).");
+  totalInjected += 3;
 
   console.log("\n==================================================================");
   console.log(`  🎉 SIMULATION SEEDING COMPLETE! Injected ${totalInjected} records.`);
   console.log("==================================================================");
   console.log("• Dave Chen's $480 Grand Vista Hotel charge is seeded as COMPLETED.");
   console.log("• Zero split invoices exist for the hotel — ready for your live chat split test!");
-  console.log("• Antoine Moreau Cafe has $115 charge with $95 receipt (ready for Receipt Audit).");
+  console.log("• Antoine Moreau Bistro has $130 charge with $115 receipt ($15 surcharge audit ready).");
   console.log("• Dynamic contact graph is armed with bidirectional P2P payment history.");
   console.log("• All 18 users have authentic transaction records in PayPal Sandbox.\n");
+}
+
+// -----------------------------------------------------------------------------
+// TEARDOWN / CLEANUP FUNCTION (--clean / --teardown)
+// -----------------------------------------------------------------------------
+async function runCleanup(): Promise<void> {
+  console.log("\n==================================================================");
+  console.log("  🧹 POCKETMATE SANDBOX SIMULATION TEARDOWN & CLEANUP");
+  console.log("==================================================================");
+
+  const token = await getAccessToken();
+
+  // 1. Fetch existing invoices from PayPal Sandbox
+  console.log("• Fetching active sandbox invoices from PayPal Developer Sandbox...");
+  const listRes = await fetch(`${baseUrl}/v2/invoicing/invoices?page_size=100&total_required=true`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (listRes.ok) {
+    const listData = await listRes.json();
+    const items = listData.items || [];
+    console.log(`  Found ${items.length} sandbox invoices.`);
+
+    let cleaned = 0;
+    for (const inv of items) {
+      const invId = inv.id;
+      const status = inv.status;
+
+      // Invoices in DRAFT can be deleted directly
+      if (status === "DRAFT") {
+        const delRes = await fetch(`${baseUrl}/v2/invoicing/invoices/${encodeURIComponent(invId)}`, {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (delRes.ok) {
+          console.log(`  ✓ Deleted DRAFT invoice: ${invId}`);
+          cleaned++;
+        }
+      }
+      // Invoices in SENT / SCHEDULED / UNPAID can be cancelled
+      else if (status === "SENT" || status === "SCHEDULED" || status === "UNPAID") {
+        const cancelRes = await fetch(`${baseUrl}/v2/invoicing/invoices/${encodeURIComponent(invId)}/cancel`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            subject: "Simulation Teardown",
+            note: "Cancelled during test simulation reset.",
+            send_to_recipient: false,
+          }),
+        });
+        if (cancelRes.ok) {
+          console.log(`  ✓ Cancelled SENT invoice: ${invId}`);
+          cleaned++;
+        }
+      }
+      // Invoices in PAID / MARKED_AS_PAID can be refunded
+      else if (status === "PAID" || status === "MARKED_AS_PAID") {
+        const refundRes = await fetch(`${baseUrl}/v2/invoicing/invoices/${encodeURIComponent(invId)}/refunds`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            method: "PAYPAL",
+            refund_date: new Date().toISOString().split("T")[0],
+            amount: inv.amount,
+            note: "Simulation reset refund",
+          }),
+        });
+        if (refundRes.ok) {
+          console.log(`  ✓ Refunded settled invoice: ${invId}`);
+          cleaned++;
+        }
+      }
+      await sleep(100);
+    }
+    console.log(`  Total sandbox invoices cleaned/cancelled/refunded: ${cleaned}`);
+  }
+
+  // 2. Clean Neon PostgreSQL Database records (Prisma)
+  console.log("\n• Purging local/Neon DB state (Chat, Categories, Contacts, Overrides)...");
+  try {
+    const { prisma } = await import("@/lib/db");
+    const [delMessages, delThreads, delOverrides, delRules] = await Promise.all([
+      prisma.chatMessage.deleteMany({}),
+      prisma.chatThread.deleteMany({}),
+      prisma.transactionCategoryOverride.deleteMany({}),
+      prisma.merchantCategoryRule.deleteMany({}),
+    ]);
+    console.log(`  ✓ Cleared ${delMessages.count} chat messages, ${delThreads.count} threads.`);
+    console.log(`  ✓ Cleared ${delOverrides.count} category overrides, ${delRules.count} merchant rules.`);
+    await prisma.$disconnect();
+  } catch (err) {
+    console.warn("  ℹ️ DB purge note:", err instanceof Error ? err.message : err);
+  }
+
+  console.log("\n✨ Teardown complete! Environment and state are reset.\n");
 }
 
 // -----------------------------------------------------------------------------
 // Orchestration Entry Point
 // -----------------------------------------------------------------------------
 async function main() {
+  const isClean = process.argv.includes("--clean") || process.argv.includes("--teardown");
   const isVerifyOnly = process.argv.includes("--verify-only");
+
+  if (isClean) {
+    await runCleanup();
+    return;
+  }
 
   const passed = await runPhase1Preflight();
   if (!passed) {
