@@ -40,13 +40,12 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Determine account role
-    const isBusiness =
-      userEmail.includes("business") ||
-      userEmail.includes("merchant") ||
-      userEmail.includes("retail") ||
-      userEmail.includes("studio") ||
-      userEmail.includes("ventures");
+    // Determine account role strictly via database persona and registered industry (no email sniffing)
+    const userRecord = await prisma.user.findUnique({
+      where: { email: userEmail },
+      select: { persona: true, industry: true },
+    });
+    const isBusiness = userRecord?.persona === "BUSINESS" || Boolean(userRecord?.industry);
 
     // Scope enforcement: personal accounts are strictly restricted to their own transactions
     const activeScope = isBusiness && scopeParam === "all" ? "all" : "personal";

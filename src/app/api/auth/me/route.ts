@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
         name: user.name || "PayPal Sandbox User",
         email: user.email,
         persona: user.persona,
+        industry: user.industry,
         avatar: (user.name || user.email)
           .split(" ")
           .map((n) => n[0])
@@ -53,5 +54,35 @@ export async function GET(req: NextRequest) {
     }
     console.error("[Auth Me API Error]", error);
     return NextResponse.json({ error: "Failed to fetch user session" }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const cookie = req.cookies.get("pocketmate_user")?.value;
+    if (!cookie) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const verified = verifySessionCookie(cookie);
+    if (!verified?.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await req.json();
+    const { persona, industry } = body;
+
+    const updated = await prisma.user.update({
+      where: { email: verified.email },
+      data: {
+        ...(persona ? { persona } : {}),
+        ...(industry ? { industry } : {}),
+      },
+    });
+
+    return NextResponse.json({ success: true, user: updated });
+  } catch (error) {
+    console.error("[Update User Profile Error]", error);
+    return NextResponse.json({ error: "Failed to update profile" }, { status: 500 });
   }
 }

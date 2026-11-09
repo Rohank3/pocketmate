@@ -11,17 +11,50 @@ export interface CategorizedTransactionResult {
   id: string;
   category: string;
   confidence: number;
-  source: "override" | "merchant_rule" | "subscription_match" | "gemini_ai" | "fallback_heuristic" | "uncategorized";
+  source: "override" | "merchant_rule" | "industry_rule" | "subscription_match" | "gemini_ai" | "fallback_heuristic" | "uncategorized";
   matchedRuleId?: string;
   reasoning?: string;
 }
 
 export interface CategorizationContext {
   userId: string;
+  industry?: string | null;
+  persona?: string;
   activeCategories?: Array<{ id: string; name: string }>;
   merchantRules?: Array<{ id: string; merchantPattern: string; categoryName: string }>;
   overrides?: Array<{ id: string; transactionId: string; categoryName: string }>;
 }
+
+export const INDUSTRY_TAXONOMY_RULES: Record<string, Array<{ pattern: RegExp; category: string }>> = {
+  TECH_SAAS: [
+    { pattern: /aws|google cloud|azure|vercel|github|datadog|mongodb|render|cloudflare|digitalocean/i, category: "Cloud Infrastructure" },
+    { pattern: /openai|anthropic|stripe|twilio|sendgrid|postman|sentry/i, category: "API & Dev Services" },
+    { pattern: /slack|zoom|notion|linear|jira|atlassian|figma/i, category: "Software & SaaS Tools" },
+  ],
+  ECOMMERCE_RETAIL: [
+    { pattern: /ups|fedex|usps|dhl|shipstation|packing|shipping/i, category: "Shipping & Fulfillment" },
+    { pattern: /shopify|stripe|klarna|square|paypal|woocommerce/i, category: "Payment Processing Fees" },
+    { pattern: /warehouse|storage|inventory|supplier|packaging/i, category: "Cost of Goods Sold" },
+  ],
+  HOSPITALITY_FOOD: [
+    { pattern: /wholefoods|trader|us foods|sysco|restaurant depot|meat|produce|baking|coffee|dairy/i, category: "Kitchen Inventory & COGS" },
+    { pattern: /square|toast|clover|pos|linens|dishwashing|cutlery/i, category: "Restaurant Operating Costs" },
+    { pattern: /inspection|liquor|food safety|permit/i, category: "Compliance & Licensing" },
+  ],
+  CREATIVE_STUDIO: [
+    { pattern: /adobe|figma|canva|envato|shutterstock|midjourney|sketch/i, category: "Design Tools & Assets" },
+    { pattern: /b&h|adorama|camera|lens|lighting|audio|microphone/i, category: "Equipment & Production" },
+    { pattern: /dropbox|frame\.io|vimeo|wetransfer/i, category: "Client Deliverables & Storage" },
+  ],
+  CONSULTING_SERVICES: [
+    { pattern: /uber|lyft|airline|delta|united|hotel|marriott|hilton|travel/i, category: "Client Travel & Lodging" },
+    { pattern: /zoom|calendly|docusign|linkedin|research/i, category: "Professional Subscriptions" },
+  ],
+  HEALTHCARE: [
+    { pattern: /medical|pharmacy|supplies|lab|quest|sterilization/i, category: "Medical Supplies" },
+    { pattern: /hipaa|epic|ehr|emr|practice/i, category: "Clinical Software" },
+  ],
+};
 
 const KNOWN_SUBSCRIPTION_KEYWORDS: Array<{ pattern: RegExp; canonicalCategory: string }> = [
   { pattern: /aws|amazon web services/i, canonicalCategory: "Utilities" },
@@ -53,7 +86,11 @@ export function normalizeMerchant(name: string): string {
  * Loads categorization context (categories, overrides, merchant rules) from database.
  */
 export async function loadUserCategorizationContext(userId: string): Promise<CategorizationContext> {
-  const [activeCategories, merchantRules, overrides] = await Promise.all([
+  const [user, activeCategories, merchantRules, overrides] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { industry: true, persona: true },
+    }).catch(() => null),
     prisma.budgetCategory.findMany({
       where: { userId },
       select: { id: true, name: true },
@@ -71,6 +108,8 @@ export async function loadUserCategorizationContext(userId: string): Promise<Cat
 
   return {
     userId,
+    industry: user?.industry || null,
+    persona: user?.persona || "GENERAL",
     activeCategories,
     merchantRules,
     overrides,
@@ -152,6 +191,34 @@ export async function categorizeTransactionsBatch(
       }
     }
 
+    // 2.5. Industry-Specific Taxonomy Rule matching (if business account has registered industry)
+    if (context.industry && INDUSTRY_TAXONOMY_RULES[context.industry]) {
+      const industryRules = INDUSTRY_TAXONOMY_RULES[context.industry];
+      let matchedIndustryCat: string | null = null;
+      for (const ir of industryRules) {
+        if (ir.pattern.test(tx.merchantName) || (tx.note && ir.pattern.test(tx.note))) {
+          const found = categoryNames.find(
+            (c) =>
+              c.toLowerCase() === ir.category.toLowerCase() ||
+              c.toLowerCase().includes(ir.category.toLowerCase().split(" ")[0])
+          );
+          matchedIndustryCat = found || ir.category;
+          break;
+        }
+      }
+
+      if (matchedIndustryCat) {
+        results.set(tx.id, {
+          id: tx.id,
+          category: matchedIndustryCat,
+          confidence: 0.96,
+          source: "industry_rule",
+          reasoning: `Matched registered ${context.industry} industry taxonomy rule.`,
+        });
+        continue;
+      }
+    }
+
     // 3. Known subscription provider matching
     let subscriptionCategory: string | null = null;
     for (const sub of KNOWN_SUBSCRIPTION_KEYWORDS) {
@@ -190,7 +257,8 @@ export async function categorizeTransactionsBatch(
       const aiResults = await classifyWithGeminiZeroShot(
         unclassifiedForAI,
         categoryNames,
-        context.userId
+        context.userId,
+        context.industry
       );
 
       for (const [txId, res] of aiResults.entries()) {
@@ -223,7 +291,8 @@ export async function categorizeTransactionsBatch(
 async function classifyWithGeminiZeroShot(
   transactions: TransactionForCategorization[],
   availableCategories: string[],
-  userId: string
+  userId: string,
+  industry?: string | null
 ): Promise<Map<string, CategorizedTransactionResult>> {
   const apiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY_SECONDARY;
   const results = new Map<string, CategorizedTransactionResult>();
@@ -237,7 +306,7 @@ async function classifyWithGeminiZeroShot(
   const prompt = `
 You are PocketMate's Transaction Categorization Intelligence.
 Categorize each financial transaction into ONE of the Available Categories below.
-
+${industry ? `REGISTERED BUSINESS INDUSTRY: ${industry}. Contextualize expenditures through the accounting and operational lens of this specific industry.\n` : ""}
 AVAILABLE CATEGORIES:
 [${categoryListStr}]
 
