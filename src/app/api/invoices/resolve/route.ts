@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedUser, getUserIdFromRequest } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 
 const InvoiceResolutionSchema = z.object({
@@ -86,7 +87,14 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 2. Update SplitItem status in DB
+    // 2. Update SplitItem status and record rich resolution info in DB
+    const effectivePaid =
+      action === "pay_adjusted" && adjustedAmount
+        ? adjustedAmount
+        : action === "pay"
+        ? (splitItem?.amount || originalAmount)
+        : 0;
+
     if (splitItem) {
       let newStatus: "PAID" | "CANCELLED" = "PAID";
       if (action === "decline") {
@@ -97,11 +105,37 @@ export async function POST(req: NextRequest) {
         where: { id: splitItem.id },
         data: {
           status: newStatus,
-          amount: action === "pay_adjusted" && adjustedAmount ? adjustedAmount : splitItem.amount,
+          amount: effectivePaid > 0 ? effectivePaid : splitItem.amount,
         },
       });
 
-      // Update SplitRecord if all items are settled
+      // Update SplitRecord.itemsJson with structured resolution metadata
+      const rawItems = (splitItem.splitRecord.itemsJson as Array<Record<string, unknown>>) || [];
+      const updatedItems = rawItems.map((item) => {
+        const matchesEmail =
+          item.participantEmail &&
+          ((item.participantEmail as string).toLowerCase() === payerEmail.toLowerCase() ||
+           (item.participantEmail as string).toLowerCase() === (splitItem.participantEmail || "").toLowerCase());
+        const matchesName =
+          item.participantName &&
+          (item.participantName as string).toLowerCase() === splitItem.participantName.toLowerCase();
+
+        if (matchesEmail || matchesName) {
+          return {
+            ...item,
+            amountPaid: effectivePaid,
+            settledReason: reason || (action === "pay" ? "Paid in full" : "Declined"),
+            status: newStatus,
+            isAdjusted: action === "pay_adjusted",
+            originalAmount: item.amount || splitItem.amount,
+            difference: (Number(item.amount) || splitItem.amount) - effectivePaid,
+            invoiceId,
+            settledAt: new Date().toISOString(),
+          };
+        }
+        return item;
+      });
+
       const remainingUnpaid = await prisma.splitItem.count({
         where: {
           splitRecordId: splitItem.splitRecordId,
@@ -109,12 +143,13 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      if (remainingUnpaid === 0) {
-        await prisma.splitRecord.update({
-          where: { id: splitItem.splitRecordId },
-          data: { status: "SETTLED" },
-        });
-      }
+      await prisma.splitRecord.update({
+        where: { id: splitItem.splitRecordId },
+        data: {
+          itemsJson: updatedItems as unknown as Prisma.InputJsonValue,
+          status: remainingUnpaid === 0 ? "SETTLED" : "SENT",
+        },
+      });
     }
 
     // 3. Construct high-visibility resolution notification message for the organizer
@@ -183,6 +218,26 @@ export async function POST(req: NextRequest) {
         });
       }
 
+      // Construct action card metadata for dispute resolution / reinvocation
+      const resolutionCardData =
+        action === "pay_adjusted" || action === "decline"
+          ? {
+              action: "DISPUTE_RESOLUTION",
+              type: "dispute_resolution",
+              invoiceId,
+              splitItemId: splitItem?.id,
+              splitRecordId: splitItem?.splitRecordId,
+              splitDescription: effectiveDescription,
+              payerName,
+              payerEmail,
+              originalAmount: effectiveOriginal,
+              adjustedAmount: action === "pay_adjusted" ? (adjustedAmount || 0) : 0,
+              difference: Math.max(0, effectiveOriginal - (action === "pay_adjusted" ? (adjustedAmount || 0) : 0)),
+              reason: reason || (action === "pay_adjusted" ? "Adjusted payment" : "Declined invoice"),
+              status: action === "pay_adjusted" ? "adjusted" : "declined",
+            }
+          : null;
+
       // Insert resolution notification message directly into organizer's thread
       await prisma.chatMessage.create({
         data: {
@@ -190,6 +245,7 @@ export async function POST(req: NextRequest) {
           threadId: targetThread.id,
           role: "assistant",
           content: notificationContent,
+          toolCallsJson: resolutionCardData ? (resolutionCardData as unknown as Prisma.InputJsonValue) : undefined,
           persona: "GENERAL",
         },
       });
