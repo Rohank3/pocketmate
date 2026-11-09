@@ -4,6 +4,7 @@ export interface UserAccount {
   email: string;
   avatar: string;
   persona: "GENERAL" | "FREELANCER" | "BUSINESS";
+  industry?: string | null;
 }
 
 export interface ContactRecord {

@@ -13,6 +13,16 @@ enum PersonaType {
   BUSINESS
 }
 
+enum IndustryType {
+  TECH_SAAS
+  ECOMMERCE_RETAIL
+  HOSPITALITY_FOOD
+  CREATIVE_STUDIO
+  CONSULTING_SERVICES
+  HEALTHCARE
+  GENERAL_BUSINESS
+}
+
 enum InvoiceStatus {
   DRAFT
   SENT
@@ -34,6 +44,7 @@ model User {
   name             String?
   avatarUrl        String?
   persona          PersonaType      @default(GENERAL)
+  industry         IndustryType?
   confidenceThreshold Float          @default(0.80)
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
