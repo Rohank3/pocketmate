@@ -21,6 +21,8 @@ export interface PayPalTransaction {
   amount: number;
   currency: string;
   merchantName: string;
+  memo?: string;
+  splitAllocation?: "self" | "split" | "owed";
   timestamp: string;
   feeAmount?: number;
   debtorName?: string;
@@ -272,6 +274,16 @@ class PayPalSandboxClient {
           const feeObj = (info.fee_amount as Record<string, string>) || {};
           const payerEmail = ((payer.email_address as string) || "").toLowerCase().trim();
 
+          const rawNote = (
+            (info.transaction_note as string) ||
+            (info.transaction_subject as string) ||
+            ""
+          ).trim();
+          const memo = rawNote || undefined;
+          const isSplit = Boolean(
+            rawNote && (rawNote.toLowerCase().includes("split") || rawNote.toLowerCase().includes("share"))
+          );
+
           const merchantName =
             (payerName.alternate_full_name as string) ||
             (info.transaction_subject as string) ||
@@ -294,9 +306,15 @@ class PayPalSandboxClient {
             amount: Math.abs(parseFloat(amountObj.value || "0.00")),
             currency: amountObj.currency_code || "USD",
             merchantName,
+            memo,
+            splitAllocation: isSplit ? "split" : "self",
             timestamp: (info.transaction_initiation_date as string) || new Date().toISOString(),
             feeAmount: parseFloat(feeObj.value || "0.00"),
-            debtorName: debtor,
+            debtorName: isSplit
+              ? debtor && debtor !== "Dave" && debtor !== "dave" && debtor !== "Self"
+                ? debtor
+                : "Shared Split"
+              : "100% Self",
             recipientEmail: payerEmail,
           });
         }
@@ -356,12 +374,13 @@ class PayPalSandboxClient {
         else if (inv.status === "DRAFT") status = "DRAFT";
         else if (inv.status === "CANCELLED" || inv.status === "REFUNDED") status = "CANCELLED";
 
-        // Derive authentic merchant name dynamically
+        // Extract memo/note separately from payee/merchant
         const invItems = (inv.items as Array<{ name?: string }>) || [];
-        let merchantName = (detail.note as string) || invItems[0]?.name;
-        
+        const rawNote = (detail.note as string)?.trim() || "";
+
+        let merchantName = "";
         const invoicer = inv.invoicer as { name?: { full_name?: string; given_name?: string; surname?: string }; email_address?: string } | undefined;
-        if (!merchantName && invoicer) {
+        if (invoicer) {
           if (invoicer.name?.full_name) {
             merchantName = invoicer.name.full_name;
           } else if (invoicer.name?.given_name) {
@@ -403,9 +422,28 @@ class PayPalSandboxClient {
           }
         }
 
+        if (!merchantName && invItems[0]?.name) {
+          merchantName = invItems[0].name;
+        }
+
+        if (!merchantName && rawNote) {
+          merchantName = rawNote;
+        }
+
         if (!merchantName) {
           merchantName = "PayPal Commercial Transfer";
         }
+
+        let memo = rawNote || undefined;
+        if (!memo && invItems[0]?.name && invItems[0].name.toLowerCase() !== merchantName.toLowerCase()) {
+          memo = invItems[0].name;
+        }
+
+        // Determine if this is a shared split or 100% self personal expense
+        const isSplit =
+          Boolean(memo && (memo.toLowerCase().includes("split") || memo.toLowerCase().includes("share"))) ||
+          merchantName.toLowerCase().includes("split") ||
+          detail.note?.toString().toLowerCase().includes("split");
 
         const invId = inv.id as string;
 
@@ -415,10 +453,12 @@ class PayPalSandboxClient {
           amount: amountVal,
           currency: amountObj.currency_code || (detail.currency_code as string) || "USD",
           merchantName,
+          memo,
+          splitAllocation: isSplit ? "split" : "self",
           timestamp: detail.invoice_date
             ? new Date(detail.invoice_date as string).toISOString()
             : new Date().toISOString(),
-          debtorName: recipientName,
+          debtorName: isSplit ? (recipientName !== "Dave" && recipientName !== "dave" ? recipientName : "Shared Split") : "100% Self",
           recipientEmail,
         });
       }

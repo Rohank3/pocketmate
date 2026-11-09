@@ -100,12 +100,25 @@ export async function GET(req: NextRequest) {
       else if (t.status === "PENDING" || t.status === "DRAFT") rowStatus = "pending";
       else if (t.status === "DISPUTED") rowStatus = "disputed";
 
+      const isSplit =
+        t.splitAllocation === "split" ||
+        Boolean(t.memo && (t.memo.toLowerCase().includes("split") || t.memo.toLowerCase().includes("share"))) ||
+        t.merchantName.toLowerCase().includes("split");
+
+      const debtorDisplay = isSplit
+        ? t.debtorName && !t.debtorName.toLowerCase().includes("self") && t.debtorName !== "Shared Split"
+          ? t.debtorName
+          : "Shared Split"
+        : "100% Self";
+
       return {
         id: t.id,
         date: displayDate,
         merchant: t.merchantName,
+        memo: t.memo,
+        splitAllocation: isSplit ? "split" : "self",
         category,
-        debtor_name: t.debtorName || "Self",
+        debtor_name: debtorDisplay,
         amount: t.amount,
         status: rowStatus,
       };
