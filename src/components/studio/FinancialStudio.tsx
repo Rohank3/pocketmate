@@ -153,7 +153,7 @@ export default function FinancialStudio({
         const d = t.debtor_name.toLowerCase().trim();
         if (d === "—" || d === "self" || d.includes("self") || d === "unassigned") return false;
         if (currentName && (d === currentName || d.includes(currentName))) return false;
-        return t.splitAllocation === "split" || (!d.includes("self") && d !== "shared split");
+        return t.isOutgoingSplit || t.splitAllocation === "split" || (!d.includes("self") && d !== "shared split");
       })
       .forEach((t) => {
         const name = t.debtor_name;

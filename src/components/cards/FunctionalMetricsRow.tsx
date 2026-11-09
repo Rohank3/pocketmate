@@ -213,6 +213,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
 
     const map = new Map<string, DebtorSummary>();
     const settledList: SettledSplitSummary[] = [];
+    const seenInvoiceIds = new Set<string>();
 
     // 1. Incorporate SplitRecord & SplitItem entities
     splits.forEach((split) => {
@@ -231,6 +232,10 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
           (currentEmail && pEmailLower === currentEmail)
         ) {
           return;
+        }
+
+        if (item.paypalInvoiceId) {
+          seenInvoiceIds.add(item.paypalInvoiceId);
         }
 
         // If item is PAID or CANCELLED, collect it into settledList
@@ -290,30 +295,50 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
       });
     });
 
-    // 2. Incorporate pending transaction debtors (excluding self / current user)
-    const debtorPendingTxs = transactions.filter((t) => {
-      if (!t.debtor_name) return false;
-      const d = t.debtor_name.toLowerCase().trim();
-      if (d === "—" || d === "self" || d.includes("self") || d === "unassigned") return false;
-      if (currentName && (d === currentName || d.includes(currentName))) return false;
-      return (
-        (t.status === "pending" || t.status === "disputed" || t.status === "unresolved") &&
-        (t.splitAllocation === "split" || (!d.includes("self") && d !== "shared split"))
-      );
-    });
+    // 2. Incorporate live PayPal API transactions & invoices
+    transactions.forEach((t) => {
+      // Avoid double-counting if already ingested via split item
+      if (seenInvoiceIds.has(t.id)) return;
 
-    debtorPendingTxs.forEach((t) => {
-      const name = t.debtor_name;
-      const existing = map.get(name);
-      if (existing) {
-        existing.totalOwed += t.amount;
-        existing.count += 1;
-      } else {
-        map.set(name, {
-          name,
-          totalOwed: t.amount,
-          count: 1,
-          sampleMerchant: t.merchant,
+      const d = (t.debtor_name || "").toLowerCase().trim();
+      if (!d || d === "—" || d === "self" || d.includes("self") || d === "unassigned") return;
+      if (currentName && (d === currentName || d.includes(currentName))) return;
+
+      const isPendingSplit =
+        (t.status === "pending" || t.status === "disputed" || t.status === "unresolved") &&
+        (t.isOutgoingSplit === true || t.splitAllocation === "split" || (!d.includes("self") && d !== "shared split"));
+
+      if (isPendingSplit) {
+        const name = t.debtor_name || "Friend";
+        const existing = map.get(name);
+        if (existing) {
+          existing.totalOwed += t.amount;
+          existing.count += 1;
+        } else {
+          map.set(name, {
+            name,
+            totalOwed: t.amount,
+            count: 1,
+            sampleMerchant: t.memo || t.merchant || "Shared Split Expense",
+          });
+        }
+      } else if (
+        (t.status === "settled" || (t.status as string) === "COMPLETED") &&
+        (t.isOutgoingSplit === true || (t.direction === "incoming" && t.splitAllocation === "split"))
+      ) {
+        // Collect settled invoices from live PayPal API
+        settledList.push({
+          id: t.id,
+          splitRecordId: t.id,
+          name: t.debtor_name || "Friend",
+          email: "",
+          amountPaid: t.amount,
+          originalAmount: t.amount,
+          difference: 0,
+          isAdjusted: false,
+          status: "PAID",
+          sampleMerchant: t.memo || t.merchant || "Shared Split Settlement",
+          invoiceId: t.id,
         });
       }
     });
