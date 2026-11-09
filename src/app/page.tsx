@@ -1026,7 +1026,7 @@ export default function Home() {
             id: `asst_audit_${Date.now()}`,
             role: "assistant",
             content: `🧾 **Gemini Vision Receipt Audit Results**\n\n• **Merchant:** ${auditData.parsedReceipt.merchantName}\n• **Extracted Subtotal:** $${auditData.parsedReceipt.subtotal.toFixed(2)}\n• **Tax & Tip:** $${(auditData.parsedReceipt.tax + auditData.parsedReceipt.tip).toFixed(2)}\n• **Calculated Total:** $${audit.receiptTotal.toFixed(2)}\n• **Settled PayPal Charge:** $${audit.chargedTotal.toFixed(2)}\n\n⚠️ **Mismatch Detected:** An unrecognized difference of **$${audit.discrepancyAmount.toFixed(2)}** was billed by the merchant.\n\nWould you like me to initiate a PayPal dispute for the $${audit.discrepancyAmount.toFixed(2)} unauthorized surcharge, or split the settled $${audit.chargedTotal.toFixed(2)} evenly?`,
-            toolBadges: ["tool: audit_receipt_against_transaction", "gemini-2.5-pro-vision"],
+            toolBadges: ["tool: audit_receipt_against_transaction", "gemini-3.5-flash-vision"],
           },
         ]);
       } else {
@@ -1106,10 +1106,13 @@ export default function Home() {
   // User pending incoming bill detection for top alert banner
   const currentUserNameLower = (currentUser?.name || "").toLowerCase().trim();
   const debtorPendingTxs = transactions.filter(
-    (t) => (t.status === "pending" || t.status === "disputed" || t.status === "unresolved") && t.debtor_name !== "Self"
+    (t) =>
+      (t.status === "pending" || t.status === "disputed" || t.status === "unresolved") &&
+      (t.id.startsWith("INV2-") || (t.debtor_name && !t.debtor_name.toLowerCase().includes("self")))
   );
   const userOwedBills = currentUser
     ? debtorPendingTxs.filter((t) => {
+        if (t.id.startsWith("INV2-") && t.status === "pending") return true;
         const d = (t.debtor_name || "").toLowerCase().trim();
         return currentUserNameLower && d.length > 0 && (d.includes(currentUserNameLower) || currentUserNameLower.includes(d));
       })
@@ -1220,7 +1223,7 @@ export default function Home() {
                 </span>
               </div>
               <p className="text-xs text-zinc-400 mt-0.5">
-                <span className="text-zinc-200 font-semibold">{firstUnpaidBill.merchant}</span> &mdash; Pending allocation of <span className="text-emerald-400 font-mono font-bold">${firstUnpaidBill.amount.toFixed(2)} USD</span> for {firstUnpaidBill.debtor_name}.
+                <span className="text-zinc-200 font-semibold">{firstUnpaidBill.merchant}</span> &mdash; Pending allocation of <span className="text-emerald-400 font-mono font-bold">${firstUnpaidBill.amount.toFixed(2)} USD</span> for {currentUser?.name || "Dave Chen"}.
               </p>
             </div>
           </div>
