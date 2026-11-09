@@ -34,6 +34,7 @@ export interface ChatMessageItem {
 interface ChatPanelProps {
   messages: ChatMessageItem[];
   isLoading: boolean;
+  categories?: Array<{ id?: string; name: string; color?: string }>;
   threads?: ChatThreadItem[];
   activeThreadId?: string | null;
   onSendMessage: (text: string) => void;
@@ -55,6 +56,7 @@ interface ChatPanelProps {
 export const ChatPanel: React.FC<ChatPanelProps> = ({
   messages,
   isLoading,
+  categories = [],
   threads = [],
   activeThreadId = null,
   onSendMessage,
@@ -609,6 +611,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               {m.actionCard && (
                 <ActionConfirmCard
                   cardData={m.actionCard}
+                  categories={categories}
                   onConfirm={onConfirmAction}
                   onCancel={() => onCancelAction?.(m.id)}
                   onAssignCategory={onAssignCategory}

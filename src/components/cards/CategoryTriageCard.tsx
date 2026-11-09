@@ -17,6 +17,7 @@ export interface CategoryTriageCardData {
 
 interface CategoryTriageCardProps {
   cardData: CategoryTriageCardData;
+  categories?: Array<{ id?: string; name: string; color?: string }>;
   onAssignCategory?: (
     transactionId: string,
     merchantName: string,
@@ -28,24 +29,29 @@ interface CategoryTriageCardProps {
 
 export const CategoryTriageCard: React.FC<CategoryTriageCardProps> = ({
   cardData,
+  categories = [],
   onAssignCategory,
   onCancel,
 }) => {
   const [loadingScope, setLoadingScope] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [targetCategory, setTargetCategory] = useState<string>(cardData.suggestedCategory || "General");
+  const [isCustom, setIsCustom] = useState<boolean>(false);
+  const [customCategory, setCustomCategory] = useState<string>("");
 
   const handleScopeSelect = async (scope: "single" | "merchant" | "similar") => {
     if (!onAssignCategory) return;
+    const effectiveCategory = (isCustom && customCategory.trim()) ? customCategory.trim() : (targetCategory || "General");
     setLoadingScope(scope);
 
     try {
       const res = await onAssignCategory(
         cardData.transactionId,
         cardData.merchantName,
-        cardData.suggestedCategory,
+        effectiveCategory,
         scope
       );
-      setSuccessMessage(res.message || `Categorized as '${cardData.suggestedCategory}'.`);
+      setSuccessMessage(res.message || `Categorized as '${effectiveCategory}'.`);
     } catch (err) {
       console.error("[Category Triage Error]", err);
     } finally {
@@ -107,11 +113,68 @@ export const CategoryTriageCard: React.FC<CategoryTriageCardProps> = ({
           )}
         </div>
 
-        <div className="flex items-center gap-2 text-xs">
-          <span className="text-zinc-400">Target Category:</span>
-          <span className="px-2 py-0.5 rounded-md font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-            {cardData.suggestedCategory}
-          </span>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs py-1">
+          <span className="text-zinc-400 font-medium">Target Category:</span>
+          {!isCustom ? (
+            <div className="flex items-center gap-2">
+              <select
+                value={targetCategory}
+                onChange={(e) => {
+                  if (e.target.value === "__custom__") {
+                    setIsCustom(true);
+                  } else {
+                    setTargetCategory(e.target.value);
+                  }
+                }}
+                className="bg-zinc-950 border border-zinc-700 hover:border-zinc-500 text-emerald-300 font-semibold px-2.5 py-1 rounded-lg focus:outline-none focus:border-emerald-500 cursor-pointer text-xs transition-colors"
+                aria-label="Select target category"
+              >
+                <option value={cardData.suggestedCategory}>
+                  {cardData.suggestedCategory} (Suggested)
+                </option>
+                {categories
+                  .filter((c) => c.name.toLowerCase() !== (cardData.suggestedCategory || "").toLowerCase())
+                  .map((c) => (
+                    <option key={c.id || c.name} value={c.name} className="bg-zinc-900 text-zinc-200">
+                      {c.name}
+                    </option>
+                  ))}
+                <option value="__custom__" className="bg-zinc-900 text-blue-400 font-medium">
+                  + Enter Custom Category...
+                </option>
+              </select>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <input
+                type="text"
+                placeholder="Category name..."
+                value={customCategory}
+                onChange={(e) => setCustomCategory(e.target.value)}
+                className="bg-zinc-950 border border-emerald-500/60 text-zinc-100 text-xs px-2 py-1 rounded-lg focus:outline-none"
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (customCategory.trim()) {
+                    setTargetCategory(customCategory.trim());
+                  }
+                  setIsCustom(false);
+                }}
+                className="px-2 py-1 text-[11px] bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-md cursor-pointer transition-colors"
+              >
+                Set
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsCustom(false)}
+                className="px-1.5 py-1 text-[11px] text-zinc-400 hover:text-zinc-200 cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
         </div>
 
         {cardData.reasoning && (

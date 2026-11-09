@@ -634,22 +634,6 @@ export async function reclassifyTransactionWithScope(
       },
     });
 
-    // Also update any individual overrides for this transaction to match
-    await prisma.transactionCategoryOverride.upsert({
-      where: {
-        userId_transactionId: {
-          userId,
-          transactionId,
-        },
-      },
-      update: { categoryName: targetCategory },
-      create: {
-        userId,
-        transactionId,
-        categoryName: targetCategory,
-      },
-    });
-
     // Find all matching transactions from the provided ledger
     const matchingTxIds = allTransactions
       .filter((t) => {
@@ -662,11 +646,29 @@ export async function reclassifyTransactionWithScope(
       matchingTxIds.push(transactionId);
     }
 
+    // Persist overrides for ALL matching transactions from this merchant so stale overrides don't block rule
+    for (const mId of matchingTxIds) {
+      await prisma.transactionCategoryOverride.upsert({
+        where: {
+          userId_transactionId: {
+            userId,
+            transactionId: mId,
+          },
+        },
+        update: { categoryName: targetCategory },
+        create: {
+          userId,
+          transactionId: mId,
+          categoryName: targetCategory,
+        },
+      });
+    }
+
     return {
       scope: "merchant",
       updatedTransactionIds: matchingTxIds,
       ruleCreated: { pattern: normMerchant, category: targetCategory },
-      message: `Rule saved: All past & future transactions from '${merchantName}' are now categorized as '${targetCategory}'.`,
+      message: `Rule saved: All past & future transactions from '${merchantName}' (${matchingTxIds.length} items) are now categorized as '${targetCategory}'.`,
     };
   }
 
@@ -691,10 +693,18 @@ export async function reclassifyTransactionWithScope(
     },
   });
 
-  const updatedIds: string[] = [transactionId];
+  // Include primary transaction and all identical-merchant transactions
+  const sameMerchantTxIds = allTransactions
+    .filter((t) => {
+      const norm = normalizeMerchant(t.merchantName);
+      return norm === normMerchant || norm.includes(normMerchant) || normMerchant.includes(norm);
+    })
+    .map((t) => t.id);
+
+  const updatedIdsSet = new Set<string>([transactionId, ...sameMerchantTxIds]);
 
   // 2. Identify candidate transactions from the ledger that might be semantically similar
-  const otherTxs = allTransactions.filter((t) => t.id !== transactionId);
+  const otherTxs = allTransactions.filter((t) => !updatedIdsSet.has(t.id));
 
   if (otherTxs.length > 0) {
     const similarTxIds = await findSemanticallySimilarTransactionsWithGemini(
@@ -704,26 +714,28 @@ export async function reclassifyTransactionWithScope(
     );
 
     for (const simId of similarTxIds) {
-      updatedIds.push(simId);
-      const txObj = otherTxs.find((t) => t.id === simId);
-      if (txObj) {
-        // Persist override for similar transaction
-        await prisma.transactionCategoryOverride.upsert({
-          where: {
-            userId_transactionId: {
-              userId,
-              transactionId: simId,
-            },
-          },
-          update: { categoryName: targetCategory },
-          create: {
-            userId,
-            transactionId: simId,
-            categoryName: targetCategory,
-          },
-        });
-      }
+      updatedIdsSet.add(simId);
     }
+  }
+
+  const updatedIds = Array.from(updatedIdsSet);
+
+  // 3. Persist overrides for ALL matching and similar transactions across the user's ledger
+  for (const id of updatedIds) {
+    await prisma.transactionCategoryOverride.upsert({
+      where: {
+        userId_transactionId: {
+          userId,
+          transactionId: id,
+        },
+      },
+      update: { categoryName: targetCategory },
+      create: {
+        userId,
+        transactionId: id,
+        categoryName: targetCategory,
+      },
+    });
   }
 
   return {
@@ -732,8 +744,8 @@ export async function reclassifyTransactionWithScope(
     similarCount: updatedIds.length - 1,
     ruleCreated: { pattern: normMerchant, category: targetCategory },
     message: `Applied '${targetCategory}' to '${merchantName}' and reclassified ${
-      updatedIds.length - 1
-    } semantically similar transactions across your ledger.`,
+      updatedIds.length
+    } matching & semantically similar transactions across your ledger.`,
   };
 }
 

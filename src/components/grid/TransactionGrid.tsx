@@ -419,6 +419,7 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
           pagination={true}
           paginationPageSize={10}
           paginationPageSizeSelector={[10, 20, 50]}
+          getRowId={(params) => params.data.id}
           onRowClicked={(event) => {
             if (event.data && onSelectRow) {
               onSelectRow(event.data);

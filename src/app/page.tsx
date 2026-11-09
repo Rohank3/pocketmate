@@ -749,6 +749,7 @@ export default function Home() {
         setTransactions((prev) =>
           prev.map((t) => (idSet.has(t.id) ? { ...t, category: targetCategory } : t))
         );
+        void loadCategories();
       }
       return data;
     } catch (err) {
@@ -1291,6 +1292,7 @@ export default function Home() {
           <ChatPanel
             messages={messages}
             isLoading={isLoading}
+            categories={categories}
             threads={threads}
             activeThreadId={activeThreadId}
             onSendMessage={handleSendMessage}
