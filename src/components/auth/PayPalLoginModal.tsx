@@ -1,8 +1,18 @@
 "use client";
 
 import React, { useState } from "react";
-import { X, LogOut, ExternalLink, HelpCircle, AlertTriangle, ShieldCheck, ArrowRight, Lock } from "lucide-react";
+import { X, LogOut, ExternalLink, HelpCircle, AlertTriangle, ShieldCheck, ArrowRight, Lock, Building2 } from "lucide-react";
 import { UserAccount } from "@/types/sandboxUser";
+
+const INDUSTRY_OPTIONS = [
+  { value: "GENERAL_BUSINESS", label: "General Business / Diverse" },
+  { value: "TECH_SAAS", label: "Technology, SaaS & Software" },
+  { value: "ECOMMERCE_RETAIL", label: "E-Commerce & Retail" },
+  { value: "HOSPITALITY_FOOD", label: "Hospitality, Food & Beverage" },
+  { value: "CREATIVE_STUDIO", label: "Creative, Media & Design Studio" },
+  { value: "CONSULTING_SERVICES", label: "Consulting & Professional Services" },
+  { value: "HEALTHCARE", label: "Healthcare & Clinical Services" },
+];
 
 interface PayPalLoginModalProps {
   isOpen: boolean;
@@ -20,8 +30,29 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
 }) => {
   const [showOAuthHelp, setShowOAuthHelp] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [selectedIndustry, setSelectedIndustry] = useState<string>(currentUser?.industry || "GENERAL_BUSINESS");
+  const [isUpdatingIndustry, setIsUpdatingIndustry] = useState(false);
 
   if (!isOpen) return null;
+
+  const handleIndustryChange = async (newIndustry: string) => {
+    setSelectedIndustry(newIndustry);
+    setIsUpdatingIndustry(true);
+    try {
+      await fetch("/api/auth/me", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ industry: newIndustry, persona: "BUSINESS" }),
+      });
+      if (currentUser && onLogin) {
+        onLogin({ ...currentUser, industry: newIndustry });
+      }
+    } catch (err) {
+      console.warn("[Industry Update Error]", err);
+    } finally {
+      setIsUpdatingIndustry(false);
+    }
+  };
 
   const handleLogoutAction = async () => {
     setIsLoggingOut(true);
@@ -96,6 +127,34 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
                 <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-blue-500/10 text-blue-300 border border-blue-500/20 shrink-0">
                   {currentUser.persona}
                 </span>
+              </div>
+
+              {/* Registered Business Industry Selection */}
+              <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-zinc-200">
+                    <Building2 className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Registered Business Industry</span>
+                  </div>
+                  {isUpdatingIndustry && (
+                    <span className="text-[10px] text-blue-400 animate-pulse">Saving...</span>
+                  )}
+                </div>
+                <p className="text-[11px] text-zinc-400">
+                  PocketMate aligns automated categorization directly with your industry&apos;s chart of accounts.
+                </p>
+                <select
+                  aria-label="Registered Business Industry"
+                  value={selectedIndustry}
+                  onChange={(e) => void handleIndustryChange(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-zinc-100 focus:outline-hidden focus:border-blue-500 cursor-pointer"
+                >
+                  {INDUSTRY_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="flex flex-col sm:flex-row gap-2">
