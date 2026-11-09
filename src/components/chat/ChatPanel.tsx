@@ -15,6 +15,7 @@ import {
   Check,
   MessageSquare,
   Clock,
+  ChevronDown,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { ActionConfirmCard, ActionCardData } from "../cards/ActionConfirmCard";
@@ -61,13 +62,31 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
   const [editTitleValue, setEditTitleValue] = useState("");
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
+  const [showScrollBottomButton, setShowScrollBottomButton] = useState(false);
 
+  const feedContainerRef = useRef<HTMLDivElement>(null);
+  const isUserScrolledUp = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const handleFeedScroll = () => {
+    if (!feedContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = feedContainerRef.current;
+    const distanceFromBottom = scrollHeight - (scrollTop + clientHeight);
+    const scrolledUp = distanceFromBottom > 80;
+    isUserScrolledUp.current = scrolledUp;
+    setShowScrollBottomButton(scrolledUp);
+  };
+
+  const scrollToBottom = (force = false) => {
+    if (!feedContainerRef.current) return;
+    if (force || !isUserScrolledUp.current) {
+      feedContainerRef.current.scrollTo({
+        top: feedContainerRef.current.scrollHeight,
+        behavior: force ? "auto" : "smooth",
+      });
+    }
   };
 
   useEffect(() => {
@@ -103,7 +122,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     if (!inputText.trim() || isLoading) return;
     const msg = inputText;
     setInputText("");
+    isUserScrolledUp.current = false;
+    setShowScrollBottomButton(false);
     onSendMessage(msg);
+    setTimeout(() => scrollToBottom(true), 50);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -435,7 +457,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       )}
 
       {/* Messages Feed */}
-      <div className="flex-1 p-3 sm:p-4 overflow-y-auto space-y-4">
+      <div
+        ref={feedContainerRef}
+        onScroll={handleFeedScroll}
+        className="flex-1 p-3 sm:p-4 overflow-y-auto space-y-4 relative"
+      >
         {messages.map((m) => (
           <div
             key={m.id}
@@ -533,6 +559,23 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Floating Scroll to Bottom Button */}
+      {showScrollBottomButton && (
+        <button
+          type="button"
+          onClick={() => {
+            isUserScrolledUp.current = false;
+            setShowScrollBottomButton(false);
+            scrollToBottom(true);
+          }}
+          aria-label="Scroll to newest messages"
+          className="absolute bottom-20 right-6 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-800/95 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-200 hover:text-white border border-zinc-700 text-xs shadow-xl backdrop-blur-sm transition-all cursor-pointer animate-in fade-in slide-in-from-bottom-2 duration-150"
+        >
+          <ChevronDown className="w-3.5 h-3.5 text-emerald-400" />
+          <span>Latest</span>
+        </button>
+      )}
 
       {/* Input Area */}
       <form onSubmit={handleSubmit} className="p-3 bg-zinc-900/90 border-t border-zinc-800">

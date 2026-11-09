@@ -379,25 +379,20 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
                   <button
                     type="button"
                     onClick={() => setSelectedScope("single")}
-                    className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer flex items-start gap-3 ${
+                    className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer flex items-center gap-3 ${
                       selectedScope === "single"
                         ? "bg-blue-950/40 border-blue-500 ring-1 ring-blue-500"
                         : "bg-zinc-950/60 border-zinc-800 hover:border-zinc-700"
                     }`}
                   >
-                    <div className="p-1.5 rounded-lg bg-blue-500/10 text-blue-400 shrink-0 mt-0.5">
+                    <div className="p-1.5 rounded-lg bg-blue-500/10 text-blue-400 shrink-0">
                       <Tag className="w-3.5 h-3.5" />
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-zinc-100">Only this one transaction</span>
-                        {selectedScope === "single" && (
-                          <CheckCircle2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                        )}
-                      </div>
-                      <p className="text-[11px] text-zinc-400 mt-0.5 leading-snug">
-                        Overrides just this specific receipt (${activeTxForEdit.amount.toFixed(2)}). Leaves future transactions from {activeTxForEdit.merchant} untouched.
-                      </p>
+                    <div className="flex-1 min-w-0 flex items-center justify-between">
+                      <span className="text-xs font-semibold text-zinc-100">Only this transaction</span>
+                      {selectedScope === "single" && (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                      )}
                     </div>
                   </button>
 
@@ -405,27 +400,22 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
                   <button
                     type="button"
                     onClick={() => setSelectedScope("merchant")}
-                    className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer flex items-start gap-3 ${
+                    className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer flex items-center gap-3 ${
                       selectedScope === "merchant"
                         ? "bg-emerald-950/40 border-emerald-500 ring-1 ring-emerald-500"
                         : "bg-zinc-950/60 border-zinc-800 hover:border-zinc-700"
                     }`}
                   >
-                    <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 shrink-0 mt-0.5">
+                    <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 shrink-0">
                       <Store className="w-3.5 h-3.5" />
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-zinc-100">
-                          All &apos;{activeTxForEdit.merchant}&apos; transactions
-                        </span>
-                        {selectedScope === "merchant" && (
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                        )}
-                      </div>
-                      <p className="text-[11px] text-zinc-400 mt-0.5 leading-snug">
-                        Saves a persistent rule. Automatically reclassifies all past and future purchases from {activeTxForEdit.merchant}.
-                      </p>
+                    <div className="flex-1 min-w-0 flex items-center justify-between">
+                      <span className="text-xs font-semibold text-zinc-100 truncate">
+                        All &apos;{activeTxForEdit.merchant}&apos; transactions
+                      </span>
+                      {selectedScope === "merchant" && (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      )}
                     </div>
                   </button>
 
@@ -433,25 +423,20 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
                   <button
                     type="button"
                     onClick={() => setSelectedScope("similar")}
-                    className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer flex items-start gap-3 ${
+                    className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer flex items-center gap-3 ${
                       selectedScope === "similar"
                         ? "bg-purple-950/40 border-purple-500 ring-1 ring-purple-500"
                         : "bg-zinc-950/60 border-zinc-800 hover:border-zinc-700"
                     }`}
                   >
-                    <div className="p-1.5 rounded-lg bg-purple-500/10 text-purple-400 shrink-0 mt-0.5">
+                    <div className="p-1.5 rounded-lg bg-purple-500/10 text-purple-400 shrink-0">
                       <Layers className="w-3.5 h-3.5" />
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-zinc-100">All similar kind of transactions</span>
-                        {selectedScope === "similar" && (
-                          <CheckCircle2 className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                        )}
-                      </div>
-                      <p className="text-[11px] text-zinc-400 mt-0.5 leading-snug">
-                        Prompts Gemini AI to scan the ledger and reclassify all other transactions that share similar vendor semantics.
-                      </p>
+                    <div className="flex-1 min-w-0 flex items-center justify-between">
+                      <span className="text-xs font-semibold text-zinc-100">All similar transactions</span>
+                      {selectedScope === "similar" && (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                      )}
                     </div>
                   </button>
                 </div>

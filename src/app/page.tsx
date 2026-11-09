@@ -868,6 +868,7 @@ export default function Home() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let calledMutatingTool = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -918,6 +919,15 @@ export default function Home() {
                 )
               );
             } else if (event === "tool_call" && data.name) {
+              if (
+                data.name === "auto_categorize_transactions" ||
+                data.name === "set_transaction_category" ||
+                data.name === "set_merchant_category_rule" ||
+                data.name === "log_category_expense" ||
+                data.name === "initiate_paypal_dispute"
+              ) {
+                calledMutatingTool = true;
+              }
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === assistantMsgId
@@ -941,6 +951,10 @@ export default function Home() {
             } else if (event === "persona_update" && data.persona) {
               setActivePersona(data.persona);
             } else if (event === "done") {
+              if (calledMutatingTool) {
+                void loadTransactions(activeScope);
+                void loadCategories();
+              }
               if (activeThreadId) {
                 setThreads((prev) =>
                   prev.map((t) =>
@@ -970,7 +984,7 @@ export default function Home() {
     } finally {
       setIsLoading(false);
     }
-  }, [activePersona, activeThreadId, currentUser, messages]);
+  }, [activePersona, activeScope, activeThreadId, currentUser, loadCategories, loadTransactions, messages]);
 
   const handleUploadReceipt = async (file: File) => {
     setIsLoading(true);
@@ -1252,7 +1266,7 @@ export default function Home() {
       {/* Main Split-View Workspace */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5 min-h-[580px]">
         {/* Left Column: Conversational Orchestration Agent (5 Cols) */}
-        <div className="lg:col-span-5 h-[620px] lg:h-auto">
+        <div className="lg:col-span-5 flex flex-col min-h-0 h-[640px] lg:h-[740px]">
           <ChatPanel
             messages={messages}
             isLoading={isLoading}
@@ -1269,7 +1283,7 @@ export default function Home() {
         </div>
 
         {/* Right Column: Transactions Ledger, Visual Insights & Upcoming Due Calendar (7 Cols) */}
-        <div className="lg:col-span-7 flex flex-col h-[650px] lg:h-auto gap-3">
+        <div className="lg:col-span-7 flex flex-col min-h-0 h-[640px] lg:h-[740px] gap-3">
           {/* View Tab Switcher */}
           <div className="flex items-center justify-between bg-zinc-900/90 border border-zinc-800 p-1.5 rounded-xl">
             <div className="flex flex-wrap items-center gap-1.5">
