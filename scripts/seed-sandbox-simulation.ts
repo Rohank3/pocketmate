@@ -174,7 +174,7 @@ async function createPaidInvoice(payload: SeedInvoicePayload): Promise<string> {
   }
 
   const invoiceData = await draftRes.json();
-  const invoiceId = invoiceData.id || draftRes.headers.get("location")?.split("/").pop();
+  const invoiceId = invoiceData.id || invoiceData.href?.split("/").pop() || draftRes.headers.get("location")?.split("/").pop();
 
   if (!invoiceId) {
     throw new Error("PayPal returned no invoice ID in response.");
@@ -381,7 +381,7 @@ async function runPhase2Seeding(): Promise<void> {
       { name: "Artisanal Dinner Entree", quantity: "2", unitPrice: 38.00 },  // $76.00
       { name: "Handcrafted Cocktail", quantity: "2", unitPrice: 12.00 },     // $24.00
       { name: "Praline Chocolate Torte", quantity: "1", unitPrice: 15.00 },   // $15.00
-      // Sum = $115.00, Total charged = $130.00 (Leaves $15 surcharge for PocketMate Receipt Audit!)
+      { name: "Merchant Surcharge & Service Fee", quantity: "1", unitPrice: 15.00 }, // $15.00 -> Total $130.00
     ],
   });
   console.log(`    ✓ Antoine Moreau Bistro ($130.00) seeded [ID: ${cafeId}].`);

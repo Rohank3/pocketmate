@@ -305,57 +305,138 @@ class PayPalSandboxClient {
       console.warn("[PayPal Reporting API Warning]", err);
     }
 
-    // 2. Fetch live invoices from PayPal Invoicing API
+    // 2. Fetch live invoices from PayPal Invoicing API with pagination
     try {
-      const invUrl = `${this.baseUrl}/v2/invoicing/invoices?total_required=true&page_size=50`;
-      const invRes = await fetch(invUrl, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
+      let page = 1;
+      let totalPages = 1;
+      const allInvoices: Array<Record<string, unknown>> = [];
 
-      if (invRes.ok) {
+      do {
+        const invUrl = `${this.baseUrl}/v2/invoicing/invoices?total_required=true&page_size=100&page=${page}`;
+        const invRes = await fetch(invUrl, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (!invRes.ok) break;
+
         const invData = await invRes.json();
-        const items = invData.items || [];
+        totalPages = (invData.total_pages as number) || 1;
+        const pageItems = (invData.items as Array<Record<string, unknown>>) || [];
+        allInvoices.push(...pageItems);
+        page++;
+      } while (page <= totalPages && page <= 5);
 
-        for (const inv of items) {
-          const detail = inv.detail || {};
-          const recipient = inv.primary_recipients?.[0]?.billing_info || {};
-          const recipientEmail = (recipient.email_address || "").toLowerCase().trim();
-          const recipientName = recipient.name?.given_name || recipientEmail || "Unassigned";
-          const amountVal = parseFloat(inv.amount?.value || detail.payment_term?.due_amount?.value || "0.00");
+      const merchantDomainMap: Record<string, string> = {
+        "grandvistahotel.com": "Grand Vista Hotel",
+        "billing@grandvistahotel.com": "Grand Vista Hotel",
+        "antoine.moreau.cafe@business.example.com": "Antoine Moreau Bistro",
+        "wholefoods.example.com": "Whole Foods Market",
+        "billing@wholefoods.example.com": "Whole Foods Market",
+        "traderjoes.example.com": "Trader Joe's",
+        "billing@traderjoes.example.com": "Trader Joe's",
+        "starbucks.example.com": "Starbucks Coffee",
+        "billing@starbucks.example.com": "Starbucks Coffee",
+        "chipotle.example.com": "Chipotle Mexican Grill",
+        "billing@chipotle.example.com": "Chipotle Mexican Grill",
+        "uber.example.com": "Uber",
+        "receipts@uber.example.com": "Uber",
+        "shelloil.example.com": "Shell Oil",
+        "billing@shelloil.example.com": "Shell Oil",
+        "target.example.com": "Target",
+        "billing@target.example.com": "Target",
+        "amazon.example.com": "Amazon.com",
+        "orders@amazon.example.com": "Amazon.com",
+        "amctheatres.example.com": "AMC Theatres",
+        "tickets@amctheatres.example.com": "AMC Theatres",
+        "netflixcom@billing.sandbox": "Netflix",
+        "spotifyusa@billing.sandbox": "Spotify",
+        "googlecloudstorage@billing.sandbox": "Google Cloud Storage",
+        "equinoxfitness@billing.sandbox": "Equinox Fitness",
+        "settlement@pocketmate.sandbox": "PocketMate Settlement",
+        "hotelroma.example.com": "Hotel Roma",
+        "reservations@hotelroma.example.com": "Hotel Roma",
+        "airalo.example.com": "Airalo eSIM",
+        "billing@airalo.example.com": "Airalo eSIM",
+        "eurostar.example.com": "Eurostar",
+        "tickets@eurostar.example.com": "Eurostar",
+      };
 
-          // If filtering by email, match recipient or user
-          if (targetEmailClean) {
-            const matchesRecipient = recipientEmail && (recipientEmail === targetEmailClean || recipientEmail.includes(targetEmailClean));
-            const nameFrag = targetEmailClean.split("@")[0].replace(/[._]/g, " ");
-            const matchesName = recipientName.toLowerCase().includes(nameFrag);
-            if (!matchesRecipient && !matchesName) {
-              continue;
+      for (const inv of allInvoices) {
+        const detail = (inv.detail as Record<string, unknown>) || {};
+        const primaryRecipients = (inv.primary_recipients as Array<{ billing_info?: { email_address?: string; name?: { given_name?: string } } }>) || [];
+        const recipient = primaryRecipients[0]?.billing_info || {};
+        const recipientEmail = (recipient.email_address || "").toLowerCase().trim();
+        const recipientName = recipient.name?.given_name || recipientEmail || "Unassigned";
+        
+        const amountObj = (inv.amount as { value?: string; currency_code?: string }) || {};
+        const paymentTerm = (detail.payment_term as { due_amount?: { value?: string } }) || {};
+        const amountVal = parseFloat(amountObj.value || paymentTerm.due_amount?.value || "0.00");
+
+        // If filtering by email, match recipient or user
+        if (targetEmailClean) {
+          const matchesRecipient = recipientEmail && (recipientEmail === targetEmailClean || recipientEmail.includes(targetEmailClean));
+          const nameFrag = targetEmailClean.split("@")[0].replace(/[._]/g, " ");
+          const matchesName = recipientName.toLowerCase().includes(nameFrag);
+          if (!matchesRecipient && !matchesName) {
+            continue;
+          }
+        }
+
+        let status: "COMPLETED" | "PENDING" | "DRAFT" | "DISPUTED" | "CANCELLED" = "PENDING";
+        if (inv.status === "PAID" || inv.status === "MARKED_AS_PAID") status = "COMPLETED";
+        else if (inv.status === "DRAFT") status = "DRAFT";
+        else if (inv.status === "CANCELLED" || inv.status === "REFUNDED") status = "CANCELLED";
+
+        // Derive authentic merchant name
+        const invItems = (inv.items as Array<{ name?: string }>) || [];
+        let merchantName = (detail.note as string) || invItems[0]?.name;
+        
+        const invoicer = inv.invoicer as { name?: { full_name?: string; given_name?: string; surname?: string }; email_address?: string } | undefined;
+        if (!merchantName && invoicer) {
+          if (invoicer.name?.full_name) {
+            merchantName = invoicer.name.full_name;
+          } else if (invoicer.name?.given_name) {
+            merchantName = `${invoicer.name.given_name} ${invoicer.name.surname || ""}`.trim();
+          } else if (invoicer.email_address) {
+            const email = invoicer.email_address.toLowerCase().trim();
+            if (merchantDomainMap[email]) {
+              merchantName = merchantDomainMap[email];
+            } else {
+              const domain = email.split("@")[1] || "";
+              if (merchantDomainMap[domain]) {
+                merchantName = merchantDomainMap[domain];
+              } else if (domain && !domain.includes("sandbox") && !domain.includes("example.com")) {
+                const root = domain.split(".")[0];
+                merchantName = root.charAt(0).toUpperCase() + root.slice(1);
+              } else {
+                const prefix = email.split("@")[0].replace(/[._]/g, " ");
+                merchantName = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+              }
             }
           }
-
-          let status: "COMPLETED" | "PENDING" | "DRAFT" | "DISPUTED" | "CANCELLED" = "PENDING";
-          if (inv.status === "PAID" || inv.status === "MARKED_AS_PAID") status = "COMPLETED";
-          else if (inv.status === "DRAFT") status = "DRAFT";
-          else if (inv.status === "CANCELLED" || inv.status === "REFUNDED") status = "CANCELLED";
-
-          const invId = inv.id;
-
-          results.push({
-            id: invId,
-            status,
-            amount: amountVal,
-            currency: inv.amount?.currency_code || detail.currency_code || "USD",
-            merchantName: detail.note || inv.items?.[0]?.name || "PayPal Sandbox Invoice",
-            timestamp: detail.invoice_date
-              ? new Date(detail.invoice_date).toISOString()
-              : new Date().toISOString(),
-            debtorName: recipientName,
-            recipientEmail,
-          });
         }
+
+        if (!merchantName) {
+          merchantName = "PayPal Commercial Transfer";
+        }
+
+        const invId = inv.id as string;
+
+        results.push({
+          id: invId,
+          status,
+          amount: amountVal,
+          currency: amountObj.currency_code || (detail.currency_code as string) || "USD",
+          merchantName,
+          timestamp: detail.invoice_date
+            ? new Date(detail.invoice_date as string).toISOString()
+            : new Date().toISOString(),
+          debtorName: recipientName,
+          recipientEmail,
+        });
       }
     } catch (err) {
       console.warn("[PayPal Invoicing API Warning]", err);
