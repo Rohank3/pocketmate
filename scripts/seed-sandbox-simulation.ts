@@ -941,25 +941,7 @@ async function runCleanup(): Promise<void> {
     console.warn("  ℹ️ DB purge note:", err instanceof Error ? err.message : err);
   }
 
-  // 3. Anchor clean baseline in .env.local so past transactions never exist in active queries
-  const resetIso = new Date().toISOString();
-  try {
-    const envLocalPath = path.resolve(process.cwd(), ".env.local");
-    if (fs.existsSync(envLocalPath)) {
-      let content = fs.readFileSync(envLocalPath, "utf-8");
-      if (content.includes("SANDBOX_RESET_AFTER=")) {
-        content = content.replace(/SANDBOX_RESET_AFTER=.*/g, `SANDBOX_RESET_AFTER="${resetIso}"`);
-      } else {
-        content += `\n# Sandbox Clean Baseline Cutoff\nSANDBOX_RESET_AFTER="${resetIso}"\n`;
-      }
-      fs.writeFileSync(envLocalPath, content, "utf-8");
-      console.log(`  ✓ Anchored clean testing baseline in .env.local: SANDBOX_RESET_AFTER="${resetIso}"`);
-    }
-  } catch (envErr) {
-    console.warn("  ℹ️ Env update note:", envErr instanceof Error ? envErr.message : envErr);
-  }
-
-  console.log("\n✨ Teardown complete! Database is purged and clean baseline is set.\n");
+  console.log("\n✨ Teardown complete! Database is purged and sandbox state is reset.\n");
 }
 
 // -----------------------------------------------------------------------------
