@@ -10,25 +10,19 @@ export type PulseBackgroundPalette = {
 };
 
 export const PULSE_PALETTES: Record<string, PulseBackgroundPalette> = {
-  // Champagne & Warm Obsidian Gold (Signature Single Modern Luxury Theme)
+  // Executive Pure White & Champagne Gold (Signature Single Modern Luxury Theme)
   gold: {
-    from: "#140f09",
-    to: "#060504",
+    from: "#ffffff",
+    to: "#f7f6f2",
     glow: "#f59e0b",
-    ink: "#fdf8ee",
+    ink: "#18181b",
   },
-  // Sodium streetlamp warm amber glow
-  sodium: {
-    from: "#18120b",
-    to: "#060504",
-    glow: "#f59e0b",
-    ink: "#fbf6ee",
-  },
-  midnight: {
-    from: "#140f09",
-    to: "#060504",
-    glow: "#f59e0b",
-    ink: "#fdf8ee",
+  // Paper Linen warm tone
+  paper: {
+    from: "#fdfbf7",
+    to: "#f3efe6",
+    glow: "#d97706",
+    ink: "#18181b",
   },
 };
 
@@ -73,16 +67,16 @@ export const PulseBackground: React.FC<PulseBackgroundProps> = ({
       aria-hidden="true"
     >
       {/* Vertical Travelling Pulse Stripes */}
-      <div className="absolute inset-0 flex opacity-60">
+      <div className="absolute inset-0 flex opacity-80">
         {Array.from({ length: n }, (_, i) => (
           <div
             key={i}
-            className="relative flex-1 h-full overflow-hidden border-r border-white/[0.035]"
+            className="relative flex-1 h-full overflow-hidden border-r border-amber-900/[0.04]"
           >
             <div
-              className="absolute left-0 right-0 h-1/2 -top-[60%] blur-[8px] opacity-40 will-change-transform"
+              className="absolute left-0 right-0 h-1/2 -top-[60%] blur-[6px] opacity-60 will-change-transform"
               style={{
-                background: `linear-gradient(180deg, transparent, color-mix(in oklab, var(--psh-glow) 20%, transparent) 45%, color-mix(in oklab, var(--psh-glow) 60%, transparent) 80%, var(--psh-glow) 95%, transparent 100%)`,
+                background: `linear-gradient(180deg, transparent, color-mix(in oklab, var(--psh-glow) 12%, transparent) 45%, color-mix(in oklab, var(--psh-glow) 28%, transparent) 80%, color-mix(in oklab, var(--psh-glow) 50%, transparent) 95%, transparent 100%)`,
                 animation: `psh-pulse 5.4s cubic-bezier(.45, 0, .25, 1) infinite`,
                 animationDelay: `${stripeDelay(i, n, 5.4)}s`,
               }}
@@ -93,18 +87,18 @@ export const PulseBackground: React.FC<PulseBackgroundProps> = ({
 
       {/* Breathing Lamp Glow at Bottom */}
       <div
-        className="absolute -left-[15%] -right-[15%] -bottom-[35%] h-[75%] rounded-[50%] blur-3xl pointer-events-none opacity-60"
+        className="absolute -left-[15%] -right-[15%] -bottom-[35%] h-[75%] rounded-[50%] blur-3xl pointer-events-none opacity-40"
         style={{
-          background: `radial-gradient(closest-side, color-mix(in oklab, var(--psh-glow) 35%, transparent), transparent)`,
+          background: `radial-gradient(closest-side, color-mix(in oklab, var(--psh-glow) 25%, transparent), transparent)`,
           animation: `psh-breathe 8s ease-in-out infinite`,
         }}
       />
 
       {/* Top Ambient Vignette Lamp */}
       <div
-        className="absolute -left-[20%] -right-[20%] -top-[30%] h-[60%] rounded-[50%] blur-3xl pointer-events-none opacity-40"
+        className="absolute -left-[20%] -right-[20%] -top-[30%] h-[60%] rounded-[50%] blur-3xl pointer-events-none opacity-30"
         style={{
-          background: `radial-gradient(closest-side, color-mix(in oklab, var(--psh-glow) 20%, transparent), transparent)`,
+          background: `radial-gradient(closest-side, color-mix(in oklab, var(--psh-glow) 18%, transparent), transparent)`,
         }}
       />
 
@@ -112,7 +106,7 @@ export const PulseBackground: React.FC<PulseBackgroundProps> = ({
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
-          background: `radial-gradient(75% 60% at 50% 35%, transparent 30%, color-mix(in oklab, var(--psh-to) 60%, transparent) 85%)`,
+          background: `radial-gradient(75% 60% at 50% 35%, transparent 50%, color-mix(in oklab, var(--psh-to) 40%, transparent) 90%)`,
         }}
       />
 
