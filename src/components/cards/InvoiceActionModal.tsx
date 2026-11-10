@@ -10,7 +10,7 @@ interface InvoiceActionModalProps {
   onClose: () => void;
   onPay: (invoiceId: string) => void;
   onDecline: (invoiceId: string, reason: string) => void;
-  onRequestAdjustment: (invoiceId: string, proposedAmount: number, reason: string) => void;
+  onRequestAdjustment?: (invoiceId: string, proposedAmount: number, reason: string) => void;
 }
 
 export const InvoiceActionModal: React.FC<InvoiceActionModalProps> = ({
@@ -19,12 +19,9 @@ export const InvoiceActionModal: React.FC<InvoiceActionModalProps> = ({
   onClose,
   onPay,
   onDecline,
-  onRequestAdjustment,
 }) => {
-  const [tab, setTab] = useState<"pay" | "decline" | "adjust">("pay");
+  const [tab, setTab] = useState<"pay" | "decline">("pay");
   const [declineReason, setDeclineReason] = useState("Not my expense / Sent by mistake");
-  const [proposedAmount, setProposedAmount] = useState("");
-  const [adjustmentReason, setAdjustmentReason] = useState("");
 
   if (!isOpen || !invoice) return null;
 
@@ -43,13 +40,6 @@ export const InvoiceActionModal: React.FC<InvoiceActionModalProps> = ({
   const handleDeclineSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onDecline(invoice.id, declineReason.trim() || "Declined by recipient");
-    onClose();
-  };
-
-  const handleAdjustSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const amt = Math.max(0, parseFloat(proposedAmount) || 0);
-    onRequestAdjustment(invoice.id, amt, adjustmentReason.trim() || "Proposed revised share");
     onClose();
   };
 
@@ -110,17 +100,6 @@ export const InvoiceActionModal: React.FC<InvoiceActionModalProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => setTab("adjust")}
-              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-                tab === "adjust"
-                  ? "bg-white text-zinc-900 shadow-2xs border border-stone-200"
-                  : "text-stone-600 hover:text-zinc-900 hover:bg-stone-200/60"
-              }`}
-            >
-              Propose Adjustment
-            </button>
-            <button
-              type="button"
               onClick={() => setTab("decline")}
               className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                 tab === "decline"
@@ -148,52 +127,6 @@ export const InvoiceActionModal: React.FC<InvoiceActionModalProps> = ({
                 <ExternalLink className="w-3.5 h-3.5" />
               </button>
             </div>
-          )}
-
-          {tab === "adjust" && (
-            <form onSubmit={handleAdjustSubmit} className="flex flex-col gap-3">
-              <p className="text-xs text-stone-600">
-                If the amount is incorrect (e.g. you only had one drink or bought fewer items), propose a revised share for the sender to re-issue.
-              </p>
-
-              <div>
-                <label className="text-[11px] font-semibold text-stone-700 block mb-1">
-                  Proposed Amount ($)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="1"
-                  max={invoice.amount}
-                  placeholder="e.g. 20.00"
-                  value={proposedAmount}
-                  onChange={(e) => setProposedAmount(e.target.value)}
-                  required
-                  className="w-full px-3 py-2 rounded-lg bg-white border border-stone-300 text-xs text-zinc-900 font-mono focus:outline-hidden focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="text-[11px] font-semibold text-stone-700 block mb-1">
-                  Reason for Adjustment
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. I only ordered one cocktail ($20)"
-                  value={adjustmentReason}
-                  onChange={(e) => setAdjustmentReason(e.target.value)}
-                  required
-                  className="w-full px-3 py-2 rounded-lg bg-white border border-stone-300 text-xs text-zinc-900 focus:outline-hidden focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full py-2 rounded-lg bg-stone-100 hover:bg-stone-200 text-zinc-900 border border-stone-300 text-xs font-semibold cursor-pointer transition-colors shadow-2xs"
-              >
-                Submit Adjustment Request
-              </button>
-            </form>
           )}
 
           {tab === "decline" && (

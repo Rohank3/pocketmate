@@ -168,8 +168,17 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
   // ==========================================
   // 1. CARD 1: TOTAL MONTHLY BUDGET (GLOBAL)
   // ==========================================
-  const { totalSpent, totalBudgetCap, isBudgetOver, budgetPercentUsed, remainingBudget, categoryBars } =
-    useMemo(() => {
+  const {
+    totalSpent,
+    totalCommittedSubscriptions,
+    totalBudgetCap,
+    isBudgetOver,
+    budgetPercentUsed,
+    remainingBudget,
+    spentBarWidth,
+    committedBarWidth,
+    categoryBars,
+  } = useMemo(() => {
       // Map category outflows and reimbursement inflows
       const catOutflowMap: Record<string, number> = {};
       const catInflowMap: Record<string, number> = {};
@@ -218,15 +227,52 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
       const percent = cap > 0 ? Math.round((netTotalSpent / cap) * 100) : 0;
       const remaining = Math.max(0, cap - netTotalSpent);
 
+      // Calculate upcoming committed subscriptions for the current month (client-only to prevent prerender hydration mismatch)
+      let totalCommitted = 0;
+      if (isClient) {
+        const now = new Date();
+        const currentMonth = now.getMonth();
+        const currentYear = now.getFullYear();
+        const todayDay = now.getDate();
+
+        const committedSubscriptions = (events || []).filter((e) => {
+          if (e.type !== "outgoing" || e.status === "completed") return false;
+          const titleLower = e.title.toLowerCase();
+          if (
+            titleLower.includes("alert") ||
+            titleLower.includes("soft cap") ||
+            titleLower.includes("threshold")
+          ) {
+            return false;
+          }
+          const dayOfMonth = e.dayOfMonth || (e.date ? parseInt(e.date.slice(8, 10)) : 15);
+          if (dayOfMonth > todayDay) return true;
+          if (e.date) {
+            const d = new Date(e.date);
+            return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+          }
+          return true;
+        });
+
+        totalCommitted = committedSubscriptions.reduce((sum, s) => sum + s.amount, 0);
+      }
+
+      const spentBarWidth = cap > 0 ? Math.min(100, Math.round((netTotalSpent / cap) * 100)) : 0;
+      const committedBarWidth =
+        cap > 0 ? Math.min(100 - spentBarWidth, Math.round((totalCommitted / cap) * 100)) : 0;
+
       return {
         totalSpent: netTotalSpent,
+        totalCommittedSubscriptions: totalCommitted,
         totalBudgetCap: cap,
         isBudgetOver: over,
         budgetPercentUsed: percent,
         remainingBudget: remaining,
+        spentBarWidth,
+        committedBarWidth,
         categoryBars: bars,
       };
-    }, [transactions, categories]);
+    }, [transactions, categories, events, isClient]);
 
   // ==========================================
   // 2. CARD 2: FRIENDS OWE YOU (Backed by SplitRecord / SplitItem & Transaction Splits)
@@ -641,6 +687,11 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                 ${totalSpent.toFixed(2)}{" "}
                 <span className="text-stone-500 text-xs font-normal">/ ${totalBudgetCap.toFixed(0)}</span>
               </p>
+              {totalCommittedSubscriptions > 0 && (
+                <p className="text-[10px] text-amber-700 font-medium truncate mt-0.5">
+                  +${totalCommittedSubscriptions.toFixed(2)} committed subscriptions
+                </p>
+              )}
               <div className="mt-1 flex items-center">
                 <span
                   className={`text-[11px] font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1 border truncate ${
@@ -700,17 +751,35 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                     ${totalSpent.toFixed(2)} of ${totalBudgetCap.toFixed(2)}
                   </span>
                 </div>
-                <div className="h-2 w-full bg-stone-100 rounded-full overflow-hidden p-0.5 border border-stone-200">
+                <div className="h-2.5 w-full bg-stone-100 rounded-full overflow-hidden p-0.5 border border-stone-200 flex">
                   <div
-                    className={`h-full transition-all duration-500 rounded-full ${
+                    title={`Settled Spent: $${totalSpent.toFixed(2)}`}
+                    className={`h-full transition-all duration-500 ${committedBarWidth > 0 ? "rounded-l-full" : "rounded-full"} ${
                       isBudgetOver
                         ? "bg-rose-500"
                         : budgetPercentUsed > 80
                         ? "bg-amber-500"
                         : "bg-gradient-to-r from-emerald-500 to-teal-500"
                     }`}
-                    style={{ width: `${Math.min(100, budgetPercentUsed)}%` }}
+                    style={{ width: `${spentBarWidth}%` }}
                   />
+                  {committedBarWidth > 0 && (
+                    <div
+                      title={`Committed Subscriptions: $${totalCommittedSubscriptions.toFixed(2)}`}
+                      className="h-full transition-all duration-500 border-l border-white/60 rounded-r-full bg-[repeating-linear-gradient(45deg,#f59e0b,#f59e0b_2px,#fef3c7_2px,#fef3c7_5px)]"
+                      style={{ width: `${committedBarWidth}%` }}
+                    />
+                  )}
+                </div>
+                <div className="flex items-center gap-3 mt-1.5 text-[10px] text-stone-500">
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" /> Settled (${totalSpent.toFixed(2)})
+                  </span>
+                  {totalCommittedSubscriptions > 0 && (
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded border border-amber-400 bg-amber-200" /> Committed Subscriptions (${totalCommittedSubscriptions.toFixed(2)})
+                    </span>
+                  )}
                 </div>
               </div>
 
