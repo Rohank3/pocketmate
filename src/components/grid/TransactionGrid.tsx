@@ -228,48 +228,9 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
       },
     },
     {
-      field: "debtor_name",
-      headerName: "Debtor / Split",
-      width: 145,
-      filter: true,
-      cellRenderer: (params: ICellRendererParams<TransactionRow, string>) => {
-        const isSplit =
-          params.data?.splitAllocation === "split" ||
-          params.value?.toLowerCase().includes("split") ||
-          params.data?.memo?.toLowerCase().includes("split") ||
-          params.data?.memo?.toLowerCase().includes("share");
-
-        if (isSplit) {
-          const splitLabel =
-            params.value && !params.value.toLowerCase().includes("self") && params.value !== "Shared Split"
-              ? `Split (${params.value})`
-              : "Shared Split";
-          return (
-            <span
-              title="Multi-party shared expense with split allocation"
-              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-500/10 text-amber-900 border border-amber-300/80 font-sans shadow-2xs"
-            >
-              <Users className="w-3 h-3 text-amber-700 shrink-0" />
-              <span className="truncate">{splitLabel}</span>
-            </span>
-          );
-        }
-
-        return (
-          <span
-            title="Personal single-party expense (100% Self)"
-            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-stone-100 text-stone-600 border border-stone-200 font-sans"
-          >
-            <User className="w-3 h-3 text-stone-500 shrink-0" />
-            <span>100% Self</span>
-          </span>
-        );
-      },
-    },
-    {
       field: "amount",
       headerName: "Amount",
-      width: 110,
+      width: 120,
       filter: "agNumberColumnFilter",
       sortable: true,
       cellRenderer: (params: ICellRendererParams<TransactionRow, number>) => {
@@ -290,22 +251,37 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
     {
       field: "status",
       headerName: "Settlement Status",
-      width: 140,
+      width: 145,
       filter: true,
       cellRenderer: (params: ICellRendererParams<TransactionRow, string>) => {
         const val = params.value;
-        if (val === "settled") {
+        const isIncoming =
+          params.data?.direction === "incoming" ||
+          params.data?.isOutgoingSplit === true;
+
+        if (val === "settled" || val === "COMPLETED") {
+          if (isIncoming) {
+            return (
+              <span
+                title="Received: Payment or split reimbursement received into your account"
+                className="flex items-center gap-1.5 text-emerald-700 text-xs font-semibold cursor-help"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Received
+              </span>
+            );
+          }
           return (
             <span
-              title="Settled: Payment successfully completed and cleared via PayPal Sandbox Wallet"
+              title="Paid: Payment successfully completed and cleared via PayPal"
               className="flex items-center gap-1.5 text-emerald-700 text-xs font-semibold cursor-help"
             >
               <CheckCircle2 className="w-3.5 h-3.5" />
-              Settled
+              Paid
             </span>
           );
         }
-        if (val === "disputed") {
+        if (val === "disputed" || val === "DISPUTED") {
           return (
             <span
               title="Disputed: Transaction flagged for audit discrepancy or unverified surcharge"
@@ -316,13 +292,24 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
             </span>
           );
         }
+        if (isIncoming) {
+          return (
+            <span
+              title="To receive: Pending reimbursement invoice sent to counterparty"
+              className="flex items-center gap-1.5 text-sky-700 text-xs font-medium cursor-help"
+            >
+              <Clock className="w-3.5 h-3.5" />
+              To receive
+            </span>
+          );
+        }
         return (
           <span
-            title="Pending: Awaiting counterparty payment or authorization clearance"
-            className="flex items-center gap-1.5 text-stone-500 text-xs font-medium cursor-help"
+            title="To send: Pending invoice or payment obligation due"
+            className="flex items-center gap-1.5 text-amber-700 text-xs font-medium cursor-help"
           >
             <Clock className="w-3.5 h-3.5" />
-            Pending
+            To send
           </span>
         );
       },

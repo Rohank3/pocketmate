@@ -469,49 +469,44 @@ class PayPalSandboxClient {
           continue;
         }
 
-        let merchantName = "";
-        if (isUserInvoicer) {
-          // When active user is invoicer, merchant/item name is the expense description
-          merchantName = rawNote || invItems[0]?.name || "Shared Split Expense";
-        } else if (invoicerFullName) {
-          merchantName = invoicerFullName;
-        } else if (invoicerEmail) {
-          const [localPart, domainPart = ""] = invoicerEmail.split("@");
-          const cleanLocal = localPart
-            .replace(/^(billing|orders|receipts|reservations|tickets|settlement|support|info|contact|pay)[._-]?/i, "")
-            .replace(/\.(cafe|studio|tech|retail|art|music|pm)$/i, "")
+        // Determine parent expense description vs specific split memo
+        let parentExpense = (invItems[0]?.name || "").trim();
+        if (
+          parentExpense &&
+          (parentExpense.toLowerCase().includes("split share") || parentExpense.toLowerCase().includes("share of"))
+        ) {
+          parentExpense = parentExpense
+            .replace(/split share/i, "")
+            .replace(/share of/i, "")
             .trim();
-          const cleanDomain = domainPart
-            .replace(/\.(example\.com|sandbox|com|org|net|co|io|edu|gov)$/i, "")
-            .replace(/^(billing|retail|business|personal)[._-]?/i, "")
-            .trim();
-          const candidate = (cleanDomain && cleanDomain !== "business" && cleanDomain !== "personal" && cleanDomain !== "billing")
-            ? cleanDomain
-            : cleanLocal || localPart;
-          merchantName = candidate
-            .replace(/[._-]+/g, " ")
-            .replace(/([a-z])([A-Z])/g, "$1 $2")
-            .trim()
-            .split(/\s+/)
-            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-            .join(" ");
-        }
-
-        if (!merchantName && invItems[0]?.name) {
-          merchantName = invItems[0].name;
-        }
-        if (!merchantName && rawNote) {
-          if (!rawNote.toLowerCase().startsWith("payment reminder")) {
-            merchantName = rawNote;
-          }
-        }
-        if (!merchantName) {
-          merchantName = "Shared Split Expense";
         }
 
         let memo = rawNote || undefined;
-        if (!memo && invItems[0]?.name && invItems[0].name.toLowerCase() !== merchantName.toLowerCase()) {
-          memo = invItems[0].name;
+        let merchantName = "";
+
+        if (isUserInvoicer) {
+          // Active user sent this invoice to a friend -> counterparty is recipient
+          const personName =
+            recipientName !== "Unassigned"
+              ? recipientName
+              : recipientEmail.split("@")[0].replace(/[._]/g, " ");
+          const parentName =
+            parentExpense || (rawNote ? rawNote.replace(/split share/i, "").trim() : "Shared Expense");
+          merchantName = `${personName} • ${parentName}`;
+        } else if (invoicerFullName || invoiceSender) {
+          // Active user received this invoice from an organizer
+          const organizerName =
+            invoicerFullName ||
+            (invoiceSender ? invoiceSender.split("@")[0].replace(/[._]/g, " ") : "Organizer");
+          const parentName =
+            parentExpense || (rawNote ? rawNote.replace(/split share/i, "").trim() : "Shared Expense");
+          merchantName = `${organizerName} • ${parentName}`;
+        } else {
+          merchantName = parentExpense || rawNote || "Shared Split Expense";
+        }
+
+        if (memo && memo.toLowerCase() === merchantName.toLowerCase()) {
+          memo = undefined;
         }
 
         // Determine debtorName, direction, and splitAllocation

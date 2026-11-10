@@ -204,7 +204,7 @@ export async function GET(req: NextRequest) {
           formatted.unshift({
             id: `stl_${item.id}`,
             date: displayDate,
-            merchant: item.participantName,
+            merchant: `${item.participantName} • ${item.splitRecord.description}`,
             memo: reasonMemo,
             splitAllocation: "split",
             category,
