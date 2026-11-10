@@ -27,7 +27,14 @@ export async function GET(req: NextRequest) {
   try {
     const userId = await getUserIdFromRequest(req);
     if (!userId) {
-      return NextResponse.json({ success: true, categories: [] });
+      const defaultCategories = [
+        { id: "cat_default_groceries", name: "Groceries", monthlyCap: 400.0, currentSpent: 120.55, color: "#10b981", alertThreshold: 0.80, softCap: 320.0 },
+        { id: "cat_default_dining", name: "Dining", monthlyCap: 250.0, currentSpent: 130.00, color: "#3b82f6", alertThreshold: 0.80, softCap: 200.0 },
+        { id: "cat_default_travel", name: "Travel", monthlyCap: 600.0, currentSpent: 480.00, color: "#f59e0b", alertThreshold: 0.80, softCap: 480.0 },
+        { id: "cat_default_shopping", name: "Shopping", monthlyCap: 300.0, currentSpent: 87.29, color: "#ec4899", alertThreshold: 0.80, softCap: 240.0 },
+        { id: "cat_default_entertainment", name: "Entertainment", monthlyCap: 200.0, currentSpent: 51.99, color: "#8b5cf6", alertThreshold: 0.80, softCap: 160.0 },
+      ];
+      return NextResponse.json({ success: true, categories: ensureUniqueCategoryColors(defaultCategories) });
     }
     let categories = await prisma.budgetCategory.findMany({
       where: { userId },

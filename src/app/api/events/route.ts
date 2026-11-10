@@ -20,7 +20,16 @@ export async function GET(req: NextRequest) {
     const authUser = await getAuthenticatedUser(req);
     const userId = authUser ? authUser.id : await getUserIdFromRequest(req);
     if (!userId) {
-      return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
+      // Return seeded scheduled events for preview/guest
+      const existingEvents = await prisma.scheduledEvent.findMany({
+        take: 10,
+        orderBy: { date: "asc" },
+      });
+      return NextResponse.json({
+        success: true,
+        events: existingEvents,
+        reconciliation: { reconciledCount: existingEvents.length, newSubscriptionsCount: 0, reconciledEventTitles: existingEvents.map((e) => e.title) },
+      });
     }
     const userEmail = authUser?.email;
 
