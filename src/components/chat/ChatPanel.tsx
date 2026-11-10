@@ -272,7 +272,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   };
 
   return (
-    <div className="relative flex flex-col h-full liquid-glass-panel rounded-2xl overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_20px_48px_-12px_rgba(0,0,0,0.7)]">
+    <div className="relative flex flex-col h-full bg-white/95 border border-stone-200/90 rounded-2xl overflow-hidden shadow-sm">
+      {/* Prominent Liquid Flow Animation */}
+      <div className="absolute top-0 left-0 right-0 z-20 liquid-bar" />
+
       {/* Hidden file picker for real receipt audits */}
       <input
         type="file"
@@ -283,16 +286,16 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       />
 
       {/* Header with Agent Status & Controls */}
-      <div className="px-3.5 sm:px-4 py-2.5 sm:py-3 bg-white/[0.04] backdrop-blur-xl border-b border-white/10 flex items-center justify-between gap-2 shrink-0">
+      <div className="px-3.5 sm:px-4 py-2.5 sm:py-3 bg-stone-50/90 backdrop-blur-xl border-b border-stone-200/80 flex items-center justify-between gap-2 shrink-0">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-500/25 to-yellow-500/10 border border-amber-400/40 flex items-center justify-center text-amber-300 shrink-0 shadow-inner">
+          <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-300 flex items-center justify-center text-amber-700 shrink-0 shadow-2xs">
             <Bot className="w-4 h-4" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-sm font-semibold text-zinc-100 flex items-center gap-1.5 truncate">
-              PocketMate <span className="text-[10px] text-amber-300/80 font-normal">v1.0</span>
+            <h1 className="text-sm font-bold text-zinc-900 flex items-center gap-1.5 truncate">
+              PocketMate <span className="text-[10px] text-stone-500 font-normal">v1.0</span>
             </h1>
-            <p className="text-[11px] text-zinc-400 truncate">Assistant</p>
+            <p className="text-[11px] text-stone-500 truncate">Assistant</p>
           </div>
         </div>
 
@@ -303,16 +306,16 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             type="button"
             onClick={() => setIsHistoryOpen((prev) => !prev)}
             aria-label="Toggle Conversation History Drawer"
-            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium border transition-all cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400 ${
+            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400 ${
               isHistoryOpen
-                ? "bg-amber-500/20 border-amber-400/40 text-amber-300 shadow-sm"
-                : "bg-white/5 hover:bg-white/10 active:bg-white/15 border-white/10 text-zinc-300 hover:text-white"
+                ? "bg-amber-500/20 border-amber-400 text-amber-950 shadow-2xs"
+                : "bg-stone-100 hover:bg-stone-200 text-stone-700 border-stone-200 hover:text-zinc-900"
             }`}
           >
-            <History className="w-3.5 h-3.5" />
+            <History className="w-3.5 h-3.5 text-stone-500" />
             <span className="hidden sm:inline">History</span>
             {threads.length > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full bg-white/5 border border-white/10 text-[10px] text-zinc-300 font-mono">
+              <span className="px-1.5 py-0.2 rounded-full bg-stone-200/80 text-[10px] text-stone-700 font-mono">
                 {threads.length}
               </span>
             )}
@@ -327,17 +330,20 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                 setIsHistoryOpen(false);
               }}
               aria-label="Start a new chat session"
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 active:bg-amber-500/35 text-amber-300 text-xs font-semibold border border-amber-500/30 transition-all cursor-pointer shadow-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 active:bg-amber-500/35 text-amber-950 text-xs font-bold border border-amber-400 transition-all cursor-pointer shadow-2xs focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-3.5 h-3.5 text-amber-700" />
               <span className="hidden sm:inline">New Chat</span>
             </button>
           )}
 
-          {/* Active Status Badge */}
-          <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/25 text-[11px] font-medium text-amber-300">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shadow-sm shadow-amber-400/50" />
-            <span>Active</span>
+          {/* Active Status Badge with Liquid Pulse */}
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-300 text-[11px] font-bold text-amber-900 shadow-2xs">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+            </span>
+            <span>Liquid Flow Active</span>
           </div>
         </div>
       </div>
@@ -348,14 +354,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           role="dialog"
           aria-modal="true"
           aria-label="Conversation History"
-          className="absolute inset-0 z-30 bg-zinc-950/95 backdrop-blur-md flex flex-col animate-in fade-in duration-150"
+          className="absolute inset-0 z-30 bg-white/98 backdrop-blur-md flex flex-col animate-in fade-in duration-150"
         >
           {/* Drawer Header */}
-          <div className="px-4 py-3 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between shrink-0">
+          <div className="px-4 py-3 bg-stone-50 border-b border-stone-200 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
-              <MessageSquare className="w-4 h-4 text-emerald-400" />
-              <h2 className="text-sm font-semibold text-zinc-100">Conversation History</h2>
-              <span className="text-[11px] text-zinc-400 font-mono">({threads.length})</span>
+              <MessageSquare className="w-4 h-4 text-amber-700" />
+              <h2 className="text-sm font-bold text-zinc-900">Conversation History</h2>
+              <span className="text-[11px] text-stone-500 font-mono">({threads.length})</span>
             </div>
 
             <div className="flex items-center gap-2">
@@ -366,7 +372,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                     onNewChat();
                     setIsHistoryOpen(false);
                   }}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-zinc-950 text-xs font-semibold shadow-sm transition-colors cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-emerald-400"
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>New Chat</span>
@@ -377,7 +383,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                 type="button"
                 onClick={() => setIsHistoryOpen(false)}
                 aria-label="Close conversation history"
-                className="p-1 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 active:bg-zinc-700 rounded-lg transition-colors cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-emerald-500"
+                className="p-1 text-stone-400 hover:text-zinc-800 hover:bg-stone-100 rounded-lg transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -542,7 +548,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       <div
         ref={feedContainerRef}
         onScroll={handleFeedScroll}
-        className="flex-1 p-3 sm:p-4 overflow-y-auto space-y-4 relative"
+        className="flex-1 p-3 sm:p-4 overflow-y-auto space-y-4 relative bg-stone-50/30"
       >
         {messages.map((m) => (
           <div
@@ -552,7 +558,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             }`}
           >
             {m.role === "assistant" && (
-              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-amber-500/20 to-yellow-500/10 border border-amber-400/35 flex items-center justify-center text-amber-300 shrink-0 mt-0.5 shadow-sm">
+              <div className="w-7 h-7 rounded-lg bg-amber-50 border border-amber-300 flex items-center justify-center text-amber-700 shrink-0 mt-0.5 shadow-2xs">
                 <Bot className="w-3.5 h-3.5" />
               </div>
             )}
@@ -560,8 +566,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             <div
               className={`max-w-[85%] rounded-2xl px-4 py-3 leading-relaxed ${
                 m.role === "user"
-                  ? "bg-gradient-to-br from-amber-500/20 via-yellow-500/15 to-amber-950/35 border border-amber-400/40 text-amber-50 rounded-tr-sm shadow-[0_8px_24px_-4px_rgba(245,158,11,0.2),inset_0_1px_0_rgba(255,255,255,0.2)] backdrop-blur-xl"
-                  : "bg-gradient-to-br from-white/[0.06] via-white/[0.02] to-amber-500/[0.03] border border-white/10 text-zinc-100 rounded-tl-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_12px_28px_-6px_rgba(0,0,0,0.5)] backdrop-blur-2xl"
+                  ? "bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 text-white rounded-tr-xs shadow-xs"
+                  : "bg-white border border-stone-200/90 text-zinc-900 rounded-tl-xs shadow-2xs"
               }`}
             >
               {/* Tool Execution Badges if any */}
@@ -570,9 +576,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                   {m.toolBadges.map((badge, bIdx) => (
                     <span
                       key={bIdx}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-500/10 border border-amber-500/25 text-[10px] text-amber-300 rounded font-mono"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 border border-amber-300/80 text-[10px] text-amber-900 rounded font-mono font-medium"
                     >
-                      <Sparkles className="w-2.5 h-2.5 text-amber-400" />
+                      <Sparkles className="w-2.5 h-2.5 text-amber-600" />
                       {badge}
                     </span>
                   ))}
@@ -580,23 +586,23 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               )}
 
               {m.role === "user" ? (
-                <div className="whitespace-pre-line text-xs md:text-sm font-medium">{m.content}</div>
+                <div className="whitespace-pre-line text-xs md:text-sm font-medium text-white">{m.content}</div>
               ) : (
-                <div className="text-xs md:text-sm text-zinc-200">
+                <div className="text-xs md:text-sm text-zinc-800">
                   <ReactMarkdown
                     components={{
-                      h1: ({ children }) => <h1 className="text-base font-bold text-zinc-100 my-2">{children}</h1>,
-                      h2: ({ children }) => <h2 className="text-sm font-bold text-zinc-100 my-1.5">{children}</h2>,
-                      h3: ({ children }) => <h3 className="text-xs md:text-sm font-bold text-amber-400 my-1">{children}</h3>,
-                      h4: ({ children }) => <h4 className="text-xs font-semibold text-zinc-200 mt-2 mb-0.5">{children}</h4>,
-                      p: ({ children }) => <p className="mb-1.5 last:mb-0 leading-relaxed">{children}</p>,
-                      ul: ({ children }) => <ul className="list-disc pl-4 mb-2 space-y-0.5">{children}</ul>,
-                      ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 space-y-0.5">{children}</ol>,
-                      li: ({ children }) => <li className="text-zinc-300">{children}</li>,
-                      strong: ({ children }) => <strong className="font-bold text-zinc-100">{children}</strong>,
-                      hr: () => <hr className="border-white/10 my-2.5" />,
+                      h1: ({ children }) => <h1 className="text-base font-bold text-zinc-950 my-2">{children}</h1>,
+                      h2: ({ children }) => <h2 className="text-sm font-bold text-zinc-900 my-1.5">{children}</h2>,
+                      h3: ({ children }) => <h3 className="text-xs md:text-sm font-bold text-amber-800 my-1">{children}</h3>,
+                      h4: ({ children }) => <h4 className="text-xs font-semibold text-zinc-800 mt-2 mb-0.5">{children}</h4>,
+                      p: ({ children }) => <p className="mb-1.5 last:mb-0 leading-relaxed text-zinc-800">{children}</p>,
+                      ul: ({ children }) => <ul className="list-disc pl-4 mb-2 space-y-0.5 text-zinc-700">{children}</ul>,
+                      ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 space-y-0.5 text-zinc-700">{children}</ol>,
+                      li: ({ children }) => <li className="text-zinc-700">{children}</li>,
+                      strong: ({ children }) => <strong className="font-bold text-zinc-950">{children}</strong>,
+                      hr: () => <hr className="border-stone-200 my-2.5" />,
                       code: ({ children }) => (
-                        <code className="bg-black/50 px-1 py-0.5 rounded text-[11px] font-mono text-amber-300 border border-amber-500/25">
+                        <code className="bg-stone-100 px-1 py-0.5 rounded text-[11px] font-mono text-amber-900 border border-stone-200">
                           {children}
                         </code>
                       ),
@@ -620,7 +626,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             </div>
 
             {m.role === "user" && (
-              <div className="w-7 h-7 rounded-lg bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-300 shrink-0 mt-0.5 shadow-sm">
+              <div className="w-7 h-7 rounded-lg bg-amber-600 border border-amber-500 flex items-center justify-center text-white shrink-0 mt-0.5 shadow-2xs">
                 <User className="w-3.5 h-3.5" />
               </div>
             )}
@@ -629,14 +635,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
         {isLoading && (
           <div className="flex gap-3 text-sm justify-start">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-amber-500/20 to-yellow-500/10 border border-amber-400/35 flex items-center justify-center text-amber-300 shrink-0 shadow-sm">
+            <div className="w-7 h-7 rounded-lg bg-amber-50 border border-amber-300 flex items-center justify-center text-amber-700 shrink-0 shadow-2xs">
               <Bot className="w-3.5 h-3.5 animate-pulse" />
             </div>
-            <div className="bg-gradient-to-br from-white/[0.05] to-amber-500/[0.03] border border-white/10 rounded-2xl px-4 py-3 text-zinc-300 text-xs flex items-center gap-2 backdrop-blur-xl shadow-md">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce shadow-sm shadow-amber-400/60" />
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce [animation-delay:0.2s] shadow-sm shadow-amber-400/60" />
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce [animation-delay:0.4s] shadow-sm shadow-amber-400/60" />
-              <span className="ml-1 text-zinc-300">Orchestrating financial tools...</span>
+            <div className="bg-white border border-stone-200 rounded-2xl px-4 py-3 text-stone-700 text-xs flex items-center gap-2 shadow-2xs">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-bounce" />
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-bounce [animation-delay:0.2s]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-bounce [animation-delay:0.4s]" />
+              <span className="ml-1 text-stone-600 font-medium">Orchestrating financial ledger...</span>
             </div>
           </div>
         )}
@@ -654,15 +660,17 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             scrollToBottom(true);
           }}
           aria-label="Scroll to newest messages"
-          className="absolute bottom-20 right-6 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900/95 hover:bg-zinc-800 active:bg-zinc-700 text-amber-200 hover:text-white border border-amber-500/30 text-xs shadow-xl backdrop-blur-md transition-all cursor-pointer animate-in fade-in slide-in-from-bottom-2 duration-150"
+          className="absolute bottom-20 right-6 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white hover:bg-stone-50 active:bg-stone-100 text-amber-900 border border-amber-300 text-xs font-semibold shadow-md backdrop-blur-md transition-all cursor-pointer animate-in fade-in slide-in-from-bottom-2 duration-150"
         >
-          <ChevronDown className="w-3.5 h-3.5 text-amber-400" />
+          <ChevronDown className="w-3.5 h-3.5 text-amber-600" />
           <span>Latest</span>
         </button>
       )}
 
       {/* Fluid Liquid Input Area */}
-      <form onSubmit={handleSubmit} className="p-3 bg-white/[0.035] backdrop-blur-2xl border-t border-white/10 relative">
+      <div className="relative">
+        <div className="h-[2px] w-full liquid-stream opacity-80" />
+        <form onSubmit={handleSubmit} className="p-3 bg-stone-50/90 backdrop-blur-xl relative">
         <div className="relative flex items-center">
           <input
             type="text"
@@ -674,10 +682,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                 ? "Listening... speak your request"
                 : "Type or speak a request (e.g., 'split $80 dinner with Alex', 'add $1200 rent on 1st')..."
             }
-            className={`w-full bg-black/50 border rounded-xl pl-4 pr-32 py-3 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none transition-all ${
+            className={`w-full bg-white border rounded-xl pl-4 pr-32 py-3 text-sm text-zinc-900 placeholder-stone-400 focus:outline-hidden transition-all shadow-2xs ${
               isListening
-                ? "border-rose-500/70 ring-2 ring-rose-500/30 animate-pulse bg-rose-950/20 placeholder-rose-300"
-                : "border-white/10 focus:ring-2 focus:ring-amber-400/40 focus:border-amber-400/60 focus:shadow-[0_0_24px_rgba(245,158,11,0.22)]"
+                ? "border-rose-400 ring-2 ring-rose-400/30 animate-pulse bg-rose-50/30 placeholder-rose-400"
+                : "border-stone-300 focus:ring-2 focus:ring-amber-400/40 focus:border-amber-500 focus:shadow-[0_0_20px_rgba(245,158,11,0.2)]"
             }`}
           />
 
@@ -696,14 +704,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               disabled={!speechSupported}
               className={`p-1.5 rounded-lg transition-all cursor-pointer relative focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400 ${
                 isListening
-                  ? "bg-rose-500/20 text-rose-300 border border-rose-500/50 shadow-md shadow-rose-500/20"
-                  : "text-zinc-400 hover:text-amber-300 hover:bg-white/10 active:bg-white/15 disabled:opacity-40"
+                  ? "bg-rose-50 text-rose-700 border border-rose-300 shadow-2xs"
+                  : "text-stone-400 hover:text-amber-800 hover:bg-stone-100 active:bg-stone-200 disabled:opacity-40"
               }`}
             >
               {isListening && (
                 <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-rose-500 animate-ping" />
               )}
-              <Mic className={`w-4 h-4 ${isListening ? "animate-pulse text-rose-400" : ""}`} />
+              <Mic className={`w-4 h-4 ${isListening ? "animate-pulse text-rose-500" : ""}`} />
             </button>
 
             {/* Upload Receipt / Document Image */}
@@ -711,7 +719,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               type="button"
               title="Upload receipt or bill image"
               onClick={() => fileInputRef.current?.click()}
-              className="p-1.5 text-zinc-400 hover:text-amber-300 hover:bg-white/10 active:bg-white/15 rounded-lg transition-colors cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400"
+              className="p-1.5 text-stone-400 hover:text-amber-800 hover:bg-stone-100 active:bg-stone-200 rounded-lg transition-colors cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400"
             >
               <Paperclip className="w-4 h-4" />
             </button>
@@ -720,7 +728,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             <button
               type="submit"
               disabled={!inputText.trim() || isLoading}
-              className="px-3 py-1.5 bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-400 hover:to-yellow-400 active:scale-95 disabled:opacity-40 text-zinc-950 font-bold rounded-lg transition-all flex items-center gap-1 text-xs shadow-md shadow-amber-500/25 cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400"
+              className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 via-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 active:scale-95 disabled:opacity-40 text-white font-bold rounded-lg transition-all flex items-center gap-1 text-xs shadow-xs cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400"
             >
               <span>Send</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -728,6 +736,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           </div>
         </div>
       </form>
+      </div>
     </div>
   );
 };
