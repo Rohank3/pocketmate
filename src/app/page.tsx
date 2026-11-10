@@ -74,7 +74,6 @@ const getMessagesKey = (threadId: string) => `pocketmate_messages_${threadId}`;
 export default function Home() {
   const [activePersona, setActivePersona] = useState<"GENERAL" | "FREELANCER" | "BUSINESS">("GENERAL");
   const [activeRightTab, setActiveRightTab] = useState<"transactions" | "insights" | "upcoming">("transactions");
-  const [activePalette, setActivePalette] = useState<"midnight" | "sodium" | "mercury" | "emerald">("midnight");
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
   const transactionsRef = useRef<TransactionRow[]>([]);
   useEffect(() => {
@@ -1229,21 +1228,21 @@ export default function Home() {
 
   return (
     <>
-      {/* Living Ambient Pulse Stripe Background inspired by pulse-stripe-hero */}
-      <PulseBackground palette={activePalette} />
+      {/* Living Ambient Pulse Stripe Background in Signature Champagne & Warm Obsidian Gold */}
+      <PulseBackground palette="gold" />
 
       <main className="relative z-10 min-h-screen text-zinc-100 flex flex-col p-3 md:p-6 lg:p-8">
         {/* Top Navigation & Brand Header */}
         <header className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-white/10">
           <div>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-500/20 via-teal-500/20 to-sky-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_8px_20px_-4px_rgba(16,185,129,0.2)] backdrop-blur-md">
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500/25 via-yellow-500/20 to-amber-600/20 border border-amber-400/40 flex items-center justify-center text-amber-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_8px_20px_-4px_rgba(245,158,11,0.25)] backdrop-blur-md">
                 <Wallet className="w-5 h-5" />
               </div>
               <div>
                 <h1 className="text-xl font-bold tracking-tight text-zinc-100 flex items-center gap-2">
                   PocketMate
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 font-semibold">
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/25 font-semibold">
                     Live
                   </span>
                 </h1>
@@ -1254,33 +1253,11 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Connection, Palette Switcher & Auth Controls */}
+          {/* Connection & Auth Controls */}
           <div className="flex flex-wrap items-center gap-3">
-            {/* Ambient Background Theme Selector */}
-            <div className="hidden md:flex items-center gap-1 p-1 rounded-xl bg-white/[0.04] border border-white/10 backdrop-blur-md shadow-inner text-xs">
-              <span className="text-[10px] font-medium text-zinc-400 px-2 flex items-center gap-1">
-                <Layers className="w-3 h-3 text-zinc-400" />
-                Theme
-              </span>
-              {(["midnight", "sodium", "mercury", "emerald"] as const).map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setActivePalette(p)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-medium capitalize transition-all cursor-pointer ${
-                    activePalette === p
-                      ? "bg-white/15 text-white shadow-sm border border-white/20"
-                      : "text-zinc-400 hover:text-zinc-200 hover:bg-white/5"
-                  }`}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
-
             {/* Sandbox Status Badge */}
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/[0.035] border border-white/10 backdrop-blur-md text-xs text-zinc-300 shadow-sm">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400/50" />
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shadow-sm shadow-amber-400/50" />
               <span className="font-mono text-[11px]">
                 {currentUser ? "Sandbox Connected" : "Sandbox Mode"}
               </span>
@@ -1288,8 +1265,8 @@ export default function Home() {
 
             {/* User Account / PayPal Login Button */}
             {currentUser ? (
-              <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-white/[0.04] border border-blue-400/25 backdrop-blur-md text-xs shadow-sm">
-                <div className="w-6 h-6 rounded-full bg-blue-500/20 border border-blue-400/40 flex items-center justify-center font-bold text-[10px] text-blue-300 shadow-inner">
+              <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-white/[0.04] border border-amber-400/30 backdrop-blur-md text-xs shadow-sm">
+                <div className="w-6 h-6 rounded-full bg-amber-500/20 border border-amber-400/40 flex items-center justify-center font-bold text-[10px] text-amber-300 shadow-inner">
                   {currentUser.avatar}
                 </div>
                 <div className="flex flex-col">
@@ -1310,7 +1287,7 @@ export default function Home() {
             ) : (
               <button
                 onClick={() => setIsLoginModalOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0070ba]/90 hover:bg-[#0070ba] active:scale-[0.98] text-white text-xs font-semibold shadow-lg shadow-blue-500/20 border border-blue-400/30 backdrop-blur-md transition-all cursor-pointer"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-400 hover:to-yellow-400 active:scale-[0.98] text-zinc-950 text-xs font-bold shadow-lg shadow-amber-500/25 border border-amber-400/40 backdrop-blur-md transition-all cursor-pointer"
               >
                 <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
                   <path d="M20.067 8.478c.492.315.844.818.996 1.424.238.948.067 2.05-.48 3.108-1.042 2.015-2.918 3.32-5.148 3.585-.453.053-.91.08-1.367.08h-.468c-.468 0-.87.332-.942.793l-.845 5.353-.028.175c-.033.206-.21.354-.42.354H8.05c-.26 0-.45-.24-.41-.497l2.128-13.49c.04-.257.26-.45.52-.45h4.636c1.69 0 3.19.467 4.143 1.565z" />
@@ -1321,34 +1298,36 @@ export default function Home() {
           </div>
         </header>
 
-        {/* 4 Responsive Actionable Glass Cards with Dropdowns */}
-        <FunctionalMetricsRow
-          categories={categories}
-          transactions={transactions}
-          events={events}
-          currentUser={currentUser}
-          splits={splits}
-          activeScope={activeScope}
-          onNavigateTab={(tab) => setActiveRightTab(tab)}
-          onFilterLedger={(debtorName, categoryName) => {
-            setActiveRightTab("transactions");
-            if (debtorName) {
-              setGridMutation({
-                filter: { debtor_name: debtorName },
-                statusMessage: `Filtered by debtor: ${debtorName}`,
-              });
-            } else if (categoryName) {
-              setSelectedCategory(categoryName);
-            }
-          }}
-          onSendChatMessage={(prompt) => {
-            void handleSendMessage(prompt);
-          }}
-          onOpenReviewModal={() => setIsReviewModalOpen(true)}
-        />
+        {/* 4 Responsive Actionable Glass Cards with Dropdowns (Isolated in High Z-Index Layer) */}
+        <div className="relative z-40 mb-6">
+          <FunctionalMetricsRow
+            categories={categories}
+            transactions={transactions}
+            events={events}
+            currentUser={currentUser}
+            splits={splits}
+            activeScope={activeScope}
+            onNavigateTab={(tab) => setActiveRightTab(tab)}
+            onFilterLedger={(debtorName, categoryName) => {
+              setActiveRightTab("transactions");
+              if (debtorName) {
+                setGridMutation({
+                  filter: { debtor_name: debtorName },
+                  statusMessage: `Filtered by debtor: ${debtorName}`,
+                });
+              } else if (categoryName) {
+                setSelectedCategory(categoryName);
+              }
+            }}
+            onSendChatMessage={(prompt) => {
+              void handleSendMessage(prompt);
+            }}
+            onOpenReviewModal={() => setIsReviewModalOpen(true)}
+          />
+        </div>
 
         {/* Main Split-View Workspace */}
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5 min-h-[580px]">
+        <div className="relative z-10 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5 min-h-[580px]">
           {/* Left Column: Conversational Agent (5 Cols) */}
           <div className="lg:col-span-5 flex flex-col min-h-0 h-[640px] lg:h-[740px]">
             <ChatPanel
@@ -1378,11 +1357,11 @@ export default function Home() {
                   onClick={() => setActiveRightTab("transactions")}
                   className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                     activeRightTab === "transactions"
-                      ? "bg-white/15 text-white shadow-sm border border-white/20 backdrop-blur-md"
+                      ? "bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-500/20 text-amber-200 shadow-sm border border-amber-400/40 backdrop-blur-md shadow-[0_2px_14px_rgba(245,158,11,0.2)]"
                       : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]"
                   }`}
                 >
-                  <Table2 className="w-3.5 h-3.5 text-sky-400" />
+                  <Table2 className={`w-3.5 h-3.5 ${activeRightTab === "transactions" ? "text-amber-400" : "text-zinc-400"}`} />
                   <span>Transactions</span>
                 </button>
 
@@ -1390,11 +1369,11 @@ export default function Home() {
                   onClick={() => setActiveRightTab("insights")}
                   className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                     activeRightTab === "insights"
-                      ? "bg-white/15 text-white shadow-sm border border-white/20 backdrop-blur-md"
+                      ? "bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-500/20 text-amber-200 shadow-sm border border-amber-400/40 backdrop-blur-md shadow-[0_2px_14px_rgba(245,158,11,0.2)]"
                       : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]"
                   }`}
                 >
-                  <BarChart3 className="w-3.5 h-3.5 text-emerald-400" />
+                  <BarChart3 className={`w-3.5 h-3.5 ${activeRightTab === "insights" ? "text-amber-400" : "text-zinc-400"}`} />
                   <span>Insights</span>
                 </button>
 
@@ -1402,18 +1381,18 @@ export default function Home() {
                   onClick={() => setActiveRightTab("upcoming")}
                   className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                     activeRightTab === "upcoming"
-                      ? "bg-white/15 text-white shadow-sm border border-white/20 backdrop-blur-md"
+                      ? "bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-500/20 text-amber-200 shadow-sm border border-amber-400/40 backdrop-blur-md shadow-[0_2px_14px_rgba(245,158,11,0.2)]"
                       : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]"
                   }`}
                 >
-                  <CalendarDays className="w-3.5 h-3.5 text-purple-400" />
+                  <CalendarDays className={`w-3.5 h-3.5 ${activeRightTab === "upcoming" ? "text-amber-400" : "text-zinc-400"}`} />
                   <span>Upcoming & Due</span>
                 </button>
               </div>
 
               <div className="hidden sm:flex items-center gap-2 pr-3 text-[11px] text-zinc-400">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400/50" />
-                <span className="font-medium">Active</span>
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shadow-sm shadow-amber-400/50" />
+                <span className="font-medium text-amber-300">Live</span>
               </div>
             </div>
 

@@ -568,7 +568,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
   }, [transactions, categoryBars, personalDebtBills, events, isClient]);
 
   return (
-    <div ref={containerRef} className="relative mb-6">
+    <div ref={containerRef} className="relative z-40 mb-6">
       {/* 4 Responsive Actionable Glass Cards */}
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         {/* ========================================================= */}
@@ -580,7 +580,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
           onClick={() => handleCardClick(1)}
           className={`relative p-4 rounded-2xl border transition-all duration-200 cursor-pointer select-none backdrop-blur-xl ${
             isFlyoutOpen(1)
-              ? "bg-white/[0.08] border-emerald-400/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_18px_40px_-10px_rgba(16,185,129,0.2)] ring-1 ring-emerald-400/30 -translate-y-0.5"
+              ? "z-50 bg-white/[0.08] border-amber-400/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_18px_40px_-10px_rgba(245,158,11,0.2)] ring-1 ring-amber-400/30 -translate-y-0.5"
               : "bg-white/[0.035] border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_12px_32px_-8px_rgba(0,0,0,0.5)] hover:border-white/20 hover:bg-white/[0.06] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_16px_36px_-8px_rgba(0,0,0,0.6)] hover:-translate-y-0.5"
           }`}
           role="button"
@@ -743,7 +743,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
           onClick={() => handleCardClick(2)}
           className={`relative p-4 rounded-2xl border transition-all duration-200 cursor-pointer select-none backdrop-blur-xl ${
             isFlyoutOpen(2)
-              ? "bg-white/[0.08] border-amber-400/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_18px_40px_-10px_rgba(245,158,11,0.2)] ring-1 ring-amber-400/30 -translate-y-0.5"
+              ? "z-50 bg-white/[0.08] border-amber-400/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_18px_40px_-10px_rgba(245,158,11,0.2)] ring-1 ring-amber-400/30 -translate-y-0.5"
               : "bg-white/[0.035] border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_12px_32px_-8px_rgba(0,0,0,0.5)] hover:border-white/20 hover:bg-white/[0.06] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_16px_36px_-8px_rgba(0,0,0,0.6)] hover:-translate-y-0.5"
           }`}
           role="button"
@@ -993,7 +993,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
           onClick={() => handleCardClick(3)}
           className={`relative p-4 rounded-2xl border transition-all duration-200 cursor-pointer select-none backdrop-blur-xl ${
             isFlyoutOpen(3)
-              ? "bg-white/[0.08] border-blue-400/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_18px_40px_-10px_rgba(59,130,246,0.2)] ring-1 ring-blue-400/30 -translate-y-0.5"
+              ? "z-50 bg-white/[0.08] border-amber-400/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_18px_40px_-10px_rgba(245,158,11,0.2)] ring-1 ring-amber-400/30 -translate-y-0.5"
               : "bg-white/[0.035] border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_12px_32px_-8px_rgba(0,0,0,0.5)] hover:border-white/20 hover:bg-white/[0.06] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_16px_36px_-8px_rgba(0,0,0,0.6)] hover:-translate-y-0.5"
           }`}
           role="button"
@@ -1005,21 +1005,21 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
               <p className="text-[11px] font-semibold text-zinc-400 tracking-wider uppercase">
                 Upcoming Bills
               </p>
-              <p className="text-xl font-bold text-blue-300 font-mono mt-1 tracking-tight truncate">
+              <p className="text-xl font-bold text-amber-200 font-mono mt-1 tracking-tight truncate">
                 ${totalMonthlyDue.toFixed(2)}{" "}
                 <span className="text-zinc-500 text-xs font-normal">Due</span>
               </p>
               {/* Dual Summary Badges */}
               <div className="flex items-center gap-1.5 mt-1">
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-300 border border-blue-500/25 font-mono truncate">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/25 font-mono truncate">
                   Subs: ${totalSubscriptionsAmount.toFixed(0)}
                 </span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/25 font-mono truncate">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.05] text-zinc-300 border border-white/10 font-mono truncate">
                   Owed: ${totalPersonalDebtsAmount.toFixed(0)}
                 </span>
               </div>
             </div>
-            <div className="w-11 h-11 rounded-xl bg-blue-500/15 border border-blue-500/25 flex items-center justify-center text-blue-300 shrink-0 shadow-inner">
+            <div className="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center text-amber-300 shrink-0 shadow-inner">
               <Clock className="w-5 h-5" />
             </div>
           </div>
@@ -1035,7 +1035,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
               {/* Header */}
               <div className="flex items-center justify-between pb-3.5 border-b border-white/10">
                 <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-lg bg-blue-500/15 border border-blue-500/25 flex items-center justify-center text-blue-300">
+                  <div className="w-6 h-6 rounded-lg bg-amber-500/15 border border-amber-500/25 flex items-center justify-center text-amber-300">
                     <CalendarDays className="w-3.5 h-3.5" />
                   </div>
                   <span className="text-xs font-semibold text-zinc-100 tracking-wider uppercase">
@@ -1048,7 +1048,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                     setActiveFlyout(null);
                     setPinnedFlyout(null);
                   }}
-                  className="text-[11px] font-semibold text-blue-400 hover:text-blue-300 px-2.5 py-1 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 flex items-center gap-1 transition-all cursor-pointer"
+                  className="text-[11px] font-semibold text-amber-400 hover:text-amber-300 px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 flex items-center gap-1 transition-all cursor-pointer"
                 >
                   <span>Calendar</span>
                   <ArrowRight className="w-3 h-3" />
@@ -1059,7 +1059,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                 {/* Recurring Subscriptions */}
                 <div>
                   <div className="flex items-center justify-between text-xs mb-2">
-                    <span className="font-semibold text-blue-300 flex items-center gap-1.5">
+                    <span className="font-semibold text-amber-300 flex items-center gap-1.5">
                       <CreditCard className="w-3.5 h-3.5" />
                       Recurring Subscriptions
                     </span>
@@ -1157,7 +1157,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
           onClick={() => handleCardClick(4)}
           className={`relative p-4 rounded-2xl border transition-all duration-200 cursor-pointer select-none backdrop-blur-xl ${
             isFlyoutOpen(4)
-              ? "bg-white/[0.08] border-rose-400/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_18px_40px_-10px_rgba(244,63,94,0.2)] ring-1 ring-rose-400/30 -translate-y-0.5"
+              ? "z-50 bg-white/[0.08] border-rose-400/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_18px_40px_-10px_rgba(244,63,94,0.2)] ring-1 ring-rose-400/30 -translate-y-0.5"
               : "bg-white/[0.035] border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_12px_32px_-8px_rgba(0,0,0,0.5)] hover:border-white/20 hover:bg-white/[0.06] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_16px_36px_-8px_rgba(0,0,0,0.6)] hover:-translate-y-0.5"
           }`}
           role="button"
