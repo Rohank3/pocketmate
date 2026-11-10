@@ -219,11 +219,11 @@ export const InteractiveSplitCard: React.FC<InteractiveSplitCardProps> = ({
   if (completed) {
     const nonHostCount = participants.filter((p) => !p.isHost).length;
     return (
-      <div className="my-3 p-4 rounded-xl border flex items-center gap-3 bg-emerald-950/30 border-emerald-500/40 text-emerald-200">
-        <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400" />
+      <div className="my-3 p-4 rounded-xl border flex items-center gap-3 bg-emerald-50 border-emerald-300 text-emerald-800 shadow-2xs">
+        <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-600" />
         <div className="text-sm">
-          <p className="font-semibold text-emerald-300">PayPal Invoices Dispatched</p>
-          <p className="text-xs text-emerald-400/80">
+          <p className="font-bold text-emerald-900">PayPal Invoices Dispatched</p>
+          <p className="text-xs text-emerald-700">
             {nonHostCount} invoice(s) sent via PayPal Sandbox for {merchantName}. Split record saved.
           </p>
         </div>
@@ -232,28 +232,28 @@ export const InteractiveSplitCard: React.FC<InteractiveSplitCardProps> = ({
   }
 
   return (
-    <div className="my-3 p-4 bg-zinc-900 border border-zinc-700/80 rounded-2xl shadow-2xl transition-all">
+    <div className="my-3 p-4 bg-white border border-stone-200 hover:border-amber-300 rounded-2xl shadow-xs transition-all">
       {/* Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+      <div className="flex items-center justify-between pb-3 border-b border-stone-100">
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+          <div className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-300 flex items-center justify-center text-amber-800 shrink-0 shadow-2xs">
             <Receipt className="w-4 h-4" />
           </div>
           <div>
-            <h4 className="text-xs font-bold text-zinc-100 tracking-wide uppercase">
+            <h4 className="text-xs font-bold text-zinc-900 tracking-wide uppercase">
               {merchantName}
             </h4>
-            <p className="text-[11px] text-zinc-400">
+            <p className="text-[11px] text-stone-500">
               Interactive Bill Split Breakdown
             </p>
           </div>
         </div>
 
         <div className="text-right">
-          <span className="text-sm font-mono font-bold text-emerald-400">
+          <span className="text-sm font-mono font-bold text-zinc-900">
             ${totalBill.toFixed(2)}
           </span>
-          <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Total Bill</p>
+          <p className="text-[10px] text-stone-400 uppercase tracking-wider font-medium">Total Bill</p>
         </div>
       </div>
 
@@ -265,12 +265,12 @@ export const InteractiveSplitCard: React.FC<InteractiveSplitCardProps> = ({
           return (
             <div
               key={p.id}
-              className={`p-2.5 rounded-xl border text-xs transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 ${
+              className={`p-2.5 rounded-xl border text-xs transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 shadow-2xs ${
                 p.isHost
-                  ? "bg-zinc-800/40 border-zinc-700/60"
+                  ? "bg-amber-50/40 border-amber-200"
                   : isMissingEmail
-                  ? "bg-amber-950/20 border-amber-500/40"
-                  : "bg-zinc-950/50 border-zinc-800"
+                  ? "bg-amber-50/70 border-amber-300"
+                  : "bg-stone-50 border-stone-200"
               }`}
             >
               {/* Left Column: Identity & Contact */}
@@ -278,8 +278,8 @@ export const InteractiveSplitCard: React.FC<InteractiveSplitCardProps> = ({
                 <span
                   className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase shrink-0 ${
                     p.isHost
-                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                      : "bg-zinc-800 text-zinc-300 border border-zinc-700"
+                      ? "bg-amber-100 text-amber-900 border border-amber-300"
+                      : "bg-stone-100 text-stone-700 border border-stone-200"
                   }`}
                 >
                   {p.isHost ? "Host" : "Invoice"}
@@ -292,11 +292,11 @@ export const InteractiveSplitCard: React.FC<InteractiveSplitCardProps> = ({
                     disabled={p.isHost}
                     onChange={(e) => handleUpdateName(p.id, e.target.value)}
                     placeholder="Name"
-                    className="w-full bg-transparent text-xs font-semibold text-zinc-100 focus:outline-hidden focus:text-white"
+                    className="w-full bg-transparent text-xs font-bold text-zinc-900 focus:outline-hidden"
                   />
                   {!p.isHost && (
                     <div className="flex items-center gap-1">
-                      <Mail className="w-3 h-3 text-zinc-500 shrink-0" />
+                      <Mail className="w-3 h-3 text-stone-400 shrink-0" />
                       <input
                         type="email"
                         value={p.email}
@@ -304,8 +304,8 @@ export const InteractiveSplitCard: React.FC<InteractiveSplitCardProps> = ({
                         placeholder="email@example.com"
                         className={`w-full bg-transparent text-[11px] font-mono focus:outline-hidden ${
                           isMissingEmail
-                            ? "text-amber-400 placeholder-amber-500/50"
-                            : "text-zinc-400 focus:text-zinc-200"
+                            ? "text-amber-800 placeholder-amber-600/50 font-medium"
+                            : "text-stone-500 focus:text-zinc-900"
                         }`}
                       />
                     </div>
@@ -320,25 +320,25 @@ export const InteractiveSplitCard: React.FC<InteractiveSplitCardProps> = ({
                   type="button"
                   onClick={() => handleToggleLock(p.id)}
                   title={p.isLocked ? "Unlock to allow auto-balance" : "Lock custom amount"}
-                  className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                  className={`p-1.5 rounded-lg border transition-colors cursor-pointer shadow-2xs ${
                     p.isLocked
-                      ? "bg-amber-500/20 border-amber-500/40 text-amber-400"
-                      : "bg-zinc-800/60 border-zinc-700/50 text-zinc-400 hover:text-zinc-200"
+                      ? "bg-amber-100 border-amber-300 text-amber-900 font-bold"
+                      : "bg-white border-stone-200 text-stone-500 hover:text-zinc-900"
                   }`}
                 >
-                  {p.isLocked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
+                  {p.isLocked ? <Lock className="w-3 h-3 text-amber-800" /> : <Unlock className="w-3 h-3" />}
                 </button>
 
                 {/* Amount Input */}
                 <div className="relative">
-                  <span className="absolute left-2 top-1.5 text-zinc-500 text-xs">$</span>
+                  <span className="absolute left-2 top-1.5 text-stone-400 text-xs">$</span>
                   <input
                     type="number"
                     step="0.01"
                     min="0"
                     value={p.amount}
                     onChange={(e) => handleUpdateAmount(p.id, e.target.value)}
-                    className="w-20 pl-5 pr-2 py-1 bg-zinc-900 border border-zinc-700 focus:border-emerald-500 rounded-lg text-xs font-mono font-bold text-zinc-100 text-right focus:outline-hidden"
+                    className="w-20 pl-5 pr-2 py-1 bg-white border border-stone-300 focus:border-amber-500 rounded-lg text-xs font-mono font-bold text-zinc-900 text-right focus:outline-hidden shadow-2xs"
                   />
                 </div>
 
@@ -347,7 +347,7 @@ export const InteractiveSplitCard: React.FC<InteractiveSplitCardProps> = ({
                   <button
                     type="button"
                     onClick={() => handleRemoveParticipant(p.id)}
-                    className="p-1.5 text-zinc-500 hover:text-rose-400 transition-colors cursor-pointer"
+                    className="p-1.5 text-stone-400 hover:text-rose-600 transition-colors cursor-pointer"
                     title="Remove participant"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -363,32 +363,32 @@ export const InteractiveSplitCard: React.FC<InteractiveSplitCardProps> = ({
       <button
         type="button"
         onClick={handleAddParticipant}
-        className="mt-1 w-full py-1.5 text-xs text-zinc-400 hover:text-emerald-400 border border-dashed border-zinc-800 hover:border-emerald-500/40 rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+        className="mt-1 w-full py-1.5 text-xs text-stone-600 hover:text-amber-900 border border-dashed border-stone-300 hover:border-amber-400 rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer font-medium bg-stone-50/50"
       >
-        <Plus className="w-3.5 h-3.5" />
+        <Plus className="w-3.5 h-3.5 text-amber-700" />
         <span>Add Person to Split</span>
       </button>
 
       {/* Live Penny-Balanced Meter & Auto-Balance Bar */}
-      <div className="mt-3 p-2.5 rounded-xl bg-zinc-950 border border-zinc-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+      <div className="mt-3 p-2.5 rounded-xl bg-stone-50 border border-stone-200 flex flex-wrap items-center justify-between gap-2 text-xs">
         <div className="flex items-center gap-2">
           {isBalanced ? (
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
           ) : (
-            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
           )}
 
           <div>
-            <span className="font-semibold text-zinc-200">
+            <span className="font-semibold text-zinc-800">
               Allocated: ${allocatedSum.toFixed(2)} of ${totalBill.toFixed(2)}
             </span>
-            <p className="text-[11px] text-zinc-400">
+            <p className="text-[11px] text-stone-500">
               {isBalanced ? (
-                <span className="text-emerald-400 font-medium">Penny-balanced (100% matched)</span>
+                <span className="text-emerald-700 font-semibold">Penny-balanced (100% matched)</span>
               ) : remaining > 0 ? (
-                <span className="text-amber-400 font-medium">${remaining.toFixed(2)} remaining to allocate</span>
+                <span className="text-amber-800 font-semibold">${remaining.toFixed(2)} remaining to allocate</span>
               ) : (
-                <span className="text-rose-400 font-medium">${Math.abs(remaining).toFixed(2)} over total</span>
+                <span className="text-rose-600 font-semibold">${Math.abs(remaining).toFixed(2)} over total</span>
               )}
             </p>
           </div>
@@ -398,7 +398,7 @@ export const InteractiveSplitCard: React.FC<InteractiveSplitCardProps> = ({
           <button
             type="button"
             onClick={handleAutoBalance}
-            className="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-xs font-semibold transition-colors cursor-pointer"
+            className="px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
           >
             Auto-balance remaining
           </button>
@@ -407,19 +407,19 @@ export const InteractiveSplitCard: React.FC<InteractiveSplitCardProps> = ({
 
       {/* Missing email banner if any */}
       {invalidEmailParticipant && (
-        <div className="mt-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px] flex items-center gap-2">
-          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+        <div className="mt-2 p-2 rounded-lg bg-amber-50 border border-amber-300 text-amber-900 text-[11px] flex items-center gap-2 font-medium">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0 text-amber-700" />
           <span>Please enter a valid PayPal email address for {invalidEmailParticipant.name} before sending.</span>
         </div>
       )}
 
       {/* Action Footer */}
-      <div className="mt-3 pt-3 border-t border-zinc-800 flex items-center justify-end gap-2">
+      <div className="mt-3 pt-3 border-t border-stone-100 flex items-center justify-end gap-2">
         <button
           type="button"
           onClick={onCancel}
           disabled={loading}
-          className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
+          className="px-3 py-1.5 text-xs text-stone-500 hover:text-zinc-900 hover:bg-stone-100 rounded-lg transition-colors cursor-pointer font-medium"
         >
           Cancel
         </button>
@@ -428,7 +428,7 @@ export const InteractiveSplitCard: React.FC<InteractiveSplitCardProps> = ({
           type="button"
           onClick={handleConfirm}
           disabled={loading || !isBalanced || Boolean(invalidEmailParticipant)}
-          className="px-4 py-1.5 text-xs font-semibold text-zinc-950 bg-emerald-400 hover:bg-emerald-300 active:bg-emerald-500 rounded-lg transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"
+          className="px-4 py-2 text-xs font-bold text-zinc-950 bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-400 hover:to-yellow-400 active:scale-95 rounded-xl transition-all shadow-xs border border-amber-400/40 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"
         >
           {loading ? (
             <>

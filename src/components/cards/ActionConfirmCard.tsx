@@ -125,11 +125,11 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
 
   if (isCancelled) {
     return (
-      <div className="my-3 p-3.5 rounded-xl border border-zinc-800 bg-zinc-950/70 text-xs text-zinc-400 flex items-center justify-between shadow-md">
+      <div className="my-3 p-3.5 rounded-xl border border-stone-200 bg-stone-50 text-xs text-stone-600 flex items-center justify-between shadow-2xs">
         <div className="flex items-center gap-2.5">
-          <XCircle className="w-4 h-4 text-zinc-500 shrink-0" />
-          <span className="font-medium text-zinc-300">Action cancelled.</span>
-          <span className="text-zinc-500">No funds transferred or invoices dispatched.</span>
+          <XCircle className="w-4 h-4 text-stone-400 shrink-0" />
+          <span className="font-semibold text-zinc-800">Action cancelled.</span>
+          <span className="text-stone-500">No funds transferred or invoices dispatched.</span>
         </div>
       </div>
     );
@@ -218,11 +218,11 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
     }
 
     return (
-      <div className="my-3 p-4 rounded-xl border flex items-center gap-3 bg-emerald-950/30 border-emerald-500/40 text-emerald-200">
-        <CheckCircle className="w-5 h-5 shrink-0 text-emerald-400" />
+      <div className="my-3 p-4 rounded-xl border flex items-center gap-3 bg-emerald-50 border-emerald-200 text-emerald-800 shadow-2xs">
+        <CheckCircle className="w-5 h-5 shrink-0 text-emerald-600" />
         <div className="text-sm">
-          <p className="font-semibold text-emerald-300">{successTitle}</p>
-          <p className="text-xs text-emerald-400/80">{successDesc}</p>
+          <p className="font-bold text-emerald-900">{successTitle}</p>
+          <p className="text-xs text-emerald-700">{successDesc}</p>
         </div>
       </div>
     );
@@ -254,21 +254,21 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
 
   // Standard Dispatch / Payout Card Layout
   return (
-    <div className="my-3 p-4 glass-subitem border-white/10 rounded-2xl shadow-xl transition-all">
-      <div className="flex items-center justify-between pb-3 border-b border-white/10">
+    <div className="my-3 p-4 bg-white border border-stone-200 hover:border-amber-300 rounded-2xl shadow-xs transition-all">
+      <div className="flex items-center justify-between pb-3 border-b border-stone-100">
         <div className="flex items-center gap-2">
           <div
             className={`w-2 h-2 rounded-full animate-pulse ${
-              isPayout ? "bg-blue-400" : "bg-emerald-400"
+              isPayout ? "bg-amber-500" : "bg-emerald-500"
             }`}
           />
-          <h4 className="text-xs font-semibold text-zinc-100 uppercase tracking-wider">
+          <h4 className="text-xs font-bold text-zinc-900 uppercase tracking-wider">
             {isPayout ? "Ready for Transfer" : "Ready for Dispatch"}
           </h4>
         </div>
         <span
           className={`text-xs font-mono font-bold ${
-            isPayout ? "text-blue-400" : "text-emerald-400"
+            isPayout ? "text-amber-900" : "text-emerald-700"
           }`}
         >
           ${totalAmount.toFixed(2)} Total
@@ -280,13 +280,13 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
         {(cardData.recipients || []).map((r, i) => (
           <div
             key={i}
-            className="flex items-center justify-between p-2 rounded-lg bg-zinc-800/40 border border-zinc-800 text-xs"
+            className="flex items-center justify-between p-2 rounded-lg bg-stone-50 border border-stone-200 text-xs shadow-2xs"
           >
             <div>
-              <span className="font-medium text-zinc-200">{r.name || r.email}</span>
-              <p className="text-[11px] text-zinc-400">{r.description}</p>
+              <span className="font-semibold text-zinc-900">{r.name || r.email}</span>
+              <p className="text-[11px] text-stone-500">{r.description}</p>
             </div>
-            <span className="font-mono font-semibold text-zinc-100">
+            <span className="font-mono font-bold text-zinc-900">
               ${r.amount.toFixed(2)}
             </span>
           </div>
@@ -295,25 +295,25 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
 
       {/* Transfer Purpose Dropdown (for Personal / P2P Transfers) */}
       {isPayout && (
-        <div className="pb-3 border-t border-zinc-800/80 pt-3">
+        <div className="pb-3 border-t border-stone-100 pt-3">
           <div className="flex items-center justify-between mb-1.5">
             <label
               htmlFor="transfer-purpose-select"
-              className="text-[11px] font-medium text-zinc-400 flex items-center gap-1.5"
+              className="text-[11px] font-semibold text-zinc-700 flex items-center gap-1.5"
             >
               <span>Payment Purpose / Ledger Category</span>
             </label>
-            <span className="text-[10px] text-blue-400 font-medium">Categorized on Transfer</span>
+            <span className="text-[10px] text-amber-800 font-medium">Categorized on Transfer</span>
           </div>
           <select
             id="transfer-purpose-select"
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
             disabled={loading}
-            className="w-full bg-zinc-950 border border-zinc-700 hover:border-zinc-600 focus:border-blue-500 rounded-lg px-3 py-2 text-xs text-zinc-100 outline-none transition-colors disabled:opacity-50 cursor-pointer"
+            className="w-full bg-white border border-stone-300 hover:border-amber-400 focus:border-amber-500 rounded-lg px-3 py-2 text-xs text-zinc-900 outline-none transition-colors disabled:opacity-50 cursor-pointer shadow-2xs"
           >
             {TRANSFER_PURPOSES.map((purpose) => (
-              <option key={purpose} value={purpose} className="bg-zinc-900 text-zinc-100">
+              <option key={purpose} value={purpose} className="bg-white text-zinc-900">
                 {purpose}
               </option>
             ))}
@@ -322,11 +322,11 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
       )}
 
       {/* Actions */}
-      <div className="pt-3 border-t border-zinc-800 flex items-center justify-end gap-2">
+      <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-2">
         <button
           onClick={handleCancel}
           disabled={loading}
-          className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 active:bg-zinc-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+          className="px-3 py-1.5 text-xs text-stone-500 hover:text-zinc-900 hover:bg-stone-100 active:bg-stone-200 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5 cursor-pointer font-medium"
         >
           <XCircle className="w-3.5 h-3.5" />
           Cancel
@@ -335,11 +335,7 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
         <button
           onClick={handleConfirm}
           disabled={loading}
-          className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-colors shadow-lg disabled:opacity-50 flex items-center gap-1.5 cursor-pointer ${
-            isPayout
-              ? "text-white bg-blue-600 hover:bg-blue-500 active:bg-blue-700 shadow-blue-500/20"
-              : "text-zinc-950 bg-emerald-400 hover:bg-emerald-300 active:bg-emerald-500 shadow-emerald-500/20"
-          }`}
+          className="px-4 py-2 text-xs font-bold rounded-xl transition-all shadow-xs disabled:opacity-50 flex items-center gap-1.5 cursor-pointer bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-400 hover:to-yellow-400 active:scale-95 text-zinc-950 border border-amber-400/40"
         >
           {loading ? (
             <>

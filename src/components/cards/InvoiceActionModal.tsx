@@ -54,19 +54,21 @@ export const InvoiceActionModal: React.FC<InvoiceActionModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 bg-stone-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white border border-amber-200/90 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150 text-zinc-900">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-800 bg-zinc-950">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-stone-200 bg-amber-50/60">
           <div className="flex items-center gap-2">
-            <DollarSign className="w-4 h-4 text-blue-400" />
-            <h3 className="text-sm font-semibold text-zinc-100">
+            <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-300 flex items-center justify-center text-amber-700">
+              <DollarSign className="w-3.5 h-3.5" />
+            </div>
+            <h3 className="text-sm font-bold text-zinc-900">
               PayPal Invoice: {invoice.paypalInvoiceId}
             </h3>
           </div>
           <button
             onClick={onClose}
-            className="text-zinc-400 hover:text-zinc-200 p-1 rounded-lg hover:bg-zinc-800 cursor-pointer"
+            className="text-stone-400 hover:text-zinc-800 p-1 rounded-lg hover:bg-stone-100 cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -74,34 +76,34 @@ export const InvoiceActionModal: React.FC<InvoiceActionModalProps> = ({
 
         {/* Invoice Summary Box */}
         <div className="p-5 flex flex-col gap-3.5">
-          <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800/80 flex flex-col gap-2">
+          <div className="p-3.5 rounded-xl bg-stone-50 border border-stone-200/90 flex flex-col gap-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-zinc-400">From</span>
-              <span className="text-xs font-semibold text-zinc-200">
+              <span className="text-xs text-stone-500 font-medium">From</span>
+              <span className="text-xs font-semibold text-zinc-900">
                 {invoice.senderName} ({invoice.senderEmail})
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-zinc-400">Description</span>
-              <span className="text-xs text-zinc-300 font-medium">{invoice.description}</span>
+              <span className="text-xs text-stone-500 font-medium">Description</span>
+              <span className="text-xs text-zinc-800 font-medium">{invoice.description}</span>
             </div>
-            <div className="flex items-center justify-between pt-2 border-t border-zinc-800/80">
-              <span className="text-xs font-semibold text-zinc-300">Total Due</span>
-              <span className="text-base font-bold text-emerald-400 font-mono">
+            <div className="flex items-center justify-between pt-2 border-t border-stone-200">
+              <span className="text-xs font-bold text-stone-700">Total Due</span>
+              <span className="text-base font-bold text-emerald-700 font-mono">
                 ${invoice.amount.toFixed(2)} {invoice.currency}
               </span>
             </div>
           </div>
 
           {/* Tab Selector */}
-          <div className="flex border-b border-zinc-800 bg-zinc-950 p-1 rounded-lg">
+          <div className="flex border border-stone-200 bg-stone-100 p-1 rounded-xl gap-1">
             <button
               type="button"
               onClick={() => setTab("pay")}
-              className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                 tab === "pay"
-                  ? "bg-blue-600 text-white shadow-xs"
-                  : "text-zinc-400 hover:text-zinc-200"
+                  ? "bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-2xs font-bold"
+                  : "text-stone-600 hover:text-zinc-900 hover:bg-stone-200/60"
               }`}
             >
               Pay via PayPal
@@ -109,10 +111,10 @@ export const InvoiceActionModal: React.FC<InvoiceActionModalProps> = ({
             <button
               type="button"
               onClick={() => setTab("adjust")}
-              className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                 tab === "adjust"
-                  ? "bg-zinc-800 text-zinc-100 shadow-xs"
-                  : "text-zinc-400 hover:text-zinc-200"
+                  ? "bg-white text-zinc-900 shadow-2xs border border-stone-200"
+                  : "text-stone-600 hover:text-zinc-900 hover:bg-stone-200/60"
               }`}
             >
               Propose Adjustment
@@ -120,10 +122,10 @@ export const InvoiceActionModal: React.FC<InvoiceActionModalProps> = ({
             <button
               type="button"
               onClick={() => setTab("decline")}
-              className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                 tab === "decline"
-                  ? "bg-rose-950 text-rose-300 border border-rose-800/50"
-                  : "text-zinc-400 hover:text-zinc-200"
+                  ? "bg-rose-50 text-rose-700 border border-rose-200"
+                  : "text-stone-600 hover:text-zinc-900 hover:bg-stone-200/60"
               }`}
             >
               Decline Invoice
@@ -133,14 +135,14 @@ export const InvoiceActionModal: React.FC<InvoiceActionModalProps> = ({
           {/* Tab Content */}
           {tab === "pay" && (
             <div className="flex flex-col gap-3">
-              <p className="text-xs text-zinc-400">
+              <p className="text-xs text-stone-600">
                 You will be redirected to PayPal&apos;s official hosted invoice page to complete checkout in your local currency or via card/UPI.
               </p>
 
               <button
                 type="button"
                 onClick={handlePay}
-                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-[#0070ba] hover:bg-[#005ea6] text-white text-xs font-semibold shadow-md shadow-blue-500/20 cursor-pointer transition-all"
+                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-bold shadow-xs cursor-pointer transition-all active:scale-[0.98]"
               >
                 <span>Pay ${invoice.amount.toFixed(2)} on PayPal Sandbox</span>
                 <ExternalLink className="w-3.5 h-3.5" />
@@ -150,12 +152,12 @@ export const InvoiceActionModal: React.FC<InvoiceActionModalProps> = ({
 
           {tab === "adjust" && (
             <form onSubmit={handleAdjustSubmit} className="flex flex-col gap-3">
-              <p className="text-xs text-zinc-400">
+              <p className="text-xs text-stone-600">
                 If the amount is incorrect (e.g. you only had one drink or bought fewer items), propose a revised share for the sender to re-issue.
               </p>
 
               <div>
-                <label className="text-[11px] font-medium text-zinc-400 block mb-1">
+                <label className="text-[11px] font-semibold text-stone-700 block mb-1">
                   Proposed Amount ($)
                 </label>
                 <input
@@ -167,12 +169,12 @@ export const InvoiceActionModal: React.FC<InvoiceActionModalProps> = ({
                   value={proposedAmount}
                   onChange={(e) => setProposedAmount(e.target.value)}
                   required
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 font-mono focus:outline-hidden focus:border-blue-500"
+                  className="w-full px-3 py-2 rounded-lg bg-white border border-stone-300 text-xs text-zinc-900 font-mono focus:outline-hidden focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
                 />
               </div>
 
               <div>
-                <label className="text-[11px] font-medium text-zinc-400 block mb-1">
+                <label className="text-[11px] font-semibold text-stone-700 block mb-1">
                   Reason for Adjustment
                 </label>
                 <input
@@ -181,13 +183,13 @@ export const InvoiceActionModal: React.FC<InvoiceActionModalProps> = ({
                   value={adjustmentReason}
                   onChange={(e) => setAdjustmentReason(e.target.value)}
                   required
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-hidden focus:border-blue-500"
+                  className="w-full px-3 py-2 rounded-lg bg-white border border-stone-300 text-xs text-zinc-900 focus:outline-hidden focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
                 />
               </div>
 
               <button
                 type="submit"
-                className="w-full py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-xs font-semibold cursor-pointer transition-colors"
+                className="w-full py-2 rounded-lg bg-stone-100 hover:bg-stone-200 text-zinc-900 border border-stone-300 text-xs font-semibold cursor-pointer transition-colors shadow-2xs"
               >
                 Submit Adjustment Request
               </button>
@@ -196,18 +198,18 @@ export const InvoiceActionModal: React.FC<InvoiceActionModalProps> = ({
 
           {tab === "decline" && (
             <form onSubmit={handleDeclineSubmit} className="flex flex-col gap-3">
-              <p className="text-xs text-zinc-400">
+              <p className="text-xs text-stone-600">
                 Decline this invoice if it was sent by mistake or you are not responsible for this charge.
               </p>
 
               <div>
-                <label className="text-[11px] font-medium text-zinc-400 block mb-1">
+                <label className="text-[11px] font-semibold text-stone-700 block mb-1">
                   Reason for Declining
                 </label>
                 <select
                   value={declineReason}
                   onChange={(e) => setDeclineReason(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-hidden focus:border-rose-500 cursor-pointer"
+                  className="w-full px-3 py-2 rounded-lg bg-white border border-stone-300 text-xs text-zinc-900 focus:outline-hidden focus:border-rose-500 cursor-pointer"
                 >
                   <option value="Not my expense / Sent by mistake">Not my expense / Sent by mistake</option>
                   <option value="I was not present at this event">I was not present at this event</option>
@@ -218,7 +220,7 @@ export const InvoiceActionModal: React.FC<InvoiceActionModalProps> = ({
 
               <button
                 type="submit"
-                className="w-full py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold cursor-pointer shadow-md shadow-rose-600/20 transition-colors"
+                className="w-full py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold cursor-pointer shadow-xs transition-colors"
               >
                 Confirm Decline & Notify Sender
               </button>

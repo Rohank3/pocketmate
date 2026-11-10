@@ -88,29 +88,32 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="paypal-auth-title"
-      className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 bg-stone-900/40 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150"
       onClick={isBlocking ? undefined : onClose}
     >
       <div
-        className="glass-dropdown rounded-2xl w-full max-w-md overflow-hidden shadow-[0_24px_64px_-12px_rgba(0,0,0,0.9),0_0_40px_rgba(245,158,11,0.12)] border border-amber-500/30 animate-in zoom-in-95 duration-150 flex flex-col"
+        className="bg-white/98 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl border border-amber-300/80 animate-in zoom-in-95 duration-150 flex flex-col relative"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Prominent Liquid Stream Accent */}
+        <div className="absolute top-0 left-0 right-0 z-10 liquid-bar" />
+
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 bg-zinc-950/85 backdrop-blur-md">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200/80 bg-amber-50/60 mt-[3.5px]">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500/25 via-yellow-500/15 to-amber-950/40 border border-amber-400/40 flex items-center justify-center text-amber-300 shrink-0 shadow-inner">
+            <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-400/50 flex items-center justify-center text-amber-800 shrink-0 shadow-2xs">
               <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M20.067 8.478c.492.315.844.818.996 1.424.238.948.067 2.05-.48 3.108-1.042 2.015-2.918 3.32-5.148 3.585-.453.053-.91.08-1.367.08h-.468c-.468 0-.87.332-.942.793l-.845 5.353-.028.175c-.033.206-.21.354-.42.354H8.05c-.26 0-.45-.24-.41-.497l2.128-13.49c.04-.257.26-.45.52-.45h4.636c1.69 0 3.19.467 4.143 1.565z" />
               </svg>
             </div>
             <div>
-              <h2 id="paypal-auth-title" className="text-sm font-bold text-zinc-100 flex items-center gap-2">
+              <h2 id="paypal-auth-title" className="text-sm font-bold text-zinc-900 flex items-center gap-2">
                 {currentUser ? "PayPal Sandbox Account" : "Log In with PayPal"}
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/25 font-mono">
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-mono font-medium">
                   Sandbox Active
                 </span>
               </h2>
-              <p className="text-[11px] text-zinc-400">
+              <p className="text-[11px] text-stone-500">
                 {currentUser
                   ? `Signed in as ${currentUser.name}`
                   : "Official OAuth 2.0 OpenID Connect Authentication"}
@@ -122,7 +125,7 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
               type="button"
               onClick={onClose}
               aria-label="Close dialog"
-              className="text-zinc-400 hover:text-zinc-100 p-1.5 rounded-lg hover:bg-white/10 active:bg-white/15 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400 cursor-pointer transition-colors"
+              className="text-stone-400 hover:text-zinc-900 p-1.5 rounded-lg hover:bg-stone-100 active:bg-stone-200 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400 cursor-pointer transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
@@ -134,44 +137,44 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
           {currentUser ? (
             /* Currently Authenticated State */
             <div className="flex flex-col gap-4">
-              <div className="p-4 rounded-xl bg-white/[0.03] border border-amber-500/30 flex items-center justify-between">
+              <div className="p-4 rounded-xl bg-stone-50 border border-stone-200 flex items-center justify-between">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-full bg-amber-500/20 border border-amber-400/40 flex items-center justify-center font-bold text-xs text-amber-300 shrink-0 shadow-inner">
+                  <div className="w-10 h-10 rounded-full bg-amber-500/20 border border-amber-400/50 flex items-center justify-center font-bold text-xs text-amber-900 shrink-0 shadow-inner">
                     {currentUser.avatar}
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <p className="text-xs font-semibold text-zinc-100 truncate">{currentUser.name}</p>
-                      <ShieldCheck className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      <p className="text-xs font-semibold text-zinc-900 truncate">{currentUser.name}</p>
+                      <ShieldCheck className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                     </div>
-                    <p className="text-[11px] text-zinc-400 font-mono truncate">{currentUser.email}</p>
+                    <p className="text-[11px] text-stone-500 font-mono truncate">{currentUser.email}</p>
                   </div>
                 </div>
 
-                <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/25 shrink-0">
+                <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 shrink-0 font-medium">
                   {currentUser.persona}
                 </span>
               </div>
 
               {/* Registered Business Industry Selection */}
-              <div className="p-3.5 rounded-xl bg-white/[0.03] border border-white/10 flex flex-col gap-2">
+              <div className="p-3.5 rounded-xl bg-stone-50/80 border border-stone-200 flex flex-col gap-2">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-zinc-200">
-                    <Building2 className="w-3.5 h-3.5 text-amber-400" />
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-zinc-800">
+                    <Building2 className="w-3.5 h-3.5 text-amber-600" />
                     <span>Registered Business Industry</span>
                   </div>
                   {isUpdatingIndustry && (
-                    <span className="text-[10px] text-amber-400 animate-pulse">Saving...</span>
+                    <span className="text-[10px] text-amber-700 animate-pulse font-medium">Saving...</span>
                   )}
                 </div>
-                <p className="text-[11px] text-zinc-400">
+                <p className="text-[11px] text-stone-500">
                   PocketMate aligns automated categorization directly with your industry&apos;s chart of accounts.
                 </p>
                 <select
                   aria-label="Registered Business Industry"
                   value={selectedIndustry}
                   onChange={(e) => void handleIndustryChange(e.target.value)}
-                  className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-zinc-100 focus:outline-hidden focus:border-blue-500 cursor-pointer"
+                  className="w-full bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-xs text-zinc-900 focus:outline-hidden focus:border-amber-500 cursor-pointer shadow-2xs"
                 >
                   {INDUSTRY_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>
@@ -181,10 +184,10 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
                 </select>
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-zinc-800">
+              <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-stone-200">
                 <a
                   href="/api/auth/paypal"
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-200 text-xs font-semibold border border-zinc-700 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-blue-500 cursor-pointer"
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-stone-100 hover:bg-stone-200 active:bg-stone-300 text-zinc-800 text-xs font-semibold border border-stone-300 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-500 cursor-pointer shadow-2xs"
                 >
                   <span>Switch PayPal Account</span>
                   <ArrowRight className="w-3.5 h-3.5 opacity-70" />
@@ -194,7 +197,7 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
                   type="button"
                   disabled={isLoggingOut}
                   onClick={handleLogoutAction}
-                  className="flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl bg-rose-950/40 hover:bg-rose-900/50 active:bg-rose-950 text-rose-300 hover:text-rose-200 text-xs font-semibold border border-rose-800/40 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-rose-500 cursor-pointer disabled:opacity-50"
+                  className="flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl bg-rose-50 hover:bg-rose-100 active:bg-rose-200 text-rose-700 hover:text-rose-800 text-xs font-semibold border border-rose-200 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-rose-500 cursor-pointer disabled:opacity-50 shadow-2xs"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                   <span>{isLoggingOut ? "Signing out..." : "Log Out"}</span>
@@ -205,22 +208,22 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
             /* Unauthenticated Blocking State */
             <div className="flex flex-col gap-4">
               {/* Notice Banner */}
-              <div className="p-4 rounded-xl bg-white/[0.03] border border-white/10 flex flex-col gap-3">
+              <div className="p-4 rounded-xl bg-stone-50/80 border border-stone-200 flex flex-col gap-3">
                 <div className="flex items-start gap-3">
-                  <div className="p-2 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 shrink-0 mt-0.5">
+                  <div className="p-2 rounded-lg bg-amber-100 border border-amber-300 text-amber-800 shrink-0 mt-0.5 shadow-2xs">
                     <Lock className="w-4 h-4" />
                   </div>
                   <div>
-                    <h3 className="text-xs font-semibold text-zinc-100">Zero Credential Exposure</h3>
-                    <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed">
+                    <h3 className="text-xs font-semibold text-zinc-900">Zero Credential Exposure</h3>
+                    <p className="text-[11px] text-stone-600 mt-1 leading-relaxed">
                       Authenticate securely directly on PayPal&apos;s verified login portal. Your password, 2FA codes,
                       and payment cards are handled exclusively by PayPal.
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 text-[11px] text-zinc-400 pt-2 border-t border-white/10">
-                  <ShieldCheck className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <div className="flex items-center gap-2 text-[11px] text-stone-500 pt-2 border-t border-stone-200">
+                  <ShieldCheck className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                   <span>Authenticated via OpenID Connect (OIDC) &amp; PKCE</span>
                 </div>
               </div>
@@ -238,12 +241,12 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
               </a>
 
               {/* Sandbox Developer Guidance */}
-              <div className="p-3.5 rounded-xl bg-amber-950/20 border border-amber-500/20 text-xs flex flex-col gap-2.5">
+              <div className="p-3.5 rounded-xl bg-amber-50/60 border border-amber-200 text-xs flex flex-col gap-2.5">
                 <div className="flex items-start gap-2.5">
-                  <HelpCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <HelpCircle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
                   <div>
-                    <p className="font-semibold text-zinc-100">PayPal Developer Sandbox Accounts</p>
-                    <p className="text-[11px] text-zinc-400 mt-0.5 leading-relaxed">
+                    <p className="font-semibold text-zinc-900">PayPal Developer Sandbox Accounts</p>
+                    <p className="text-[11px] text-stone-600 mt-0.5 leading-relaxed">
                       Log in with any personal or business sandbox account provisioned in your PayPal Developer Dashboard.
                       Sandbox accounts hold virtual balances ($5,000 USD) with zero real-currency exposure.
                     </p>
@@ -254,37 +257,37 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
                   href="https://developer.paypal.com/dashboard/accounts"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-amber-400 hover:text-amber-300 active:text-amber-500 transition-colors self-start ml-6.5 cursor-pointer focus-visible:outline-hidden focus-visible:underline"
+                  className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-amber-800 hover:text-amber-900 active:text-amber-950 transition-colors self-start ml-6.5 cursor-pointer focus-visible:outline-hidden focus-visible:underline"
                 >
                   <span>Manage Sandbox Accounts in PayPal Dashboard</span>
                   <ExternalLink className="w-3 h-3" />
                 </a>
 
-                <div className="border-t border-amber-500/15 pt-2 ml-6.5">
+                <div className="border-t border-amber-200 pt-2 ml-6.5">
                   <button
                     type="button"
                     onClick={() => setShowOAuthHelp(!showOAuthHelp)}
-                    className="text-[11px] text-zinc-400 hover:text-zinc-200 active:text-zinc-100 flex items-center gap-1 cursor-pointer transition-colors focus-visible:outline-hidden"
+                    className="text-[11px] text-stone-600 hover:text-zinc-900 active:text-black flex items-center gap-1 cursor-pointer transition-colors focus-visible:outline-hidden font-medium"
                   >
                     <span>{showOAuthHelp ? "Hide Return URL Setup" : "Return URL Configuration Guide"}</span>
-                    <HelpCircle className="w-3 h-3 text-amber-400/80" />
+                    <HelpCircle className="w-3 h-3 text-amber-700" />
                   </button>
 
                   {showOAuthHelp && (
-                    <div className="mt-2.5 p-3 rounded-lg bg-black/50 border border-amber-500/25 text-[11px] text-zinc-300 flex flex-col gap-1.5">
-                      <div className="flex items-center gap-1.5 font-bold text-amber-300">
-                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    <div className="mt-2.5 p-3 rounded-xl bg-white border border-amber-200 text-[11px] text-zinc-700 flex flex-col gap-1.5 shadow-2xs">
+                      <div className="flex items-center gap-1.5 font-bold text-amber-900">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-600" />
                         <span>App Features &amp; Return URL:</span>
                       </div>
-                      <p className="text-zinc-400">
+                      <p className="text-stone-600">
                         In your PayPal Developer Dashboard &gt; Apps &amp; Credentials &gt; your Sandbox App:
                       </p>
-                      <p className="text-zinc-300">
+                      <p className="text-zinc-800">
                         1. Enable <strong>Log in with PayPal</strong> in App Features.
                       </p>
-                      <p className="text-zinc-300">
+                      <p className="text-zinc-800">
                         2. Add Return URL:{" "}
-                        <code className="bg-zinc-950 px-1.5 py-0.5 rounded text-amber-300 font-mono text-[10px] break-all border border-amber-500/30">
+                        <code className="bg-stone-100 px-1.5 py-0.5 rounded text-amber-900 font-mono text-[10px] break-all border border-amber-200">
                           http://localhost:3000/api/auth/callback/paypal
                         </code>
                       </p>
@@ -297,13 +300,13 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="px-5 py-3 bg-zinc-950/80 border-t border-white/10 flex items-center justify-between text-[11px] text-zinc-500 backdrop-blur-md">
-          <span className="flex items-center gap-1.5 text-zinc-400">
-            <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+        <div className="px-5 py-3 bg-stone-50/90 border-t border-stone-200 flex items-center justify-between text-[11px] text-stone-500 backdrop-blur-md">
+          <span className="flex items-center gap-1.5 text-stone-600">
+            <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
             PayPal Sandbox OAuth 2.0
           </span>
-          <span className="flex items-center gap-1 text-amber-400 font-medium">
-            <CheckCircle2 className="w-3 h-3" />
+          <span className="flex items-center gap-1 text-amber-800 font-semibold">
+            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
             Zero Risk
           </span>
         </div>
