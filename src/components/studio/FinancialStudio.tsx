@@ -217,21 +217,24 @@ export default function FinancialStudio({
   }, [categoryAnalytics]);
 
   return (
-    <div className="h-full w-full flex flex-col glass-panel rounded-2xl overflow-y-auto p-4 md:p-5 gap-4 shadow-2xl">
+    <div className="h-full w-full flex flex-col bg-white/95 border border-stone-200/90 rounded-2xl overflow-y-auto p-4 md:p-5 gap-4 shadow-sm relative">
+      {/* Prominent Liquid Flow Animation */}
+      <div className="absolute top-0 left-0 right-0 z-10 liquid-bar" />
+
       {/* Top Banner: Budget Health Summary */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl glass-subitem border-white/10">
+      <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-stone-50/90 border border-stone-200/90 mt-1 shadow-2xs">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-300">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-300 flex items-center justify-center text-amber-800 shadow-2xs">
             <TrendingUp className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-zinc-100 flex items-center gap-2">
+            <h2 className="text-sm font-bold text-zinc-900 flex items-center gap-2">
               Spending Insights & Budget Health
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-300 font-semibold">
                 Real-Time
               </span>
             </h2>
-            <p className="text-xs text-zinc-400">
+            <p className="text-xs text-stone-500">
               Clear breakdown of monthly budget caps, spending distribution, and split receivables
             </p>
           </div>
@@ -239,22 +242,22 @@ export default function FinancialStudio({
 
         <div className="flex items-center gap-4 text-xs font-mono">
           <div>
-            <span className="text-zinc-500 block text-[10px]">TOTAL SPENT</span>
-            <span className="text-zinc-100 font-bold text-sm">
+            <span className="text-stone-500 block text-[10px]">TOTAL SPENT</span>
+            <span className="text-zinc-900 font-bold text-sm">
               ${categoryAnalytics.totalSpent.toFixed(2)}
             </span>
           </div>
-          <div className="border-l border-zinc-800 pl-4">
-            <span className="text-zinc-500 block text-[10px]">TOTAL CAP</span>
-            <span className="text-zinc-400 font-semibold text-sm">
+          <div className="border-l border-stone-200 pl-4">
+            <span className="text-stone-500 block text-[10px]">TOTAL CAP</span>
+            <span className="text-stone-600 font-semibold text-sm">
               ${categoryAnalytics.totalCap.toFixed(2)}
             </span>
           </div>
-          <div className="border-l border-zinc-800 pl-4">
-            <span className="text-zinc-500 block text-[10px]">UTILIZATION</span>
+          <div className="border-l border-stone-200 pl-4">
+            <span className="text-stone-500 block text-[10px]">UTILIZATION</span>
             <span
               className={`font-bold text-sm ${
-                categoryAnalytics.overallPercent > 100 ? "text-rose-400" : "text-emerald-400"
+                categoryAnalytics.overallPercent > 100 ? "text-rose-600" : "text-emerald-700"
               }`}
             >
               {categoryAnalytics.overallPercent}%
@@ -266,30 +269,30 @@ export default function FinancialStudio({
       {/* 2-Column Grid of 3 Core Visual Insights */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Insight 1: Budget Caps vs Actual Spend (7 Columns) */}
-        <div className="lg:col-span-7 glass-subitem border-white/10 rounded-2xl p-4 flex flex-col justify-between">
+        <div className="lg:col-span-7 bg-white border border-stone-200/90 rounded-2xl p-4 flex flex-col justify-between shadow-2xs">
           <div>
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
-                <BarChart2 className="w-4 h-4 text-amber-400" />
-                <h3 className="text-xs font-bold text-zinc-100 uppercase tracking-wider">
+                <BarChart2 className="w-4 h-4 text-amber-600" />
+                <h3 className="text-xs font-bold text-zinc-900 uppercase tracking-wider">
                   Budget Caps vs. Actual Spend
                 </h3>
               </div>
-              <span className="text-[11px] text-zinc-400">
+              <span className="text-[11px] text-stone-500">
                 {categoryAnalytics.items.filter((i) => i.isOver).length > 0 ? (
-                  <span className="text-rose-400 font-medium flex items-center gap-1">
+                  <span className="text-rose-600 font-semibold flex items-center gap-1">
                     <AlertTriangle className="w-3 h-3" />
                     {categoryAnalytics.items.filter((i) => i.isOver).length} cap breached
                   </span>
                 ) : (
-                  <span className="text-emerald-400 font-medium flex items-center gap-1">
+                  <span className="text-emerald-700 font-semibold flex items-center gap-1">
                     <CheckCircle2 className="w-3 h-3" /> All caps healthy
                   </span>
                 )}
               </span>
             </div>
 
-            <p className="text-xs text-zinc-400 mb-4">
+            <p className="text-xs text-stone-500 mb-4">
               Monthly spending ceilings compared to current transactions. Bars turn red when a ceiling is breached.
             </p>
 
@@ -307,29 +310,29 @@ export default function FinancialStudio({
                           className="w-2.5 h-2.5 rounded-full"
                           style={{ backgroundColor: cat.color }}
                         />
-                        <span className="font-semibold text-zinc-200">{cat.name}</span>
+                        <span className="font-semibold text-zinc-800">{cat.name}</span>
                         {isOver && (
-                          <span className="text-[10px] bg-rose-500/20 text-rose-300 border border-rose-500/30 px-1.5 py-0.2 rounded font-semibold">
+                          <span className="text-[10px] bg-rose-50 text-rose-700 border border-rose-200 px-1.5 py-0.2 rounded font-semibold">
                             +${cat.diff.toFixed(2)} Over Cap
                           </span>
                         )}
                       </div>
 
-                      <div className="font-mono text-zinc-300">
-                        <span className={`font-semibold ${isOver ? "text-rose-400" : "text-zinc-100"}`}>
+                      <div className="font-mono text-zinc-700">
+                        <span className={`font-semibold ${isOver ? "text-rose-600" : "text-zinc-900"}`}>
                           ${cat.spent.toFixed(2)}
                         </span>
-                        <span className="text-zinc-500"> / </span>
-                        <span className="text-zinc-400">${cat.monthlyCap.toFixed(0)}</span>
-                        <span className="text-zinc-500 text-[11px] ml-1.5">({cat.percent}%)</span>
+                        <span className="text-stone-400"> / </span>
+                        <span className="text-stone-600">${cat.monthlyCap.toFixed(0)}</span>
+                        <span className="text-stone-400 text-[11px] ml-1.5">({cat.percent}%)</span>
                       </div>
                     </div>
 
                     {/* Comparative Track Bar */}
-                    <div className="w-full bg-zinc-950 rounded-full h-2.5 overflow-hidden border border-zinc-800">
+                    <div className="w-full bg-stone-100 rounded-full h-2.5 overflow-hidden border border-stone-200">
                       <div
                         className={`h-full rounded-full transition-all duration-500 ${
-                          isOver ? "bg-rose-500" : cat.percent > 80 ? "bg-amber-400" : "bg-emerald-400"
+                          isOver ? "bg-rose-500" : cat.percent > 80 ? "bg-amber-500" : "bg-emerald-500"
                         }`}
                         style={{ width: `${barWidth}%` }}
                       />
@@ -340,34 +343,34 @@ export default function FinancialStudio({
             </div>
           </div>
 
-          <div className="mt-4 pt-3 border-t border-zinc-800/80 flex items-center justify-between text-[11px] text-zinc-400">
+          <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between text-[11px] text-stone-500">
             <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-400" /> Healthy
-              <span className="w-2 h-2 rounded-full bg-amber-400 ml-2" /> &gt;80% Warning
+              <span className="w-2 h-2 rounded-full bg-emerald-500" /> Healthy
+              <span className="w-2 h-2 rounded-full bg-amber-500 ml-2" /> &gt;80% Warning
               <span className="w-2 h-2 rounded-full bg-rose-500 ml-2" /> Exceeded
             </span>
-            <span className="font-mono text-zinc-500">
+            <span className="font-mono text-stone-500">
               {categoryAnalytics.items.length} Tracked Categories
             </span>
           </div>
         </div>
 
         {/* Insight 2: Category Spending Share Donut (5 Columns) */}
-        <div className="lg:col-span-5 glass-subitem border-white/10 rounded-2xl p-4 flex flex-col justify-between">
+        <div className="lg:col-span-5 bg-white border border-stone-200/90 rounded-2xl p-4 flex flex-col justify-between shadow-2xs">
           <div>
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
-                <PieChart className="w-4 h-4 text-emerald-400" />
-                <h3 className="text-xs font-bold text-zinc-100 uppercase tracking-wider">
+                <PieChart className="w-4 h-4 text-emerald-600" />
+                <h3 className="text-xs font-bold text-zinc-900 uppercase tracking-wider">
                   Spending Share
                 </h3>
               </div>
-              <span className="text-[11px] font-mono text-zinc-400">
+              <span className="text-[11px] font-mono text-stone-500">
                 100% of ${categoryAnalytics.totalSpent.toFixed(0)}
               </span>
             </div>
 
-            <p className="text-xs text-zinc-400 mb-3">
+            <p className="text-xs text-stone-500 mb-3">
               Proportion of total monthly expenses distributed across each spending category.
             </p>
 
@@ -401,17 +404,17 @@ export default function FinancialStudio({
 
                 {/* Donut Center Display */}
                 <div className="absolute flex flex-col items-center justify-center text-center pointer-events-none">
-                  <span className="text-[10px] text-zinc-500 uppercase font-semibold">
+                  <span className="text-[10px] text-stone-500 uppercase font-semibold">
                     {hoveredSlice || "Total"}
                   </span>
-                  <span className="text-sm font-bold text-zinc-100 font-mono">
+                  <span className="text-sm font-bold text-zinc-900 font-mono">
                     {hoveredSlice
                       ? `$${categoryAnalytics.items
                           .find((i) => i.name === hoveredSlice)
                           ?.spent.toFixed(0)}`
                       : `$${categoryAnalytics.totalSpent.toFixed(0)}`}
                   </span>
-                  <span className="text-[10px] text-zinc-400 font-mono">
+                  <span className="text-[10px] text-stone-500 font-mono">
                     {hoveredSlice
                       ? `${
                           categoryAnalytics.items.find((i) => i.name === hoveredSlice)
@@ -430,10 +433,10 @@ export default function FinancialStudio({
                   key={slice.id}
                   onMouseEnter={() => setHoveredSlice(slice.name)}
                   onMouseLeave={() => setHoveredSlice(null)}
-                  className={`flex items-center justify-between p-1.5 rounded-lg border transition-all cursor-pointer ${
+                  className={`flex items-center justify-between p-1.5 rounded-lg border transition-all cursor-pointer shadow-2xs ${
                     hoveredSlice === slice.name
-                      ? "bg-zinc-800 border-zinc-600 scale-[1.02]"
-                      : "bg-zinc-950/70 border-zinc-800/80 hover:border-zinc-700"
+                      ? "bg-amber-50/70 border-amber-300 scale-[1.02]"
+                      : "bg-stone-50 border-stone-200 hover:border-amber-300"
                   }`}
                 >
                   <div className="flex items-center gap-1.5 min-w-0">
@@ -441,9 +444,9 @@ export default function FinancialStudio({
                       className="w-2.5 h-2.5 rounded-full shrink-0"
                       style={{ backgroundColor: slice.color }}
                     />
-                    <span className="text-xs text-zinc-200 truncate">{slice.name}</span>
+                    <span className="text-xs text-zinc-800 truncate font-medium">{slice.name}</span>
                   </div>
-                  <span className="text-xs font-mono text-zinc-400 ml-1">
+                  <span className="text-xs font-mono text-stone-500 ml-1">
                     {slice.percentage}%
                   </span>
                 </div>
@@ -453,23 +456,23 @@ export default function FinancialStudio({
         </div>
 
         {/* Insight 3: Split Balances & Counterparty Receivables (Full 12 Columns) */}
-        <div className="lg:col-span-12 glass-subitem border-white/10 rounded-2xl p-4">
+        <div className="lg:col-span-12 bg-white border border-stone-200/90 rounded-2xl p-4 shadow-2xs">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
             <div className="flex items-center gap-2">
-              <Users className="w-4 h-4 text-purple-400" />
-              <h3 className="text-xs font-bold text-zinc-100 uppercase tracking-wider">
+              <Users className="w-4 h-4 text-amber-700" />
+              <h3 className="text-xs font-bold text-zinc-900 uppercase tracking-wider">
                 Split Balances & Receivables
               </h3>
             </div>
             <div className="flex items-center gap-2 text-xs">
-              <span className="text-zinc-400">Total Unsettled Owed:</span>
-              <span className="font-bold text-amber-400 font-mono">
+              <span className="text-stone-500">Total Unsettled Owed:</span>
+              <span className="font-bold text-amber-900 font-mono text-sm">
                 ${debtorAnalytics.totalReceivables.toFixed(2)}
               </span>
             </div>
           </div>
 
-          <p className="text-xs text-zinc-400 mb-3.5">
+          <p className="text-xs text-stone-500 mb-3.5">
             Active group splits and individual debts linked to your PayPal ledger charges.
           </p>
 
@@ -481,31 +484,31 @@ export default function FinancialStudio({
               return (
                 <div
                   key={debtor.name}
-                  className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 hover:border-zinc-700 transition-colors flex flex-col justify-between gap-2"
+                  className="p-3 rounded-xl bg-stone-50/80 border border-stone-200 hover:border-amber-300 transition-colors flex flex-col justify-between gap-2 shadow-2xs"
                 >
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-semibold text-zinc-200 truncate max-w-[130px]">
+                      <span className="text-xs font-bold text-zinc-900 truncate max-w-[130px]">
                         {debtor.name}
                       </span>
                       <span
-                        className={`text-[10px] px-1.5 py-0.5 rounded font-medium border ${
+                        className={`text-[10px] px-1.5 py-0.5 rounded font-semibold border ${
                           isSettled
-                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-300"
                             : isDisputed
-                            ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
-                            : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                            ? "bg-rose-50 text-rose-700 border-rose-300"
+                            : "bg-amber-50 text-amber-900 border-amber-300"
                         }`}
                       >
                         {isSettled ? "Settled" : isDisputed ? "Discrepancy" : "Pending"}
                       </span>
                     </div>
 
-                    <p className="text-base font-bold text-zinc-100 font-mono">
+                    <p className="text-base font-bold text-zinc-900 font-mono">
                       ${debtor.amount.toFixed(2)}
                     </p>
 
-                    <p className="text-[11px] text-zinc-500 truncate mt-0.5">
+                    <p className="text-[11px] text-stone-500 truncate mt-0.5">
                       {debtor.txs.join(", ")}
                     </p>
                   </div>
@@ -519,10 +522,10 @@ export default function FinancialStudio({
                           )}`
                         )
                       }
-                      className="mt-1 flex items-center justify-center gap-1 w-full py-1 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white text-[11px] font-medium border border-zinc-800 transition-colors cursor-pointer"
+                      className="mt-1 flex items-center justify-center gap-1 w-full py-1.5 rounded-lg bg-white hover:bg-amber-50 text-amber-900 text-[11px] font-semibold border border-amber-300 transition-colors cursor-pointer shadow-2xs"
                     >
                       <span>Draft Reminder</span>
-                      <ArrowUpRight className="w-3 h-3 text-zinc-400" />
+                      <ArrowUpRight className="w-3 h-3 text-amber-700" />
                     </button>
                   )}
                 </div>
