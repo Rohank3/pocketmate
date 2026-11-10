@@ -2,6 +2,8 @@
 
 import React, { useState, useMemo, useRef, useEffect, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
+import { gsap } from "gsap";
+import { useGSAP } from "@gsap/react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -16,6 +18,8 @@ import {
 } from "lucide-react";
 import { TransactionRow } from "@/components/grid/TransactionGrid";
 import { DISTINCT_CATEGORY_PALETTE } from "@/lib/utils/categoryColors";
+
+gsap.registerPlugin(useGSAP);
 
 export interface CategoryItem {
   id: string;
@@ -84,6 +88,30 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
     left: number;
   } | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const barRef = useRef<HTMLDivElement | null>(null);
+
+  useGSAP(
+    () => {
+      if (!activeMenu?.cat.id || !menuRef.current) return;
+      const mm = gsap.matchMedia();
+      mm.add("(prefers-reduced-motion: no-preference)", () => {
+        gsap.fromTo(
+          menuRef.current,
+          { y: -6, scale: 0.97, opacity: 0 },
+          {
+            y: 0,
+            scale: 1,
+            opacity: 1,
+            duration: 0.18,
+            ease: "power2.out",
+            clearProps: "transform,opacity",
+          }
+        );
+      });
+      return () => mm.revert();
+    },
+    { scope: barRef, dependencies: [activeMenu?.cat.id], revertOnUpdate: true }
+  );
 
   // Quick single category edit modal state (when opened directly from pill context menu)
   const [quickEditCategory, setQuickEditCategory] = useState<CategoryItem | null>(null);
@@ -253,7 +281,7 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
   };
 
   return (
-    <div className="glass-panel rounded-2xl p-3 flex flex-col gap-2.5 text-[var(--fg-primary)] shadow-md">
+    <div ref={barRef} className="relative glass-strip rounded-2xl p-3 flex flex-col gap-2.5 text-[var(--fg-primary)]">
       {/* Top Bar: Roundabout Carousel + Budget Cap Meter + Action Buttons */}
       <div className="flex flex-wrap items-center justify-between gap-2.5">
         {/* Roundabout Category Navigator */}
@@ -437,7 +465,7 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
         <div
           ref={menuRef}
           style={{ top: activeMenu.top, left: activeMenu.left }}
-          className="fixed z-[210] w-44 rounded-xl glass-dropdown py-1 text-xs animate-in fade-in zoom-in-95 duration-100"
+          className="fixed z-[210] w-44 rounded-xl glass-dropdown py-1 text-xs"
         >
           <div className="px-3 py-1 text-[10px] font-bold text-[var(--fg-muted)] border-b border-[var(--border-subtle)] uppercase tracking-wider">
             {activeMenu.cat.name}
