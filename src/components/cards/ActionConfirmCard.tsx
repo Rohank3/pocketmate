@@ -255,7 +255,7 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
   // Standard Dispatch / Payout Card Layout
   return (
     <div
-      className="my-3 p-4 bg-white/85 backdrop-blur-md border border-white/90 hover:border-amber-300/80 rounded-2xl shadow-[0_4px_16px_rgba(0,0,0,0.04),inset_0_1px_1.5px_rgba(255,255,255,0.95)] hover:shadow-[0_8px_24px_rgba(245,158,11,0.12)] transition-transform duration-300 ease-out hover:scale-[1.015] active:scale-[0.99] cursor-default"
+      className="my-3 p-4 bg-white/80 backdrop-blur-md border border-white/90 hover:border-amber-300/80 rounded-2xl shadow-[0_4px_16px_rgba(0,0,0,0.04),inset_0_1px_1.5px_rgba(255,255,255,0.95)] hover:shadow-[0_8px_24px_rgba(245,158,11,0.12)] transition-all duration-300 ease-out cursor-default"
       style={{
         transitionTimingFunction: "cubic-bezier(0.34, 1.56, 0.64, 1)",
       }}

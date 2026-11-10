@@ -283,7 +283,7 @@ export const SplitReconciliationCard: React.FC<SplitReconciliationCardProps> = (
   }
 
   return (
-    <div className="my-3 p-4 bg-white/95 border border-stone-200 hover:border-amber-300/80 rounded-xl shadow-lg transition-all">
+    <div className="my-3 p-4 bg-white/80 backdrop-blur-md border border-white/90 hover:border-amber-300/80 rounded-2xl shadow-[0_4px_16px_rgba(0,0,0,0.04),inset_0_1px_1.5px_rgba(255,255,255,0.95)] hover:shadow-[0_8px_24px_rgba(245,158,11,0.12)] transition-all duration-300 cursor-default">
       {/* Header */}
       <div className="flex items-center justify-between pb-3 border-b border-stone-200">
         <div className="flex items-center gap-2">
