@@ -248,13 +248,20 @@ class PayPalSandboxClient {
     const startDate = new Date(Date.now() - hoursBack * 60 * 60 * 1000).toISOString();
     const endDate = new Date().toISOString();
 
+    const resetBaseline = process.env.SANDBOX_RESET_AFTER
+      ? new Date(process.env.SANDBOX_RESET_AFTER).toISOString()
+      : undefined;
+    const effectiveStartDate = resetBaseline && new Date(resetBaseline) > new Date(startDate)
+      ? resetBaseline
+      : startDate;
+
     const results: PayPalTransaction[] = [];
     const targetEmailClean = (filterEmail || "").toLowerCase().trim();
 
     // 1. Fetch settled transactions and payouts from PayPal Reporting API
     try {
       const url = `${this.baseUrl}/v1/reporting/transactions?start_date=${encodeURIComponent(
-        startDate
+        effectiveStartDate
       )}&end_date=${encodeURIComponent(endDate)}&fields=all&page_size=100`;
 
       const repRes = await fetch(url, {
@@ -280,6 +287,12 @@ class PayPalSandboxClient {
           const txStatus = (info.transaction_status as string) || "S";
           const eventCode = (info.transaction_event_code as string) || "";
           if (txStatus === "V" || eventCode.startsWith("T11") || eventCode.startsWith("T12")) {
+            continue;
+          }
+
+          // Exclude transactions that occurred prior to the clean sandbox baseline
+          const txDateStr = (info.transaction_initiation_date as string) || (info.transaction_updated_date as string) || "";
+          if (resetBaseline && txDateStr && new Date(txDateStr).getTime() < new Date(resetBaseline).getTime()) {
             continue;
           }
 
@@ -409,6 +422,11 @@ class PayPalSandboxClient {
           rawStatus === "DRAFT" ||
           rawStatus === "SCHEDULED"
         ) {
+          continue;
+        }
+
+        const createTimeStr = (detail.metadata as Record<string, string>)?.create_time || (detail.invoice_date as string) || "";
+        if (resetBaseline && createTimeStr && new Date(createTimeStr).getTime() < new Date(resetBaseline).getTime()) {
           continue;
         }
 

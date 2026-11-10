@@ -848,8 +848,8 @@ async function runCleanup(): Promise<void> {
         const invId = inv.id;
         const status = inv.status;
 
-        // Invoices in DRAFT can be deleted directly
-        if (status === "DRAFT") {
+        // Invoices in DRAFT or CANCELLED can be hard-deleted directly
+        if (status === "DRAFT" || status === "CANCELLED") {
           const delRes = await fetch(`${baseUrl}/v2/invoicing/invoices/${encodeURIComponent(invId)}`, {
             method: "DELETE",
             headers: {
@@ -857,11 +857,11 @@ async function runCleanup(): Promise<void> {
             },
           });
           if (delRes.ok) {
-            console.log(`  ✓ Deleted DRAFT invoice: ${invId}`);
+            console.log(`  ✓ Permanently deleted ${status} invoice: ${invId}`);
             cleaned++;
           }
         }
-        // Invoices in SENT / SCHEDULED / UNPAID can be cancelled
+        // Invoices in SENT / SCHEDULED / UNPAID: cancel first, then hard-delete immediately
         else if (status === "SENT" || status === "SCHEDULED" || status === "UNPAID") {
           const cancelRes = await fetch(`${baseUrl}/v2/invoicing/invoices/${encodeURIComponent(invId)}/cancel`, {
             method: "POST",
@@ -876,30 +876,22 @@ async function runCleanup(): Promise<void> {
             }),
           });
           if (cancelRes.ok) {
-            console.log(`  ✓ Cancelled SENT invoice: ${invId}`);
+            // Once cancelled, permanently delete from PayPal API
+            const delRes = await fetch(`${baseUrl}/v2/invoicing/invoices/${encodeURIComponent(invId)}`, {
+              method: "DELETE",
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (delRes.ok) {
+              console.log(`  ✓ Cancelled & permanently deleted invoice: ${invId}`);
+            } else {
+              console.log(`  ✓ Cancelled SENT invoice: ${invId}`);
+            }
             cleaned++;
           }
         }
-        // Invoices in PAID / MARKED_AS_PAID can be refunded
-        else if (status === "PAID" || status === "MARKED_AS_PAID") {
-          const refundRes = await fetch(`${baseUrl}/v2/invoicing/invoices/${encodeURIComponent(invId)}/refunds`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              method: "PAYPAL",
-              refund_date: new Date().toISOString().split("T")[0],
-              amount: inv.amount,
-              note: "Simulation reset refund",
-            }),
-          });
-          if (refundRes.ok) {
-            console.log(`  ✓ Refunded settled invoice: ${invId}`);
-            cleaned++;
-          }
-        }
+        // Invoices in PAID / MARKED_AS_PAID / MARKED_AS_REFUNDED cannot be deleted via PayPal REST API
+        // (PayPal returns HTTP 422: INVOICE_CANNOT_BE_DELETED). Never issue refunds as that creates
+        // ledger clutter. Instead, they are completely excluded from testing via SANDBOX_RESET_AFTER.
       } catch (itemErr) {
         console.warn(`  ⚠️ Error processing invoice ${inv?.id}:`, itemErr instanceof Error ? itemErr.message : itemErr);
       }
@@ -949,7 +941,25 @@ async function runCleanup(): Promise<void> {
     console.warn("  ℹ️ DB purge note:", err instanceof Error ? err.message : err);
   }
 
-  console.log("\n✨ Teardown complete! Database and PayPal sandbox invoices are fully reset.\n");
+  // 3. Anchor clean baseline in .env.local so past transactions never exist in active queries
+  const resetIso = new Date().toISOString();
+  try {
+    const envLocalPath = path.resolve(process.cwd(), ".env.local");
+    if (fs.existsSync(envLocalPath)) {
+      let content = fs.readFileSync(envLocalPath, "utf-8");
+      if (content.includes("SANDBOX_RESET_AFTER=")) {
+        content = content.replace(/SANDBOX_RESET_AFTER=.*/g, `SANDBOX_RESET_AFTER="${resetIso}"`);
+      } else {
+        content += `\n# Sandbox Clean Baseline Cutoff\nSANDBOX_RESET_AFTER="${resetIso}"\n`;
+      }
+      fs.writeFileSync(envLocalPath, content, "utf-8");
+      console.log(`  ✓ Anchored clean testing baseline in .env.local: SANDBOX_RESET_AFTER="${resetIso}"`);
+    }
+  } catch (envErr) {
+    console.warn("  ℹ️ Env update note:", envErr instanceof Error ? envErr.message : envErr);
+  }
+
+  console.log("\n✨ Teardown complete! Database is purged and clean baseline is set.\n");
 }
 
 // -----------------------------------------------------------------------------
