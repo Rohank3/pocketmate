@@ -13,6 +13,7 @@ import {
 import type { CategoryItem } from "@/components/categories/CategoryControlBar";
 import type { TransactionRow } from "@/components/grid/TransactionGrid";
 import type { UserAccount } from "@/types/sandboxUser";
+import { ensureUniqueCategoryColors } from "@/lib/utils/categoryColors";
 
 export interface FinancialStudioProps {
   categories?: CategoryItem[];
@@ -47,8 +48,33 @@ export default function FinancialStudio({
 
   // 1. Calculate spending per category
   const categoryAnalytics = useMemo(() => {
+    // 1a. Ensure all categories have distinct unique colors and incorporate any ad-hoc transaction categories
+    const existingCats = ensureUniqueCategoryColors(categories);
+    const existingNames = new Set(existingCats.map((c) => c.name.toLowerCase()));
+
+    const extraCats: Array<{ id: string; name: string; monthlyCap: number; color?: string }> = [];
+    for (const tx of transactions) {
+      if (!tx.category) continue;
+      const norm = tx.category.trim();
+      if (
+        norm &&
+        norm !== "—" &&
+        norm.toLowerCase() !== "uncategorized" &&
+        !existingNames.has(norm.toLowerCase())
+      ) {
+        existingNames.add(norm.toLowerCase());
+        extraCats.push({
+          id: `cat_dyn_${norm.toLowerCase().replace(/\s+/g, "_")}`,
+          name: norm,
+          monthlyCap: 300,
+        });
+      }
+    }
+
+    const allCategories = ensureUniqueCategoryColors([...existingCats, ...extraCats]);
+
     const map: Record<string, { spent: number; count: number }> = {};
-    for (const c of categories) {
+    for (const c of allCategories) {
       map[c.name.toLowerCase()] = { spent: 0, count: 0 };
     }
 
@@ -56,7 +82,7 @@ export default function FinancialStudio({
     for (const tx of transactions) {
       totalSpent += tx.amount;
       const key = tx.category.toLowerCase();
-      const matched = categories.find(
+      const matched = allCategories.find(
         (c) =>
           c.name.toLowerCase() === key ||
           c.name.toLowerCase().includes(key) ||
@@ -70,7 +96,7 @@ export default function FinancialStudio({
       }
     }
 
-    const items = categories.map((cat) => {
+    const items = allCategories.map((cat) => {
       const stat = map[cat.name.toLowerCase()] || { spent: 0, count: 0 };
       const isOver = stat.spent > cat.monthlyCap;
       const diff = Math.abs(stat.spent - cat.monthlyCap);

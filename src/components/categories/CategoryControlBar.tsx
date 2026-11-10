@@ -15,6 +15,7 @@ import {
   Palette,
 } from "lucide-react";
 import { TransactionRow } from "@/components/grid/TransactionGrid";
+import { DISTINCT_CATEGORY_PALETTE } from "@/lib/utils/categoryColors";
 
 export interface CategoryItem {
   id: string;
@@ -42,18 +43,7 @@ interface CategoryControlBarProps {
   onDeleteCategory: (categoryId: string) => void;
 }
 
-export const PRESET_COLORS = [
-  "#f59e0b", // Gold / Amber
-  "#d97706", // Deep Gold
-  "#10b981", // Emerald
-  "#8b5cf6", // Purple
-  "#ec4899", // Pink
-  "#f43f5e", // Rose
-  "#6366f1", // Indigo
-  "#14b8a6", // Teal
-  "#eab308", // Yellow Gold
-  "#fbbf24", // Champagne
-];
+export const PRESET_COLORS = [...DISTINCT_CATEGORY_PALETTE];
 
 export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
   categories,
@@ -70,7 +60,15 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
   // Form states for adding category
   const [newName, setNewName] = useState("");
   const [newCap, setNewCap] = useState("300");
-  const [newColor, setNewColor] = useState(PRESET_COLORS[0]);
+
+  const nextAvailableColor = useMemo(() => {
+    const used = new Set(categories.map((c) => c.color?.toLowerCase()));
+    return DISTINCT_CATEGORY_PALETTE.find((c) => !used.has(c.toLowerCase())) || DISTINCT_CATEGORY_PALETTE[0];
+  }, [categories]);
+
+  const [selectedColor, setSelectedColor] = useState<string | null>(null);
+  const newColor = selectedColor || nextAvailableColor;
+  const setNewColor = (color: string) => setSelectedColor(color);
 
   // Editing state inside Manage tab
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
@@ -193,6 +191,7 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
     });
     setNewName("");
     setNewCap("300");
+    setSelectedColor(null);
     setIsModalOpen(false);
     onSelectCategory(newName.trim());
   };

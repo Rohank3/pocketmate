@@ -21,6 +21,7 @@ import type { CategoryItem } from "@/components/categories/CategoryControlBar";
 import type { TransactionRow } from "@/components/grid/TransactionGrid";
 import type { ScheduledEvent } from "@/components/scheduler/BudgetScheduler";
 import type { UserAccount } from "@/types/sandboxUser";
+import { ensureUniqueCategoryColors } from "@/lib/utils/categoryColors";
 
 export interface FunctionalMetricsRowProps {
   categories: CategoryItem[];
@@ -177,7 +178,8 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
         catSpendMap[catName] = (catSpendMap[catName] || 0) + tx.amount;
       });
 
-      const bars = categories.map((cat) => {
+      const normalizedCats = ensureUniqueCategoryColors(categories);
+      const bars = normalizedCats.map((cat) => {
         const catSpent = catSpendMap[cat.name.toLowerCase()] || 0;
         const catPercent = cat.monthlyCap > 0 ? Math.round((catSpent / cat.monthlyCap) * 100) : 0;
         const barWidth = Math.min(100, catPercent);

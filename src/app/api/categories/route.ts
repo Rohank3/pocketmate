@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthenticatedUser, getUserIdFromRequest } from "@/lib/auth/session";
 import { reinitializeCategory } from "@/lib/services/categorizer";
+import { getDistinctColorForCategory, ensureUniqueCategoryColors } from "@/lib/utils/categoryColors";
 import { z } from "zod";
 
 const CreateCategorySchema = z.object({
@@ -48,7 +49,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    return NextResponse.json({ success: true, categories });
+    return NextResponse.json({ success: true, categories: ensureUniqueCategoryColors(categories) });
   } catch (error) {
     console.error("[Categories GET Error]", error);
     return NextResponse.json({ success: false, error: "Failed to fetch categories" }, { status: 500 });
@@ -77,6 +78,7 @@ export async function POST(req: NextRequest) {
 
     const { name, monthlyCap, color, alertThreshold, softCap } = parseResult.data;
     const computedSoftCap = softCap ?? (monthlyCap * (alertThreshold ?? 0.80));
+    const resolvedColor = color && color !== "#3b82f6" ? color : getDistinctColorForCategory(name);
 
     const created = await prisma.budgetCategory.upsert({
       where: {
@@ -87,7 +89,7 @@ export async function POST(req: NextRequest) {
       },
       update: {
         monthlyCap,
-        color,
+        color: resolvedColor,
         ...(alertThreshold !== undefined ? { alertThreshold } : {}),
         softCap: computedSoftCap,
       },
@@ -95,7 +97,7 @@ export async function POST(req: NextRequest) {
         userId,
         name,
         monthlyCap,
-        color,
+        color: resolvedColor,
         currentSpent: 0,
         alertThreshold: alertThreshold ?? 0.80,
         softCap: computedSoftCap,
