@@ -307,7 +307,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       />
 
       {/* Floating Inset Header with Controls */}
-      <div className="px-3 py-2.5 bg-[var(--surface-elevated)] backdrop-blur-md border border-[var(--border-subtle)] flex items-center justify-between gap-2 shrink-0 rounded-2xl shadow-2xs">
+      <div className="relative px-3 py-2.5 glass-strip flex items-center justify-between gap-2 shrink-0 rounded-2xl">
         <div className="flex items-center gap-2 shrink-0">
           <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center justify-center text-[var(--accent-text)] shrink-0">
             <Bot className="w-4 h-4" />

@@ -401,7 +401,7 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
   return (
     <div className="h-full w-full flex flex-col rounded-2xl overflow-hidden bg-transparent relative">
       {/* Top Banner / Reactive Agent Feedback Header */}
-      <div className="px-4 py-3 bg-[var(--surface-elevated)] border-b border-[var(--border-subtle)] flex items-center justify-between backdrop-blur-md relative overflow-hidden rounded-t-2xl">
+      <div className="relative px-4 py-3 glass-strip border-t-0 border-x-0 flex items-center justify-between overflow-hidden rounded-t-2xl">
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 rounded-lg bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center justify-center text-[var(--accent-text)]">
             <DollarSign className="w-3.5 h-3.5" />

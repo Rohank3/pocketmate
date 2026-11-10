@@ -1210,7 +1210,7 @@ export default function Home() {
               intensity={1}
             >
               {/* View Tab Switcher */}
-            <div className="flex items-center justify-between p-1.5 rounded-2xl glass-panel shadow-sm">
+            <div className="relative flex items-center justify-between p-1.5 rounded-2xl glass-strip">
               <div className="flex flex-wrap items-center gap-1.5">
                 <button
                   onClick={() => setActiveRightTab("transactions")}
