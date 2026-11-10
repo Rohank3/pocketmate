@@ -36,9 +36,9 @@ const darkTheme = themeQuartz.withPart(colorSchemeDark).withParams({
   backgroundColor: "rgba(9, 9, 11, 0.6)",
   headerBackgroundColor: "rgba(18, 18, 22, 0.85)",
   borderColor: "rgba(255, 255, 255, 0.08)",
-  foregroundColor: "#f4f4f5",
-  accentColor: "#3b82f6",
-  rowHoverColor: "rgba(255, 255, 255, 0.05)",
+  foregroundColor: "#fcfcfd",
+  accentColor: "#f59e0b",
+  rowHoverColor: "rgba(245, 158, 11, 0.06)",
 });
 
 export interface TransactionRow {
@@ -369,13 +369,13 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
       {/* Top Banner / Reactive Agent Feedback */}
       <div className="px-4 py-2.5 bg-zinc-950/70 border-b border-white/10 flex items-center justify-between backdrop-blur-md">
         <div className="flex items-center gap-2">
-          <DollarSign className="w-4 h-4 text-emerald-400" />
+          <DollarSign className="w-4 h-4 text-amber-400" />
           <h2 className="text-sm font-semibold text-zinc-100">Live Financial Ledger</h2>
           <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700/60">
             {filteredData.length} of {rowData.length} records
           </span>
           {selectedCategory && selectedCategory.toLowerCase() !== "all" && (
-            <span className="text-[11px] px-2 py-0.5 rounded bg-blue-950/70 text-blue-300 border border-blue-800/60 font-medium">
+            <span className="text-[11px] px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 font-medium">
               Category: {selectedCategory}
             </span>
           )}

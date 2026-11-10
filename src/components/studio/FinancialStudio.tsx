@@ -221,7 +221,7 @@ export default function FinancialStudio({
       {/* Top Banner: Budget Health Summary */}
       <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl glass-subitem border-white/10">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-300">
             <TrendingUp className="w-5 h-5" />
           </div>
           <div>
@@ -270,7 +270,7 @@ export default function FinancialStudio({
           <div>
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
-                <BarChart2 className="w-4 h-4 text-blue-400" />
+                <BarChart2 className="w-4 h-4 text-amber-400" />
                 <h3 className="text-xs font-bold text-zinc-100 uppercase tracking-wider">
                   Budget Caps vs. Actual Spend
                 </h3>

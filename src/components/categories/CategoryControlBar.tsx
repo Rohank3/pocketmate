@@ -44,16 +44,16 @@ interface CategoryControlBarProps {
 }
 
 export const PRESET_COLORS = [
+  "#f59e0b", // Gold / Amber
+  "#d97706", // Deep Gold
   "#10b981", // Emerald
-  "#3b82f6", // Blue
   "#8b5cf6", // Purple
   "#ec4899", // Pink
-  "#f59e0b", // Amber
-  "#06b6d4", // Cyan
   "#f43f5e", // Rose
   "#6366f1", // Indigo
   "#14b8a6", // Teal
-  "#eab308", // Yellow
+  "#eab308", // Yellow Gold
+  "#fbbf24", // Champagne
 ];
 
 export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
@@ -239,9 +239,9 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
         {/* Roundabout Category Navigator */}
         <div className="flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-xl border border-white/10">
           <span
-            className="w-3 h-3 rounded-sm shrink-0"
+            className="w-3 h-3 rounded-sm shrink-0 shadow-sm shadow-amber-400/30"
             style={{
-              backgroundColor: activeCategoryObj ? activeCategoryObj.color : "#3b82f6",
+              backgroundColor: activeCategoryObj ? activeCategoryObj.color : "#f59e0b",
             }}
           />
 
@@ -335,14 +335,14 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
                 onClick={() => onSelectCategory(optName)}
                 className={`flex items-center gap-1.5 pl-3 pr-2.5 py-1 rounded-xl text-xs font-medium transition-all cursor-pointer border ${
                   isSelected
-                    ? "bg-white/15 text-white border-white/25 shadow-sm backdrop-blur-md"
+                    ? "bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-500/20 text-amber-200 border-amber-400/40 shadow-[0_2px_12px_rgba(245,158,11,0.2)] backdrop-blur-md"
                     : "bg-white/[0.03] text-zinc-300 border-white/8 hover:border-white/15 hover:bg-white/[0.06] hover:text-white"
                 }`}
               >
                 {!isAll && (
                   <span
                     className="w-2 h-2 rounded-full shrink-0 shadow-sm"
-                    style={{ backgroundColor: catObj?.color || "#3b82f6" }}
+                    style={{ backgroundColor: catObj?.color || "#f59e0b" }}
                   />
                 )}
                 <span>{optName}</span>

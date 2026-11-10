@@ -479,7 +479,7 @@ export default function BudgetScheduler({
               const d = String(Math.min(15, new Date(y, viewDate.getMonth() + 1, 0).getDate())).padStart(2, "0");
               handleOpenDayModal(`${y}-${m}-${d}`, parseInt(d, 10));
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white text-xs font-semibold cursor-pointer shadow-sm transition-all focus-visible:outline-2 focus-visible:outline-blue-400"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-400 hover:to-yellow-400 active:scale-95 text-zinc-950 text-xs font-bold cursor-pointer shadow-md shadow-amber-500/25 transition-all"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Add Bill / Reminder</span>
@@ -495,7 +495,7 @@ export default function BudgetScheduler({
             onClick={() => setViewMode("calendar")}
             className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-medium transition-all cursor-pointer ${
               viewMode === "calendar"
-                ? "bg-blue-600 text-white shadow-xs"
+                ? "bg-gradient-to-r from-amber-500/25 via-yellow-500/15 to-amber-500/25 text-amber-200 border border-amber-400/40 shadow-xs"
                 : "text-zinc-400 hover:text-zinc-200"
             }`}
           >
@@ -507,7 +507,7 @@ export default function BudgetScheduler({
             onClick={() => setViewMode("agenda")}
             className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-medium transition-all cursor-pointer ${
               viewMode === "agenda"
-                ? "bg-blue-600 text-white shadow-xs"
+                ? "bg-gradient-to-r from-amber-500/25 via-yellow-500/15 to-amber-500/25 text-amber-200 border border-amber-400/40 shadow-xs"
                 : "text-zinc-400 hover:text-zinc-200"
             }`}
           >
@@ -616,7 +616,7 @@ export default function BudgetScheduler({
                     <span
                       className={`text-xs font-mono font-semibold px-1.5 py-0.5 rounded ${
                         cell.isToday
-                          ? "bg-blue-600 text-white"
+                          ? "bg-gradient-to-r from-amber-500 to-yellow-500 text-zinc-950 font-bold shadow-xs"
                           : cell.isCurrentMonth
                           ? "text-zinc-400 group-hover:text-zinc-200"
                           : "text-zinc-600"
@@ -625,7 +625,7 @@ export default function BudgetScheduler({
                       {cell.day}
                     </span>
                     {cell.isToday && (
-                      <span className="text-[9px] font-semibold text-blue-400 uppercase tracking-tight">
+                      <span className="text-[9px] font-bold text-amber-400 uppercase tracking-tight">
                         Today
                       </span>
                     )}
@@ -647,7 +647,7 @@ export default function BudgetScheduler({
                               : isIncoming
                               ? "bg-emerald-950/70 border-emerald-800/50 text-emerald-300 hover:bg-emerald-900/80"
                               : isOutgoing
-                              ? "bg-blue-950/70 border-blue-800/50 text-blue-300 hover:bg-blue-900/80"
+                              ? "bg-amber-950/70 border-amber-800/50 text-amber-300 hover:bg-amber-900/80"
                               : "bg-purple-950/70 border-purple-800/50 text-purple-300 hover:bg-purple-900/80"
                           }`}
                           title={`${evt.title} - $${evt.amount.toFixed(2)} (${evt.status})`}
@@ -859,7 +859,7 @@ export default function BudgetScheduler({
             <span className="w-2 h-2 rounded-full bg-emerald-400" /> Receivables (Split Due)
           </span>
           <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-blue-400" /> Subscriptions & Bills
+            <span className="w-2 h-2 rounded-full bg-amber-400" /> Subscriptions & Bills
           </span>
           <span className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-purple-400" /> Checkpoints
