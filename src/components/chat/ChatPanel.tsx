@@ -296,6 +296,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     >
       {/* Hidden file picker for real receipt audits */}
       <input
+        id="receipt-file-upload"
+        name="receiptFile"
+        aria-label="Upload receipt image or PDF"
         type="file"
         ref={fileInputRef}
         onChange={handleFileChange}
@@ -304,24 +307,24 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       />
 
       {/* Floating Inset Header with Controls */}
-      <div className="px-3.5 sm:px-4 py-2.5 bg-[var(--surface-elevated)] backdrop-blur-md border border-[var(--border-subtle)] flex items-center justify-between gap-2 shrink-0 rounded-2xl shadow-2xs">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center justify-center text-[var(--accent-text)] shrink-0">
+      <div className="px-3 py-2.5 bg-[var(--surface-elevated)] backdrop-blur-md border border-[var(--border-subtle)] flex items-center justify-between gap-2 shrink-0 rounded-2xl shadow-2xs">
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center justify-center text-[var(--accent-text)] shrink-0">
             <Bot className="w-4 h-4" />
           </div>
-          <h1 className="text-sm font-bold text-[var(--fg-primary)] truncate">
+          <h1 className="text-sm font-bold text-[var(--fg-primary)] whitespace-nowrap">
             PocketMate
           </h1>
         </div>
 
         {/* Action Controls: History Drawer, New Chat */}
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
           {/* History Drawer Toggle Button */}
           <button
             type="button"
             onClick={() => setIsHistoryOpen((prev) => !prev)}
             aria-label="Toggle Conversation History Drawer"
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0070ba] ${
+            className={`flex items-center gap-1 px-2 xl:px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0070ba] ${
               isHistoryOpen
                 ? "bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-text)] shadow-2xs"
                 : "theme-btn-secondary hover:border-[var(--accent-border)]"
@@ -345,10 +348,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                 setIsHistoryOpen(false);
               }}
               aria-label="Start a new chat session"
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[var(--accent-subtle)] hover:bg-[var(--accent-subtle-hover)] text-[var(--accent-text)] text-xs font-bold border border-[var(--accent-border)] transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0070ba]"
+              className="flex items-center gap-1 px-2 xl:px-2.5 py-1.5 rounded-xl bg-[var(--accent-subtle)] hover:bg-[var(--accent-subtle-hover)] text-[var(--accent-text)] text-xs font-bold border border-[var(--accent-border)] transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0070ba]"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">New Chat</span>
+              <span className="hidden sm:inline whitespace-nowrap">New Chat</span>
             </button>
           )}
         </div>
@@ -662,6 +665,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             }}
           >
             <input
+              id="pocketmate-chat-input"
+              name="chatMessage"
+              aria-label="Message PocketMate"
               type="text"
               value={inputText}
               maxLength={2000}
