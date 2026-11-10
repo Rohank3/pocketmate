@@ -22,6 +22,7 @@ import ReactMarkdown from "react-markdown";
 import { ActionConfirmCard, ActionCardData } from "../cards/ActionConfirmCard";
 import type { ChatThreadItem } from "@/types/chat";
 import { LiquidGlassContainer } from "@/components/ui/LiquidGlassContainer";
+import { ElasticChatBubble } from "./ElasticChatBubble";
 
 export interface ChatMessageItem {
   id: string;
@@ -186,25 +187,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     }
   }, [editingThreadId]);
 
-  const [isBuoyant, setIsBuoyant] = useState(false);
   const chatRootRef = useRef<HTMLDivElement>(null);
-
-  // Listen for liquid chamber velocity waves to trigger organic bubble buoyancy
-  useEffect(() => {
-    const el = chatRootRef.current;
-    if (!el) return;
-    let timer: ReturnType<typeof setTimeout>;
-    const handleWave = () => {
-      setIsBuoyant(true);
-      clearTimeout(timer);
-      timer = setTimeout(() => setIsBuoyant(false), 850);
-    };
-    el.addEventListener("liquid-wave", handleWave);
-    return () => {
-      el.removeEventListener("liquid-wave", handleWave);
-      clearTimeout(timer);
-    };
-  }, []);
 
   // Handle escape to close drawer or cancel rename
   useEffect(() => {
@@ -309,7 +292,6 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       }}
       accent="#f59e0b"
       intensity={1}
-      rippleStrength={1}
     >
       {/* Hidden file picker for real receipt audits */}
       <input
@@ -589,17 +571,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               </div>
             )}
 
-            <div
-              className={`max-w-[85%] rounded-2xl px-4 py-3 leading-relaxed transition-all duration-300 ease-out animate-jelly-pop cursor-default select-text ${
-                isBuoyant ? "liquid-buoyant" : ""
-              } ${
-                m.role === "user"
-                  ? "bg-gradient-to-br from-amber-500/95 via-amber-600/95 to-amber-700/95 backdrop-blur-md text-white rounded-tr-xs shadow-[0_4px_16px_rgba(245,158,11,0.22),inset_0_1px_1.5px_rgba(255,255,255,0.5)] hover:shadow-[0_8px_24px_rgba(245,158,11,0.3)]"
-                  : "bg-white/75 backdrop-blur-xl border border-white/85 text-zinc-900 rounded-tl-xs shadow-[0_4px_16px_rgba(0,0,0,0.04),inset_0_1px_1.5px_rgba(255,255,255,0.95)] hover:shadow-[0_8px_24px_rgba(245,158,11,0.12)] hover:border-amber-200/90"
-              }`}
-              style={{
-                transitionTimingFunction: "cubic-bezier(0.34, 1.56, 0.64, 1)",
-              }}
+            <ElasticChatBubble
+              role={m.role}
+              intensity={0.75}
             >
               {/* Tool Execution Badges if any */}
               {m.toolBadges && m.toolBadges.length > 0 && (
@@ -654,7 +628,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                   onAssignCategory={onAssignCategory}
                 />
               )}
-            </div>
+            </ElasticChatBubble>
 
             {m.role === "user" && (
               <div className="w-7 h-7 rounded-lg bg-amber-600 border border-amber-500 flex items-center justify-center text-white shrink-0 mt-0.5 shadow-2xs">
