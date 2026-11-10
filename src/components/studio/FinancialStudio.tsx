@@ -73,52 +73,71 @@ export default function FinancialStudio({
 
     const allCategories = ensureUniqueCategoryColors([...existingCats, ...extraCats]);
 
-    const map: Record<string, { spent: number; count: number }> = {};
+    const catOutflowMap: Record<string, { amount: number; count: number }> = {};
+    const catInflowMap: Record<string, number> = {};
+
     for (const c of allCategories) {
-      map[c.name.toLowerCase()] = { spent: 0, count: 0 };
+      catOutflowMap[c.name.toLowerCase()] = { amount: 0, count: 0 };
     }
 
-    let totalSpent = 0;
     for (const tx of transactions) {
-      totalSpent += tx.amount;
-      const key = tx.category.toLowerCase();
+      const key = (tx.category || "Uncategorized").toLowerCase();
+      if (key === "income" || key === "revenue") {
+        // Exclude general income from expense caps
+        continue;
+      }
+
       const matched = allCategories.find(
         (c) =>
           c.name.toLowerCase() === key ||
           c.name.toLowerCase().includes(key) ||
           key.includes(c.name.toLowerCase())
       );
-      if (matched) {
-        const mKey = matched.name.toLowerCase();
-        if (!map[mKey]) map[mKey] = { spent: 0, count: 0 };
-        map[mKey].spent += tx.amount;
-        map[mKey].count += 1;
+
+      const targetKey = matched ? matched.name.toLowerCase() : key;
+
+      if (tx.direction === "incoming") {
+        catInflowMap[targetKey] = (catInflowMap[targetKey] || 0) + (tx.amount || 0);
+      } else {
+        if (!catOutflowMap[targetKey]) catOutflowMap[targetKey] = { amount: 0, count: 0 };
+        catOutflowMap[targetKey].amount += (tx.amount || 0);
+        catOutflowMap[targetKey].count += 1;
       }
     }
 
+    let totalSpent = 0;
     const items = allCategories.map((cat) => {
-      const stat = map[cat.name.toLowerCase()] || { spent: 0, count: 0 };
-      const isOver = stat.spent > cat.monthlyCap;
-      const diff = Math.abs(stat.spent - cat.monthlyCap);
-      const percent = cat.monthlyCap > 0 ? Math.round((stat.spent / cat.monthlyCap) * 100) : 0;
-      const shareOfTotal = totalSpent > 0 ? Math.round((stat.spent / totalSpent) * 100) : 0;
+      const normKey = cat.name.toLowerCase();
+      const outflow = catOutflowMap[normKey]?.amount || 0;
+      const inflow = catInflowMap[normKey] || 0;
+      const netSpent = Math.max(0, outflow - inflow);
+      totalSpent += netSpent;
+
+      const isOver = netSpent > cat.monthlyCap;
+      const diff = Math.abs(netSpent - cat.monthlyCap);
+      const percent = cat.monthlyCap > 0 ? Math.round((netSpent / cat.monthlyCap) * 100) : 0;
 
       return {
         ...cat,
-        spent: stat.spent,
-        txCount: stat.count,
+        spent: netSpent,
+        txCount: catOutflowMap[normKey]?.count || 0,
         isOver,
         diff,
         percent,
-        shareOfTotal,
+        shareOfTotal: 0,
       };
     });
+
+    const itemsWithShare = items.map((i) => ({
+      ...i,
+      shareOfTotal: totalSpent > 0 ? Math.round((i.spent / totalSpent) * 100) : 0,
+    }));
 
     const totalCap = categories.reduce((sum, c) => sum + c.monthlyCap, 0);
     const overallPercent = totalCap > 0 ? Math.round((totalSpent / totalCap) * 100) : 0;
 
     return {
-      items,
+      items: itemsWithShare,
       totalSpent,
       totalCap,
       overallPercent,
