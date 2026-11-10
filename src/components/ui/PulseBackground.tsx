@@ -64,27 +64,27 @@ export const PulseBackground: React.FC<PulseBackgroundProps> = ({
   const isDark = pal.isDark ?? (pal.ink === "#f1f5f9" || pal.from.startsWith("#0"));
 
   const stripeGradient = isDark
-    ? "linear-gradient(180deg, transparent, rgba(0, 112, 186, 0.03) 25%, rgba(0, 112, 186, 0.12) 60%, rgba(0, 69, 124, 0.18) 90%, transparent 100%)"
+    ? "linear-gradient(180deg, transparent 0%, rgba(0, 112, 186, 0.14) 22%, rgba(56, 189, 248, 0.34) 58%, rgba(0, 140, 255, 0.42) 86%, transparent 100%)"
     : "linear-gradient(180deg, transparent, rgba(0, 112, 186, 0.04) 25%, rgba(0, 112, 186, 0.12) 60%, rgba(0, 70, 124, 0.18) 90%, transparent 100%)";
 
   const breathingLamp = isDark
-    ? "radial-gradient(closest-side, rgba(0, 112, 186, 0.2), rgba(0, 94, 166, 0.1), transparent)"
+    ? "radial-gradient(closest-side, rgba(0, 140, 255, 0.34), rgba(56, 189, 248, 0.16), transparent)"
     : "radial-gradient(closest-side, rgba(0, 112, 186, 0.14), rgba(0, 121, 193, 0.07), transparent)";
 
   const topLamp = isDark
-    ? "radial-gradient(closest-side, rgba(0, 112, 186, 0.16), rgba(0, 69, 124, 0.08), transparent)"
+    ? "radial-gradient(closest-side, rgba(56, 189, 248, 0.24), rgba(0, 112, 186, 0.14), transparent)"
     : "radial-gradient(closest-side, rgba(0, 121, 193, 0.12), rgba(0, 112, 186, 0.05), transparent)";
 
   const centerBloom = isDark
-    ? "radial-gradient(closest-side, rgba(0, 112, 186, 0.1), transparent)"
+    ? "radial-gradient(closest-side, rgba(56, 189, 248, 0.18), transparent)"
     : "radial-gradient(closest-side, rgba(0, 112, 186, 0.09), transparent)";
 
   const vignette = isDark
-    ? "radial-gradient(75% 60% at 50% 35%, transparent 45%, rgba(3, 6, 12, 0.72) 95%)"
+    ? "radial-gradient(80% 65% at 50% 38%, transparent 50%, rgba(3, 6, 12, 0.42) 96%)"
     : "radial-gradient(75% 60% at 50% 35%, transparent 55%, rgba(203, 213, 225, 0.28) 92%)";
 
   const stripeBorderClass = isDark
-    ? "border-sky-400/[0.04]"
+    ? "border-sky-400/[0.12]"
     : "border-slate-900/[0.035]";
 
   return (
@@ -102,14 +102,16 @@ export const PulseBackground: React.FC<PulseBackgroundProps> = ({
       aria-hidden="true"
     >
       {/* Vertical Travelling Pulse Stripes */}
-      <div className="absolute inset-0 flex opacity-90">
+      <div className={`absolute inset-0 flex ${isDark ? "opacity-95" : "opacity-90"}`}>
         {Array.from({ length: n }, (_, i) => (
           <div
             key={i}
             className={`relative flex-1 h-full overflow-hidden border-r ${stripeBorderClass}`}
           >
             <div
-              className="absolute left-0 right-0 h-3/5 -top-[60%] blur-[8px] opacity-75 will-change-transform"
+              className={`absolute left-0 right-0 h-3/5 -top-[60%] will-change-transform ${
+                isDark ? "blur-[6px] opacity-85" : "blur-[8px] opacity-75"
+              }`}
               style={{
                 background: stripeGradient,
                 animation: `psh-pulse 5.4s cubic-bezier(.45, 0, .25, 1) infinite`,
