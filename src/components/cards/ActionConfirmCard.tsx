@@ -254,7 +254,12 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
 
   // Standard Dispatch / Payout Card Layout
   return (
-    <div className="my-3 p-4 bg-white border border-stone-200 hover:border-amber-300 rounded-2xl shadow-xs transition-all">
+    <div
+      className="my-3 p-4 bg-white border border-stone-200 hover:border-amber-300 rounded-2xl shadow-xs transition-transform duration-300 ease-out hover:scale-[1.015] active:scale-[0.99] cursor-default"
+      style={{
+        transitionTimingFunction: "cubic-bezier(0.34, 1.56, 0.64, 1)",
+      }}
+    >
       <div className="flex items-center justify-between pb-3 border-b border-stone-100">
         <div className="flex items-center gap-2">
           <div

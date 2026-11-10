@@ -29,8 +29,6 @@ export interface LiquidGlassContainerProps {
   elasticEdges?: boolean;
   intensity?: number; // edge spring intensity: 0..1.5
   rippleStrength?: number; // click ripple intensity: 0..1.5
-  showCursor?: boolean; // pointer lens follower
-  cursorSize?: number; // 18..56
   borderRadius?: number; // default: 28px
   contentClassName?: string;
 }
@@ -219,7 +217,8 @@ interface Ripple extends Point {
 }
 
 /**
- * Living Elastic Meniscus & Dynamic Physics Engine.
+ * Living Elastic Meniscus & Dynamic Rim Physics.
+ * Seamlessly flexes the container perimeter when the mouse approaches, without any floating orbs.
  */
 function LiquidGlassMotion({
   containerRef,
@@ -227,23 +226,17 @@ function LiquidGlassMotion({
   elasticEdges = true,
   intensity = 0.9,
   rippleStrength = 1,
-  showCursor = true,
-  cursorSize = 36,
 }: {
   containerRef: RefObject<HTMLElement | null>;
   clipId: string;
   elasticEdges?: boolean;
   intensity?: number;
   rippleStrength?: number;
-  showCursor?: boolean;
-  cursorSize?: number;
 }) {
-  const diameter = clamp(cursorSize, 24, 56, 36);
   const svgRef = useRef<SVGSVGElement>(null);
   const clipRef = useRef<SVGPathElement>(null);
   const rimGlowRef = useRef<SVGPathElement>(null);
   const rimRef = useRef<SVGPathElement>(null);
-  const cursorRef = useRef<HTMLDivElement>(null);
   const rippleLayerRef = useRef<SVGGElement>(null);
 
   useLayoutEffect(() => {
@@ -252,9 +245,8 @@ function LiquidGlassMotion({
     const outline = rimRef.current;
     const outlineGlow = rimGlowRef.current;
     const clipping = clipRef.current;
-    const lens = cursorRef.current;
 
-    if (!container || !surface || !outline || !outlineGlow || !clipping || !lens) return;
+    if (!container || !surface || !outline || !outlineGlow || !clipping) return;
 
     const amount = elasticEdges ? clamp(intensity, 0, 1.5, 0.9) : 0;
     const strength = clamp(rippleStrength, 0, 1.5, 1);
@@ -273,15 +265,12 @@ function LiquidGlassMotion({
       center: 0,
     }));
 
-    // Resting position on left rim (similar to reference wordmark card)
     const pointer = {
-      x: 0,
-      y: 120,
-      targetX: 0,
-      targetY: 120,
-      visible: 1,
-      targetVisible: 1,
-      initialized: true,
+      x: -9999,
+      y: -9999,
+      targetX: -9999,
+      targetY: -9999,
+      initialized: false,
     };
 
     let width = Math.max(1, container.offsetWidth);
@@ -436,14 +425,8 @@ function LiquidGlassMotion({
       last = now;
 
       const follow = 1 - Math.exp(-20 * dt);
-      const fade = 1 - Math.exp(-14 * dt);
       pointer.x += (pointer.targetX - pointer.x) * follow;
       pointer.y += (pointer.targetY - pointer.y) * follow;
-      pointer.visible += (pointer.targetVisible - pointer.visible) * fade;
-
-      // Update surface light caustic reflection
-      container!.style.setProperty("--mouse-x", `${round(pointer.x)}px`);
-      container!.style.setProperty("--mouse-y", `${round(pointer.y)}px`);
 
       targets();
 
@@ -463,15 +446,9 @@ function LiquidGlassMotion({
       draw();
       drawRipples(dt);
 
-      lens!.style.transform = `translate3d(${round(pointer.x - diameter / 2)}px, ${round(
-        pointer.y - diameter / 2
-      )}px, 0)`;
-      lens!.style.opacity = String(round(pointer.visible));
-
       const unsettled =
         edges.some((e) => Math.abs(e.value - e.target) > 0.015 || Math.abs(e.velocity) > 0.05) ||
         Math.abs(pointer.x - pointer.targetX) + Math.abs(pointer.y - pointer.targetY) > 0.1 ||
-        Math.abs(pointer.visible - pointer.targetVisible) > 0.002 ||
         waves.some(Boolean);
 
       if (unsettled) {
@@ -482,8 +459,6 @@ function LiquidGlassMotion({
           e.velocity = 0;
         });
         draw();
-        pointer.visible = pointer.targetVisible;
-        lens!.style.opacity = String(pointer.visible);
         last = 0;
       }
     }
@@ -497,10 +472,8 @@ function LiquidGlassMotion({
     function reset() {
       hasPointer = false;
       contact = null;
-      // Gently return lens to left rim bead resting position
-      pointer.targetX = 0;
-      pointer.targetY = 120;
-      pointer.targetVisible = 0.95;
+      pointer.targetX = -9999;
+      pointer.targetY = -9999;
       edges.forEach((e) => {
         e.target = 0;
       });
@@ -524,14 +497,8 @@ function LiquidGlassMotion({
         return;
       }
 
-      if (!pointer.initialized) {
-        pointer.x = pt.x;
-        pointer.y = pt.y;
-        pointer.initialized = true;
-      }
       pointer.targetX = pt.x;
       pointer.targetY = pt.y;
-      pointer.targetVisible = showCursor ? 1 : 0;
       hasPointer = true;
       wake();
     }
@@ -585,7 +552,6 @@ function LiquidGlassMotion({
     window.addEventListener("pointerup", release, { passive: true });
     window.addEventListener("pointercancel", release, { passive: true });
 
-    // Initial draw & wake to ensure resting droplet is immediately visible
     draw();
     wake();
 
@@ -600,7 +566,7 @@ function LiquidGlassMotion({
       window.removeEventListener("pointercancel", release);
       clearRipples();
     };
-  }, [containerRef, elasticEdges, intensity, rippleStrength, diameter, showCursor]);
+  }, [containerRef, elasticEdges, intensity, rippleStrength]);
 
   return (
     <>
@@ -627,8 +593,8 @@ function LiquidGlassMotion({
         <g ref={rippleLayerRef} clipPath={`url(#${clipId})`}>
           {[0, 1, 2, 3].map((index) => (
             <g key={index} className="g-liquid-ripple" opacity="0">
-              <circle stroke="rgba(245, 158, 11, 0.45)" strokeWidth="2.4" fill="none" cy="1.2" r="0" />
-              <circle stroke="rgba(255, 255, 255, 0.95)" strokeWidth="1.5" fill="none" r="0" />
+              <circle stroke="rgba(245, 158, 11, 0.4)" strokeWidth="2.2" fill="none" cy="1.2" r="0" />
+              <circle stroke="rgba(255, 255, 255, 0.95)" strokeWidth="1.4" fill="none" r="0" />
             </g>
           ))}
         </g>
@@ -637,11 +603,11 @@ function LiquidGlassMotion({
         <path
           ref={rimGlowRef}
           fill="none"
-          stroke="rgba(245, 158, 11, 0.45)"
-          strokeWidth="2.5px"
+          stroke="rgba(245, 158, 11, 0.4)"
+          strokeWidth="2.2px"
           vectorEffect="non-scaling-stroke"
           style={{
-            filter: "drop-shadow(0 0 6px rgba(245, 158, 11, 0.35))",
+            filter: "drop-shadow(0 0 6px rgba(245, 158, 11, 0.3))",
           }}
         />
 
@@ -654,32 +620,13 @@ function LiquidGlassMotion({
           vectorEffect="non-scaling-stroke"
         />
       </svg>
-
-      {/* Living Glass Lens Droplet (3D spherical refraction bead) */}
-      <div
-        ref={cursorRef}
-        className="g-liquid-lens pointer-events-none absolute select-none z-30 rounded-full transition-opacity duration-200"
-        style={{
-          width: diameter,
-          height: diameter,
-          inset: "0 auto auto 0",
-          background:
-            "radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.6) 28%, rgba(245, 158, 11, 0.28) 55%, rgba(255, 255, 255, 0.2) 100%)",
-          border: "1.5px solid rgba(255, 255, 255, 0.95)",
-          boxShadow:
-            "inset 0 2px 4px #ffffff, inset 0 -2px 4px rgba(217, 119, 6, 0.25), 0 8px 24px -4px rgba(180, 120, 30, 0.35), 0 0 12px rgba(255, 255, 255, 0.8)",
-          backdropFilter: "blur(4px) saturate(1.8)",
-          WebkitBackdropFilter: "blur(4px) saturate(1.8)",
-        }}
-        aria-hidden="true"
-      />
     </>
   );
 }
 
 /**
  * Reusable Production Liquid Glass Container.
- * Provides physical DOM displacement refraction in Chromium + elastic meniscus edge physics + specular ripples.
+ * Provides physical DOM displacement refraction in Chromium + living elastic meniscus edge physics.
  */
 export const LiquidGlassContainer: React.FC<LiquidGlassContainerProps> = ({
   children,
@@ -691,8 +638,6 @@ export const LiquidGlassContainer: React.FC<LiquidGlassContainerProps> = ({
   elasticEdges = true,
   intensity = 0.9,
   rippleStrength = 1,
-  showCursor = true,
-  cursorSize = 36,
   borderRadius = 28,
   contentClassName = "",
 }) => {
@@ -730,22 +675,11 @@ export const LiquidGlassContainer: React.FC<LiquidGlassContainerProps> = ({
           "linear-gradient(135deg, rgba(255, 255, 255, 0.6) 0%, rgba(253, 251, 247, 0.45) 100%)",
         border: "1.5px solid rgba(255, 255, 255, 0.85)",
         boxShadow:
-          "0 20px 48px -12px rgba(24, 24, 27, 0.08), 0 0 32px rgba(245, 158, 11, 0.06), inset 0 1px 2px rgba(255, 255, 255, 0.95), inset 0 -2px 6px rgba(217, 119, 6, 0.04)",
+          "0 20px 48px -12px rgba(24, 24, 27, 0.08), 0 0 32px rgba(245, 158, 11, 0.06), inset 0 1px 2px rgba(255, 255, 255, 0.95)",
         backdropFilter: "blur(20px) saturate(1.8)",
         WebkitBackdropFilter: "blur(20px) saturate(1.8)",
       }}
     >
-      {/* Dynamic Cursor Light Sheen (Caustic Reflection that slides with pointer) */}
-      <div
-        className="pointer-events-none absolute inset-0 z-10 transition-opacity duration-300"
-        style={{
-          borderRadius,
-          background:
-            "radial-gradient(circle 380px at var(--mouse-x, 0px) var(--mouse-y, 120px), rgba(255, 255, 255, 0.5) 0%, transparent 70%)",
-        }}
-        aria-hidden="true"
-      />
-
       {/* Liquid Refraction Backdrop Surface (Overscan 32px to capture outward meniscus stretching) */}
       <div
         className="g-liquid-material pointer-events-none absolute -inset-8 transition-shadow duration-300 z-5"
@@ -766,8 +700,6 @@ export const LiquidGlassContainer: React.FC<LiquidGlassContainerProps> = ({
           elasticEdges={elasticEdges}
           intensity={intensity}
           rippleStrength={rippleStrength}
-          showCursor={showCursor}
-          cursorSize={cursorSize}
         />
       )}
 
