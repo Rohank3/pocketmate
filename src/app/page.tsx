@@ -1364,7 +1364,6 @@ export default function Home() {
               }}
               accent="#f59e0b"
               intensity={1}
-              rippleStrength={1}
             >
               {/* View Tab Switcher Styled with Frosted White Glass Segmented Control */}
             <div className="flex items-center justify-between p-1.5 rounded-2xl glass-panel shadow-sm">

@@ -210,12 +210,6 @@ interface Point {
   y: number;
 }
 
-interface Ripple extends Point {
-  age: number;
-  reach: number;
-  intensity?: number;
-}
-
 /**
  * Living Elastic Meniscus & Dynamic Rim Physics.
  * The SVG paths form the TRUE visible border of the liquid container,
@@ -226,7 +220,6 @@ function LiquidGlassMotion({
   clipId,
   elasticEdges = true,
   intensity = 1,
-  rippleStrength = 1,
 }: {
   containerRef: RefObject<HTMLElement | null>;
   clipId: string;
@@ -238,7 +231,6 @@ function LiquidGlassMotion({
   const clipRef = useRef<SVGPathElement>(null);
   const rimGlowRef = useRef<SVGPathElement>(null);
   const rimRef = useRef<SVGPathElement>(null);
-  const rippleLayerRef = useRef<SVGGElement>(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -250,14 +242,6 @@ function LiquidGlassMotion({
     if (!container || !surface || !outline || !outlineGlow || !clipping) return;
 
     const amount = elasticEdges ? clamp(intensity, 0, 1.5, 1) : 0;
-    const strength = clamp(rippleStrength, 0, 1.5, 1);
-
-    const rippleNodes = Array.from(
-      rippleLayerRef.current?.querySelectorAll<SVGGElement>(".g-liquid-ripple") ?? []
-    );
-    const rippleCircles = rippleNodes.map((node) => Array.from(node.querySelectorAll("circle")));
-    const waves: (Ripple | null)[] = rippleNodes.map(() => null);
-    let nextWave = 0;
 
     const edges: Edge[] = Array.from({ length: 4 }, () => ({
       value: 0,
@@ -389,65 +373,6 @@ function LiquidGlassMotion({
       });
     }
 
-    let lastMoveTime = 0;
-    let lastMoveX = 0;
-    let lastMoveY = 0;
-    let lastPulseTime = 0;
-
-    function clearRipples() {
-      waves.fill(null);
-      rippleNodes.forEach((node) => {
-        node.style.opacity = "0";
-      });
-    }
-
-    function triggerCausticWave(x: number, y: number, intensity = 1) {
-      if (strength === 0 || !inView || document.hidden || !waves.length) return;
-      if (x < -30 || x > width + 30 || y < -30 || y > height + 30) return;
-
-      const slot = nextWave++ % waves.length;
-      const reach = Math.max(160, Math.min(540, Math.max(width, height) * 0.75));
-      waves[slot] = { x, y, age: 0, reach, intensity };
-      if (rippleNodes[slot]) {
-        rippleNodes[slot].setAttribute("transform", `translate(${round(x + PADDING)} ${round(y + PADDING)})`);
-        rippleNodes[slot].style.opacity = "0";
-      }
-
-      // Dispatch liquid wave event for buoyant message bubbles and cards
-      if (container) {
-        container.dispatchEvent(
-          new CustomEvent("liquid-wave", {
-            bubbles: true,
-            detail: { x, y, intensity },
-          })
-        );
-      }
-      wake();
-    }
-
-    function drawRipples(dt: number) {
-      waves.forEach((wave, i) => {
-        if (!wave) return;
-        wave.age += dt;
-        const progress = Math.min(1, wave.age / 1.35);
-        const r = 16 + wave.reach * (1 - (1 - progress) ** 2.2);
-        const fadeIn = smoothstep(wave.age / 0.08);
-        const waveScale = wave.intensity ?? 1;
-        const currentOpacity = Math.min(1, strength * waveScale * 0.95 * fadeIn * (1 - progress) ** 1.35);
-
-        if (rippleNodes[i]) {
-          rippleNodes[i].style.opacity = String(currentOpacity);
-        }
-        rippleCircles[i]?.forEach((circle) => circle.setAttribute("r", String(round(r))));
-        if (progress === 1) {
-          waves[i] = null;
-          if (rippleNodes[i]) {
-            rippleNodes[i].style.opacity = "0";
-          }
-        }
-      });
-    }
-
     function tick(now: number) {
       raf = 0;
       if (disposed || !inView || document.hidden) {
@@ -477,12 +402,10 @@ function LiquidGlassMotion({
       }
 
       draw();
-      drawRipples(dt);
 
       const unsettled =
         edges.some((e) => Math.abs(e.value - e.target) > 0.015 || Math.abs(e.velocity) > 0.05) ||
-        Math.abs(pointer.x - pointer.targetX) + Math.abs(pointer.y - pointer.targetY) > 0.1 ||
-        waves.some(Boolean);
+        Math.abs(pointer.x - pointer.targetX) + Math.abs(pointer.y - pointer.targetY) > 0.1;
 
       if (unsettled) {
         wake();
@@ -529,32 +452,10 @@ function LiquidGlassMotion({
         return;
       }
 
-      const now = performance.now();
       if (!pointer.initialized) {
         pointer.x = pt.x;
         pointer.y = pt.y;
         pointer.initialized = true;
-        lastMoveTime = now;
-        lastMoveX = pt.x;
-        lastMoveY = pt.y;
-      } else {
-        const dtMove = Math.max(8, now - lastMoveTime);
-        const dx = pt.x - lastMoveX;
-        const dy = pt.y - lastMoveY;
-        const dist = Math.hypot(dx, dy);
-        const speed = (dist / dtMove) * 1000; // px/sec
-
-        lastMoveTime = now;
-        lastMoveX = pt.x;
-        lastMoveY = pt.y;
-
-        // Velocity-Triggered Caustic Pulses
-        // Faster mouse sweeps (> 460 px/s) trigger expanding fluid caustic waves
-        if (speed > 460 && now - lastPulseTime > 180) {
-          lastPulseTime = now;
-          const pulseIntensity = Math.min(1.4, 0.75 + (speed - 460) / 1100);
-          triggerCausticWave(pt.x, pt.y, pulseIntensity);
-        }
       }
 
       pointer.targetX = pt.x;
@@ -569,8 +470,6 @@ function LiquidGlassMotion({
     }
 
     function down(event: PointerEvent) {
-      const pt = locate(event);
-      triggerCausticWave(pt.x, pt.y, 1.3);
       if (event.pointerType !== "touch") {
         update(event);
         return;
@@ -623,13 +522,12 @@ function LiquidGlassMotion({
       window.removeEventListener("pointerdown", down);
       window.removeEventListener("pointerup", release);
       window.removeEventListener("pointercancel", release);
-      clearRipples();
     };
-  }, [containerRef, elasticEdges, intensity, rippleStrength]);
+  }, [containerRef, elasticEdges, intensity]);
 
   return (
     <>
-      {/* Living SVG Meniscus Outline & Refractive Ripples */}
+      {/* Living SVG Meniscus Outline */}
       <svg
         ref={svgRef}
         className="g-liquid-rim pointer-events-none absolute select-none z-[30] overflow-visible"
@@ -647,23 +545,6 @@ function LiquidGlassMotion({
             <path ref={clipRef} />
           </clipPath>
         </defs>
-
-        {/* Expanding click & velocity caustic ripples with specular crest and caustic ring */}
-        <g ref={rippleLayerRef} clipPath={`url(#${clipId})`}>
-          {[0, 1, 2, 3, 4, 5, 6, 7].map((index) => (
-            <g key={index} className="g-liquid-ripple" opacity="0">
-              <circle
-                stroke="rgba(245, 158, 11, 0.6)"
-                strokeWidth="3.2"
-                fill="none"
-                cy="1.2"
-                r="0"
-                style={{ filter: "drop-shadow(0 0 6px rgba(245, 158, 11, 0.5))" }}
-              />
-              <circle stroke="rgba(255, 255, 255, 0.95)" strokeWidth="1.8" fill="none" r="0" />
-            </g>
-          ))}
-        </g>
 
         {/* Outer vibrant amber caustic edge glow - the living liquid border */}
         <path
@@ -703,7 +584,6 @@ export const LiquidGlassContainer: React.FC<LiquidGlassContainerProps> = ({
   motion = true,
   elasticEdges = true,
   intensity = 1,
-  rippleStrength = 1,
   borderRadius = 28,
   contentClassName = "",
 }) => {
@@ -767,14 +647,13 @@ export const LiquidGlassContainer: React.FC<LiquidGlassContainerProps> = ({
         {children}
       </div>
 
-      {/* Living Elastic Rim & Cursor Ripple Motion */}
+      {/* Living Elastic Meniscus Rim Motion */}
       {motion && (
         <LiquidGlassMotion
           containerRef={containerRef}
           clipId={clipId}
           elasticEdges={elasticEdges}
           intensity={intensity}
-          rippleStrength={rippleStrength}
         />
       )}
     </div>
