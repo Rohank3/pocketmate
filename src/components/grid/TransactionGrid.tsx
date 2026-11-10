@@ -28,20 +28,53 @@ import {
 } from "lucide-react";
 import { GridMutationState } from "@/types/agent";
 import type { CategoryItem } from "@/components/categories/CategoryControlBar";
+import { useTheme } from "@/components/theme/ThemeContext";
 
 // Register all community features (RowSelection, Pagination, ColumnFilter, NumberFilter, Validation)
 ModuleRegistry.registerModules([AllCommunityModule]);
 
-const lightGoldTheme = themeQuartz.withParams({
-  backgroundColor: "#ffffff",
-  headerBackgroundColor: "#faf9f6",
-  borderColor: "#edebe4",
-  foregroundColor: "#18181b",
-  accentColor: "#f59e0b",
-  rowHoverColor: "rgba(245, 158, 11, 0.04)",
-  selectedRowBackgroundColor: "rgba(245, 158, 11, 0.08)",
-  fontFamily: "inherit",
-});
+const gridThemes: Record<string, ReturnType<typeof themeQuartz.withParams>> = {
+  "white-orange": themeQuartz.withParams({
+    backgroundColor: "#ffffff",
+    headerBackgroundColor: "#faf9f6",
+    borderColor: "#edebe4",
+    foregroundColor: "#18181b",
+    accentColor: "#f59e0b",
+    rowHoverColor: "rgba(245, 158, 11, 0.04)",
+    selectedRowBackgroundColor: "rgba(245, 158, 11, 0.08)",
+    fontFamily: "inherit",
+  }),
+  "white-blue": themeQuartz.withParams({
+    backgroundColor: "#ffffff",
+    headerBackgroundColor: "#f8fafc",
+    borderColor: "#e2e8f0",
+    foregroundColor: "#18181b",
+    accentColor: "#0070ba",
+    rowHoverColor: "rgba(0, 112, 186, 0.04)",
+    selectedRowBackgroundColor: "rgba(0, 112, 186, 0.08)",
+    fontFamily: "inherit",
+  }),
+  "black-blue": themeQuartz.withParams({
+    backgroundColor: "#121217",
+    headerBackgroundColor: "#181822",
+    borderColor: "#272733",
+    foregroundColor: "#f4f4f5",
+    accentColor: "#0070ba",
+    rowHoverColor: "rgba(0, 112, 186, 0.12)",
+    selectedRowBackgroundColor: "rgba(0, 112, 186, 0.22)",
+    fontFamily: "inherit",
+  }),
+  "black-orange": themeQuartz.withParams({
+    backgroundColor: "#121217",
+    headerBackgroundColor: "#181822",
+    borderColor: "#272733",
+    foregroundColor: "#f4f4f5",
+    accentColor: "#f59e0b",
+    rowHoverColor: "rgba(245, 158, 11, 0.12)",
+    selectedRowBackgroundColor: "rgba(0, 112, 186, 0.22)",
+    fontFamily: "inherit",
+  }),
+};
 
 export interface TransactionRow {
   id: string;
@@ -86,6 +119,8 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
   onOpenReviewModal,
   onClearMutation,
 }) => {
+  const { theme } = useTheme();
+  const currentGridTheme = gridThemes[theme] || gridThemes["white-orange"];
   const gridRef = useRef<AgGridReact<TransactionRow>>(null);
 
   // Filter dismissal state to prevent user from being trapped in triage/search filter
@@ -427,7 +462,7 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
       <div className="flex-1 w-full min-h-[380px]">
         <AgGridReact
           ref={gridRef}
-          theme={lightGoldTheme}
+          theme={currentGridTheme}
           rowData={filteredData}
           columnDefs={columnDefs}
           defaultColDef={defaultColDef}

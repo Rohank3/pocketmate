@@ -220,12 +220,14 @@ function LiquidGlassMotion({
   clipId,
   elasticEdges = true,
   intensity = 1,
+  accent = "#f59e0b",
 }: {
   containerRef: RefObject<HTMLElement | null>;
   clipId: string;
   elasticEdges?: boolean;
   intensity?: number;
   rippleStrength?: number;
+  accent?: string;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const clipRef = useRef<SVGPathElement>(null);
@@ -546,15 +548,15 @@ function LiquidGlassMotion({
           </clipPath>
         </defs>
 
-        {/* Outer vibrant amber caustic edge glow - the living liquid border */}
+        {/* Outer living caustic edge glow - the living liquid border */}
         <path
           ref={rimGlowRef}
           fill="none"
-          stroke="rgba(245, 158, 11, 0.75)"
+          stroke={accent || "rgba(245, 158, 11, 0.75)"}
           strokeWidth="3.5px"
           vectorEffect="non-scaling-stroke"
           style={{
-            filter: "drop-shadow(0 0 10px rgba(245, 158, 11, 0.6)) drop-shadow(0 2px 8px rgba(217, 119, 6, 0.4))",
+            filter: `drop-shadow(0 0 10px ${accent || "rgba(245, 158, 11, 0.6)"}) drop-shadow(0 2px 8px ${accent || "rgba(217, 119, 6, 0.4)"})`,
           }}
         />
 
@@ -623,10 +625,14 @@ export const LiquidGlassContainer: React.FC<LiquidGlassContainerProps> = ({
       <div
         className="g-liquid-material pointer-events-none absolute -inset-8 transition-shadow duration-300 z-[5]"
         style={{
-          background: `linear-gradient(135deg, rgba(255, 255, 255, 0.58) 0%, rgba(253, 251, 247, 0.38) 100%), color-mix(in srgb, ${tint} calc(${opacity} * 100%), transparent)`,
+          background: tint.startsWith("#0") || tint.startsWith("#1")
+            ? `linear-gradient(135deg, rgba(28, 28, 36, 0.7) 0%, rgba(14, 14, 20, 0.6) 100%), color-mix(in srgb, ${tint} calc(${opacity} * 100%), transparent)`
+            : `linear-gradient(135deg, rgba(255, 255, 255, 0.58) 0%, rgba(253, 251, 247, 0.38) 100%), color-mix(in srgb, ${tint} calc(${opacity} * 100%), transparent)`,
           backdropFilter: `blur(var(--glass-blur)) saturate(var(--glass-saturation)) var(--glass-refraction, blur(0px))`,
           WebkitBackdropFilter: `blur(var(--glass-blur)) saturate(var(--glass-saturation))`,
-          boxShadow: `0 20px 48px -12px rgba(24, 24, 27, 0.09), 0 0 32px rgba(245, 158, 11, 0.08)`,
+          boxShadow: tint.startsWith("#0") || tint.startsWith("#1")
+            ? `0 20px 48px -12px rgba(0, 0, 0, 0.6), 0 0 32px ${accent}26`
+            : `0 20px 48px -12px rgba(24, 24, 27, 0.09), 0 0 32px ${accent}1f`,
           clipPath: `url(#${clipId})`,
           WebkitClipPath: `url(#${clipId})`,
         }}
@@ -637,7 +643,7 @@ export const LiquidGlassContainer: React.FC<LiquidGlassContainerProps> = ({
           className="absolute inset-0 opacity-40 mix-blend-overlay pointer-events-none"
           style={{
             background:
-              "radial-gradient(circle at 35% 25%, rgba(245, 158, 11, 0.25) 0%, transparent 50%), radial-gradient(circle at 75% 70%, rgba(251, 191, 36, 0.2) 0%, transparent 45%)",
+              `radial-gradient(circle at 35% 25%, ${accent}40 0%, transparent 50%), radial-gradient(circle at 75% 70%, ${accent}33 0%, transparent 45%)`,
           }}
         />
       </div>
@@ -654,6 +660,7 @@ export const LiquidGlassContainer: React.FC<LiquidGlassContainerProps> = ({
           clipId={clipId}
           elasticEdges={elasticEdges}
           intensity={intensity}
+          accent={accent}
         />
       )}
     </div>

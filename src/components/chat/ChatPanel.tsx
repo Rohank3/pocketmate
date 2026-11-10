@@ -23,6 +23,7 @@ import { ActionConfirmCard, ActionCardData } from "../cards/ActionConfirmCard";
 import type { ChatThreadItem } from "@/types/chat";
 import { LiquidGlassContainer } from "@/components/ui/LiquidGlassContainer";
 import { ElasticChatBubble } from "./ElasticChatBubble";
+import { useTheme } from "@/components/theme/ThemeContext";
 
 export interface ChatMessageItem {
   id: string;
@@ -71,6 +72,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   onRenameThread,
   onDeleteThread,
 }) => {
+  const { accentColor, tintColor } = useTheme();
   const [inputText, setInputText] = useState("");
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
@@ -286,11 +288,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         blur: 24,
         opacity: 0.82,
         saturation: 1.8,
-        tint: "#fdfbf7",
+        tint: tintColor,
         edge: 0.9,
         distortion: 26,
       }}
-      accent="#f59e0b"
+      accent={accentColor}
       intensity={1}
     >
       {/* Hidden file picker for real receipt audits */}
