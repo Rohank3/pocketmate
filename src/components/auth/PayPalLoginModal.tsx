@@ -132,7 +132,7 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
               </h2>
               <span
                 className={`text-[10px] font-mono font-medium ${
-                  isDark ? "text-zinc-500" : "text-stone-500"
+                  isDark ? "text-zinc-400" : "text-stone-600"
                 }`}
               >
                 {currentUser ? currentUser.name : "Sandbox Mode"}
@@ -277,7 +277,7 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
                 <h3 className="text-base font-bold tracking-tight">Connect with PayPal</h3>
                 <p
                   className={`text-xs mt-1 leading-relaxed ${
-                    isDark ? "text-zinc-400" : "text-stone-500"
+                    isDark ? "text-zinc-400" : "text-stone-600"
                   }`}
                 >
                   Sign in with your PayPal Sandbox account to sync transactions and manage budgets.
@@ -308,10 +308,10 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className={`w-full py-2 px-3 rounded-xl text-xs font-medium transition-colors cursor-pointer text-center ${
+                className={`w-full py-2 px-3 rounded-xl text-xs font-semibold transition-colors cursor-pointer text-center ${
                   isDark
-                    ? "text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60"
-                    : "text-stone-500 hover:text-zinc-800 hover:bg-stone-100/70"
+                    ? "text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800/60"
+                    : "text-stone-600 hover:text-zinc-900 hover:bg-stone-100"
                 }`}
               >
                 Explore Workspace as Guest
@@ -320,7 +320,7 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
               {/* Minimal 1-line Footer */}
               <div
                 className={`pt-3 border-t flex items-center justify-between text-[11px] ${
-                  isDark ? "border-zinc-800/80 text-zinc-500" : "border-stone-100 text-stone-500"
+                  isDark ? "border-zinc-800/80 text-zinc-400" : "border-stone-200 text-stone-600"
                 }`}
               >
                 <span className="flex items-center gap-1">
