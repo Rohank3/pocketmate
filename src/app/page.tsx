@@ -1376,13 +1376,9 @@ export default function Home() {
 
       {/* PayPal Sandbox Login & Session Switch Modal */}
       <PayPalLoginModal
-        isOpen={isLoginModalOpen || !currentUser}
+        isOpen={isLoginModalOpen}
         currentUser={currentUser}
-        onClose={() => {
-          if (currentUser) {
-            setIsLoginModalOpen(false);
-          }
-        }}
+        onClose={() => setIsLoginModalOpen(false)}
         onLogin={handleUserLogin}
         onLogout={handleUserLogout}
       />

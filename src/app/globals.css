@@ -376,10 +376,17 @@ html[data-theme^="black"] .bg-white,
 html[data-theme^="black"] .bg-white\/90,
 html[data-theme^="black"] .bg-white\/92,
 html[data-theme^="black"] .bg-white\/95,
+html[data-theme^="black"] .bg-white\/98,
 html[data-theme^="black"] .bg-white\/80,
 html[data-theme^="black"] .bg-white\/76,
 html[data-theme^="black"] .bg-white\/78 {
-  background-color: rgba(20, 20, 26, 0.9) !important;
+  background-color: rgba(18, 18, 23, 0.95) !important;
+}
+
+html[data-theme^="black"] [role="dialog"] > div {
+  background-color: #121217 !important;
+  color: #f4f4f5 !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
 }
 
 html[data-theme^="black"] .bg-stone-50,
