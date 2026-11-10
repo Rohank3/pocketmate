@@ -344,23 +344,23 @@ export default function FinancialStudio({
 
                 return (
                   <div key={cat.id} className="flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between text-xs gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex flex-wrap items-center justify-between text-xs gap-x-2 gap-y-1">
+                      <div className="flex flex-wrap items-center gap-1.5 min-w-0">
                         <span
                           className="w-2.5 h-2.5 rounded-full shrink-0"
                           style={{ backgroundColor: cat.color }}
                         />
-                        <span className="font-semibold text-[var(--fg-primary)] truncate">
+                        <span className="font-semibold text-[var(--fg-primary)]">
                           {cat.name}
                         </span>
                         {isOver && (
-                          <span className="text-[10px] bg-[var(--status-danger-bg)] text-[var(--status-danger-text)] border border-[var(--status-danger-border)] px-1.5 py-0.5 rounded font-semibold shrink-0">
+                          <span className="text-[10px] bg-[var(--status-danger-bg)] text-[var(--status-danger-text)] border border-[var(--status-danger-border)] px-1.5 py-0.5 rounded font-semibold shrink-0 tabular-nums">
                             +${cat.diff.toFixed(2)} Over
                           </span>
                         )}
                       </div>
 
-                      <div className="font-mono text-[var(--fg-secondary)] tabular-nums shrink-0">
+                      <div className="font-mono text-[var(--fg-secondary)] tabular-nums shrink-0 text-[11px] sm:text-xs">
                         <span
                           className={`font-semibold ${
                             isOver ? "text-[var(--status-danger-text)]" : "text-[var(--fg-primary)]"
@@ -370,7 +370,7 @@ export default function FinancialStudio({
                         </span>
                         <span className="text-[var(--fg-muted)]"> / </span>
                         <span className="text-[var(--fg-secondary)]">${cat.monthlyCap.toFixed(0)}</span>
-                        <span className="text-[var(--fg-muted)] text-[11px] ml-1.5">({cat.percent}%)</span>
+                        <span className="text-[var(--fg-muted)] text-[11px] ml-1">({cat.percent}%)</span>
                       </div>
                     </div>
 
@@ -469,13 +469,13 @@ export default function FinancialStudio({
             </div>
 
             {/* Legend */}
-            <div className="grid grid-cols-2 gap-2 mt-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 mt-3">
               {donutSlices.map((slice) => (
                 <div
                   key={slice.id}
                   onMouseEnter={() => setHoveredSlice(slice.name)}
                   onMouseLeave={() => setHoveredSlice(null)}
-                  className={`flex items-center justify-between p-1.5 rounded-lg border transition-all cursor-pointer shadow-2xs ${
+                  className={`flex items-center justify-between px-2 py-1.5 rounded-lg border transition-all cursor-pointer shadow-2xs ${
                     hoveredSlice === slice.name
                       ? "bg-[var(--accent-subtle)] border-[var(--accent-border)] scale-[1.02]"
                       : "bg-[var(--surface-elevated)] border-[var(--border-subtle)] hover:border-[var(--accent-border)]"
@@ -483,14 +483,14 @@ export default function FinancialStudio({
                 >
                   <div className="flex items-center gap-1.5 min-w-0">
                     <span
-                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      className="w-2 h-2 rounded-full shrink-0"
                       style={{ backgroundColor: slice.color }}
                     />
-                    <span className="text-xs text-[var(--fg-primary)] truncate font-medium">
+                    <span className="text-[11px] text-[var(--fg-primary)] truncate font-medium">
                       {slice.name}
                     </span>
                   </div>
-                  <span className="text-xs font-mono text-[var(--fg-muted)] ml-1 tabular-nums">
+                  <span className="text-[11px] font-mono text-[var(--fg-muted)] ml-1 shrink-0 tabular-nums">
                     {slice.percentage}%
                   </span>
                 </div>
