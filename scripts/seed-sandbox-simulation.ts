@@ -145,6 +145,8 @@ async function createPaidInvoice(payload: SeedInvoicePayload): Promise<string> {
         currency_code: "USD",
         note: payload.note || undefined,
         invoice_date: dateStr,
+        reference: `sender:${payload.invoicerEmail.toLowerCase().trim()}`,
+        memo: `sender:${payload.invoicerEmail.toLowerCase().trim()}`,
       },
       invoicer: {
         name: {

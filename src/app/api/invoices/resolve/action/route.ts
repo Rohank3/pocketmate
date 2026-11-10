@@ -102,6 +102,13 @@ export async function POST(req: NextRequest) {
       const targetName = item?.participantName || "Mark Spencer";
       const desc = note || `Supplemental balance for ${item?.splitRecord.description || "Shared Split"}`;
 
+      const senderInfo = authUser?.email
+        ? {
+            name: authUser.name || authUser.email.split("@")[0].replace(/[._]/g, " "),
+            email: authUser.email,
+          }
+        : undefined;
+
       // Dispatch supplemental invoice via PayPal Invoicing API v2
       let newInvoiceId = `INV2-SUPP-${Date.now()}`;
       try {
@@ -110,7 +117,7 @@ export async function POST(req: NextRequest) {
           name: targetName,
           amount: diffToCharge,
           description: desc,
-        });
+        }, senderInfo);
         newInvoiceId = invRes.invoiceId;
       } catch (dispErr) {
         console.warn("[PayPal Supplemental Invoice Warning]", dispErr);

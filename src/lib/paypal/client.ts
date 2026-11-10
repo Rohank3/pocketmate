@@ -410,6 +410,18 @@ class PayPalSandboxClient {
           status = "COMPLETED";
         }
 
+        // Extract sender tag embedded in detail.reference, detail.memo, or invoicer
+        const reference = typeof detail.reference === "string" ? detail.reference.trim() : "";
+        const rawMemo = typeof detail.memo === "string" ? detail.memo.trim() : "";
+        let invoiceSender = "";
+        if (reference.toLowerCase().startsWith("sender:")) {
+          invoiceSender = reference.slice(7).trim().toLowerCase();
+        } else if (rawMemo.toLowerCase().startsWith("sender:")) {
+          invoiceSender = rawMemo.slice(7).trim().toLowerCase();
+        } else if (invoicerEmail) {
+          invoiceSender = invoicerEmail.toLowerCase().trim();
+        }
+
         // Determine relationship: Did the active user send this invoice, or receive it?
         const userFrag = targetEmailClean ? targetEmailClean.split("@")[0].replace(/[._]/g, " ").toLowerCase() : "";
 
@@ -422,12 +434,15 @@ class PayPalSandboxClient {
         );
 
         // Active user is the invoicer (organizer / merchant who sent this split request)
+        // Strictly verified: requires explicit match on embedded sender tag, invoicerEmail, or invoicerFullName
         const isUserInvoicer = Boolean(
-          !targetEmailClean ||
-          (!isUserRecipient &&
-           (invoicerEmail === targetEmailClean ||
-            !invoicerEmail ||
-            (userFrag && invoicerFullName.toLowerCase().includes(userFrag))))
+          targetEmailClean
+            ? !isUserRecipient &&
+              (
+                (invoiceSender && (invoiceSender === targetEmailClean || invoiceSender.includes(targetEmailClean))) ||
+                (invoicerFullName && userFrag && invoicerFullName.toLowerCase().trim() === userFrag)
+              )
+            : false
         );
 
         // In personal scope, filter out invoices that neither involve the active user as invoicer nor recipient
@@ -675,6 +690,10 @@ class PayPalSandboxClient {
         detail: {
           currency_code: "USD",
           note: recipient.description || "Shared Expense Split via PocketMate",
+          ...(senderEmail ? {
+            reference: `sender:${senderEmail.toLowerCase().trim()}`,
+            memo: `sender:${senderEmail.toLowerCase().trim()}`,
+          } : {}),
         },
         invoicer: {
           name: {
@@ -738,6 +757,39 @@ class PayPalSandboxClient {
       status: sendRes.ok ? "SENT" : "DRAFT_SAVED",
       viewUrl,
     };
+  }
+
+  /**
+   * Dispatches an authentic payment reminder for an invoice via PayPal Invoicing API v2.
+   * Endpoint: POST /v2/invoicing/invoices/{invoice_id}/remind
+   */
+  async sendInvoiceReminder(
+    invoiceId: string,
+    params?: { subject?: string; note?: string }
+  ): Promise<{ success: boolean; invoiceId: string }> {
+    const token = await this.getAccessToken();
+
+    const body = {
+      subject: params?.subject || "Payment Reminder: Shared Expense via PocketMate",
+      note: params?.note || "Friendly reminder to settle your pending shared expense via PayPal.",
+      send_to_recipient: true,
+    };
+
+    const res = await fetch(`${this.baseUrl}/v2/invoicing/invoices/${encodeURIComponent(invoiceId)}/remind`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`PayPal send invoice reminder failed: HTTP ${res.status} - ${errText}`);
+    }
+
+    return { success: true, invoiceId };
   }
 
   /**

@@ -688,8 +688,10 @@ export async function executeAgentTool(
       let senderInfo: { name?: string; email?: string } | undefined = undefined;
       if (userId) {
         try {
-          const userRec = await prisma.user.findUnique({
-            where: { id: userId },
+          const userRec = await prisma.user.findFirst({
+            where: {
+              OR: [{ id: userId }, { email: userId }],
+            },
             select: { name: true, email: true },
           });
           if (userRec) {
@@ -887,8 +889,10 @@ export async function executeAgentTool(
         let senderInfo: { name?: string; email?: string } | undefined = undefined;
         if (userId) {
           try {
-            const userRec = await prisma.user.findUnique({
-              where: { id: userId },
+            const userRec = await prisma.user.findFirst({
+              where: {
+                OR: [{ id: userId }, { email: userId }],
+              },
               select: { name: true, email: true },
             });
             if (userRec) {

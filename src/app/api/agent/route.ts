@@ -105,9 +105,9 @@ export async function POST(req: NextRequest) {
 
     // Handle single-tap confirmation of an action card (Layer D)
     if (actionToConfirm && (actionToConfirm.action === "DISPATCH_INVOICES" || actionToConfirm.action === "PROPOSE_SPLIT_BREAKDOWN")) {
-      if (!authenticatedUser && process.env.PAYPAL_ENVIRONMENT === "live") {
+      if (!authenticatedUser) {
         return NextResponse.json(
-          { error: "Unauthorized: Active authenticated session required to dispatch live invoices." },
+          { error: "Unauthorized: Active authenticated session required to dispatch invoices." },
           { status: 401 }
         );
       }

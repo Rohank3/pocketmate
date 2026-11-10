@@ -57,6 +57,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Split record not found." }, { status: 404 });
     }
 
+    const senderInfo = authUser?.email
+      ? {
+          name: authUser.name || authUser.email.split("@")[0].replace(/[._]/g, " "),
+          email: authUser.email,
+        }
+      : undefined;
+
     const supplementalDispatched: Array<{ name: string; email: string; amount: number; invoiceId: string }> = [];
     const reissuedInvoices: Array<{ name: string; email: string; amount: number; invoiceId: string }> = [];
     const refundsQueue: Array<{ name: string; email: string; amount: number; reason: string }> = [];
@@ -90,7 +97,7 @@ export async function POST(req: NextRequest) {
               name: p.name,
               amount: p.newShare,
               description: `${memo || splitRecord.description} (Rebalanced Share)`,
-            });
+            }, senderInfo);
             currentInvoiceId = inv.invoiceId;
             reissuedInvoices.push({
               name: p.name,
@@ -110,7 +117,7 @@ export async function POST(req: NextRequest) {
             name: p.name,
             amount: delta,
             description: `Supplemental balance for ${memo || splitRecord.description}`,
-          });
+          }, senderInfo);
           currentInvoiceId = inv.invoiceId;
           supplementalDispatched.push({
             name: p.name,
