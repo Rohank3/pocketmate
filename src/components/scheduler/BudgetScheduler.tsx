@@ -16,7 +16,6 @@ import {
   Trash2,
   CheckCircle2,
   Circle,
-  AlertCircle,
   Check,
 } from "lucide-react";
 import type { CategoryItem } from "@/components/categories/CategoryControlBar";
@@ -127,6 +126,17 @@ export default function BudgetScheduler({
     dayNumber: number;
     formattedTitle: string; // e.g. "Wednesday, November 18, 2026"
   } | null>(null);
+
+  useEffect(() => {
+    if (!selectedDayModal) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setSelectedDayModal(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedDayModal]);
 
   // Form state for creating an event inside Day Modal or standalone
   const [modalTitle, setModalTitle] = useState("");
@@ -389,23 +399,24 @@ export default function BudgetScheduler({
       <div className="absolute top-0 left-0 right-0 z-10 liquid-bar" />
 
       {/* Top Header & Metrics Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-stone-50/90 border-b border-stone-200 mt-[3.5px]">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-300 flex items-center justify-center text-amber-800 shadow-2xs">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-[var(--surface-elevated)] border-b border-[var(--border-subtle)] mt-[3px]">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 rounded-xl bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center justify-center text-[var(--accent-text)] shadow-2xs shrink-0">
             <CalendarIcon className="w-5 h-5" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-zinc-900">
-                Upcoming & Due Calendar
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-sm font-bold text-[var(--fg-primary)]">
+                Upcoming &amp; Due
               </h2>
               {/* Dynamic Month Navigation Controls with Direct Month/Year Dropdowns */}
-              <div className="flex items-center bg-white border border-stone-200 rounded-lg p-0.5 gap-0.5 shadow-2xs">
+              <div className="flex items-center bg-[var(--surface-card)] border border-[var(--border-strong)] rounded-lg p-0.5 gap-0.5 shadow-2xs">
                 <button
                   type="button"
                   onClick={handlePrevMonth}
                   title="Previous Month"
-                  className="p-1 rounded text-stone-500 hover:text-zinc-900 hover:bg-stone-100 cursor-pointer transition-colors"
+                  aria-label="Previous Month"
+                  className="p-1 rounded text-[var(--fg-muted)] hover:text-[var(--fg-primary)] hover:bg-[var(--surface-subtle)] active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--accent)] cursor-pointer transition-colors"
                 >
                   <ChevronLeft className="w-3.5 h-3.5" />
                 </button>
@@ -415,10 +426,14 @@ export default function BudgetScheduler({
                   aria-label="Select Calendar Month"
                   value={viewMonth}
                   onChange={(e) => handleSelectMonth(Number(e.target.value))}
-                  className="bg-transparent text-[11px] font-semibold text-amber-900 hover:text-amber-950 focus:outline-none cursor-pointer px-1 py-0.5 rounded border border-transparent hover:border-stone-200 transition-colors"
+                  className="bg-transparent text-[11px] font-semibold text-[var(--accent-text)] hover:text-[var(--fg-primary)] focus-visible:outline-2 focus-visible:outline-[var(--accent)] cursor-pointer px-1 py-0.5 rounded border border-transparent hover:border-[var(--border-strong)] transition-colors"
                 >
                   {MONTH_NAMES.map((name, idx) => (
-                    <option key={name} value={idx} className="bg-white text-zinc-900">
+                    <option
+                      key={name}
+                      value={idx}
+                      className="bg-[var(--surface-modal)] text-[var(--fg-primary)]"
+                    >
                       {name}
                     </option>
                   ))}
@@ -429,10 +444,14 @@ export default function BudgetScheduler({
                   aria-label="Select Calendar Year"
                   value={viewYear}
                   onChange={(e) => handleSelectYear(Number(e.target.value))}
-                  className="bg-transparent text-[11px] font-semibold text-amber-900 hover:text-amber-950 focus:outline-none cursor-pointer px-1 py-0.5 rounded border border-transparent hover:border-stone-200 transition-colors"
+                  className="bg-transparent text-[11px] font-semibold text-[var(--accent-text)] hover:text-[var(--fg-primary)] focus-visible:outline-2 focus-visible:outline-[var(--accent)] cursor-pointer px-1 py-0.5 rounded border border-transparent hover:border-[var(--border-strong)] transition-colors"
                 >
                   {availableYears.map((yr) => (
-                    <option key={yr} value={yr} className="bg-white text-zinc-900">
+                    <option
+                      key={yr}
+                      value={yr}
+                      className="bg-[var(--surface-modal)] text-[var(--fg-primary)]"
+                    >
                       {yr}
                     </option>
                   ))}
@@ -442,7 +461,8 @@ export default function BudgetScheduler({
                   type="button"
                   onClick={handleNextMonth}
                   title="Next Month"
-                  className="p-1 rounded text-stone-500 hover:text-zinc-900 hover:bg-stone-100 cursor-pointer transition-colors"
+                  aria-label="Next Month"
+                  className="p-1 rounded text-[var(--fg-muted)] hover:text-[var(--fg-primary)] hover:bg-[var(--surface-subtle)] active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--accent)] cursor-pointer transition-colors"
                 >
                   <ChevronRight className="w-3.5 h-3.5" />
                 </button>
@@ -450,120 +470,122 @@ export default function BudgetScheduler({
                   type="button"
                   onClick={handleJumpToToday}
                   title="Jump to Current Month"
-                  className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-stone-100 text-stone-700 hover:bg-stone-200 cursor-pointer transition-colors ml-0.5"
+                  className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[var(--surface-subtle)] text-[var(--fg-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--fg-primary)] active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--accent)] cursor-pointer transition-colors ml-0.5"
                 >
                   Today
                 </button>
               </div>
             </div>
-            <p className="text-xs text-stone-500">
-              Click any day to inspect bills, mark as done, or schedule reminders
-            </p>
           </div>
         </div>
 
         {/* Cashflow Summary & Action Buttons */}
         <div className="flex flex-wrap items-center gap-3">
-          <div className="hidden sm:flex items-center gap-3 text-xs font-mono bg-white px-3 py-1.5 rounded-lg border border-stone-200 shadow-2xs">
-            <div className="flex items-center gap-1.5 text-emerald-700 font-semibold">
+          <div className="hidden sm:flex items-center gap-3 text-xs font-mono bg-[var(--surface-card)] px-3 py-1.5 rounded-lg border border-[var(--border-strong)] shadow-2xs tabular-nums">
+            <div className="flex items-center gap-1.5 text-[var(--status-success-text)] font-semibold">
               <ArrowDownLeft className="w-3.5 h-3.5" />
-              <span>Receivables: +${upcomingReceivables.toFixed(2)}</span>
+              <span>+${upcomingReceivables.toFixed(2)}</span>
             </div>
-            <div className="w-px h-3 bg-stone-200" />
-            <div className="flex items-center gap-1.5 text-rose-600 font-semibold">
+            <div className="w-px h-3 bg-[var(--border-subtle)]" />
+            <div className="flex items-center gap-1.5 text-[var(--status-danger-text)] font-semibold">
               <ArrowUpRight className="w-3.5 h-3.5" />
-              <span>Bills Due: -${upcomingBills.toFixed(2)}</span>
+              <span>-${upcomingBills.toFixed(2)}</span>
             </div>
           </div>
 
           {/* Quick Schedule Today Button */}
           <button
+            type="button"
             onClick={() => {
               const y = viewDate.getFullYear();
               const m = String(viewDate.getMonth() + 1).padStart(2, "0");
               const d = String(Math.min(15, new Date(y, viewDate.getMonth() + 1, 0).getDate())).padStart(2, "0");
               handleOpenDayModal(`${y}-${m}-${d}`, parseInt(d, 10));
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-400 hover:to-yellow-400 active:scale-95 text-zinc-950 text-xs font-bold cursor-pointer shadow-xs border border-amber-400/40 transition-all"
+            className="theme-btn-primary flex items-center gap-1.5 px-3 py-1.5 rounded-xl active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] text-xs font-semibold cursor-pointer transition-all"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Add Bill / Reminder</span>
+            <span>Add Bill</span>
           </button>
         </div>
       </div>
 
       {/* View Switcher & Filter Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 px-4 py-2 bg-stone-50/60 border-b border-stone-200 text-xs">
+      <div className="flex flex-wrap items-center justify-between gap-2.5 px-4 py-2 bg-[var(--surface-elevated)] border-b border-[var(--border-subtle)] text-xs">
         {/* Calendar vs Agenda Tabs */}
-        <div className="flex items-center bg-white border border-stone-200 p-0.5 rounded-xl shadow-2xs">
+        <div className="flex items-center bg-[var(--surface-card)] border border-[var(--border-strong)] p-0.5 rounded-xl shadow-2xs">
           <button
+            type="button"
             onClick={() => setViewMode("calendar")}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg font-medium transition-all cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--accent)] ${
               viewMode === "calendar"
-                ? "bg-amber-500/15 text-amber-900 border border-amber-300 font-semibold shadow-2xs"
-                : "text-stone-600 hover:text-zinc-900"
+                ? "bg-[var(--accent-subtle)] text-[var(--accent-text)] border border-[var(--accent-border)] font-semibold shadow-2xs"
+                : "text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]"
             }`}
           >
             <CalendarIcon className="w-3.5 h-3.5" />
-            <span>Month Grid</span>
+            <span>Month</span>
           </button>
 
           <button
+            type="button"
             onClick={() => setViewMode("agenda")}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg font-medium transition-all cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--accent)] ${
               viewMode === "agenda"
-                ? "bg-amber-500/15 text-amber-900 border border-amber-300 font-semibold shadow-2xs"
-                : "text-stone-600 hover:text-zinc-900"
+                ? "bg-[var(--accent-subtle)] text-[var(--accent-text)] border border-[var(--accent-border)] font-semibold shadow-2xs"
+                : "text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]"
             }`}
           >
             <Clock className="w-3.5 h-3.5" />
-            <span>Timeline Agenda</span>
+            <span>Agenda</span>
           </button>
         </div>
 
         {/* Directional Type Filters & In-Calendar Category Filter */}
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
-          <span className="text-stone-400 text-[11px] hidden sm:inline">Filter:</span>
           <button
+            type="button"
             onClick={() => setFilterType("all")}
-            className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors cursor-pointer border ${
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors cursor-pointer border focus-visible:outline-2 focus-visible:outline-[var(--accent)] ${
               filterType === "all"
-                ? "bg-stone-200 text-zinc-900 border-stone-300 font-semibold"
-                : "bg-white text-stone-600 border-stone-200 hover:bg-stone-100"
+                ? "bg-[var(--accent-subtle)] text-[var(--accent-text)] border-[var(--accent-border)] font-semibold"
+                : "bg-[var(--surface-card)] text-[var(--fg-secondary)] border-[var(--border-strong)] hover:bg-[var(--surface-subtle)]"
             }`}
           >
-            All Items ({events.length})
+            All ({events.length})
           </button>
 
           <button
+            type="button"
             onClick={() => setFilterType("incoming")}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors cursor-pointer border ${
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors cursor-pointer border focus-visible:outline-2 focus-visible:outline-[var(--accent)] ${
               filterType === "incoming"
-                ? "bg-emerald-50 text-emerald-800 border-emerald-300 font-semibold"
-                : "bg-white text-stone-600 border-stone-200 hover:text-emerald-700"
+                ? "bg-[var(--status-success-bg)] text-[var(--status-success-text)] border-[var(--status-success-border)] font-semibold"
+                : "bg-[var(--surface-card)] text-[var(--fg-secondary)] border-[var(--border-strong)] hover:text-[var(--status-success-text)]"
             }`}
           >
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            Receivables (Money In)
+            Receivables
           </button>
 
           <button
+            type="button"
             onClick={() => setFilterType("outgoing")}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors cursor-pointer border ${
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors cursor-pointer border focus-visible:outline-2 focus-visible:outline-[var(--accent)] ${
               filterType === "outgoing"
-                ? "bg-amber-50 text-amber-900 border-amber-300 font-semibold"
-                : "bg-white text-stone-600 border-stone-200 hover:text-amber-800"
+                ? "bg-[var(--status-info-bg)] text-[var(--status-info-text)] border-[var(--status-info-border)] font-semibold"
+                : "bg-[var(--surface-card)] text-[var(--fg-secondary)] border-[var(--border-strong)] hover:text-[var(--accent-text)]"
             }`}
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-            Bills (Money Out)
+            <span className="w-1.5 h-1.5 rounded-full bg-[#0070ba]" />
+            Bills
           </button>
 
           {/* In-Calendar Category Dropdown */}
           <select
             value={calendarCategory}
             onChange={(e) => setCalendarCategory(e.target.value)}
-            className="bg-white border border-stone-200 text-[11px] text-stone-700 rounded-lg px-2.5 py-1 font-medium focus:outline-none focus:border-amber-400 cursor-pointer ml-1 shadow-2xs"
+            className="bg-[var(--surface-card)] border border-[var(--border-strong)] text-[11px] text-[var(--fg-primary)] rounded-lg px-2.5 py-1 font-medium focus:outline-hidden focus:border-[var(--accent)] cursor-pointer ml-1 shadow-2xs"
             aria-label="Filter calendar events by category"
           >
             <option value="all">All Categories</option>
@@ -576,8 +598,9 @@ export default function BudgetScheduler({
 
           {calendarCategory !== "all" && (
             <button
+              type="button"
               onClick={() => setCalendarCategory("all")}
-              className="text-[10px] text-amber-800 hover:text-amber-900 underline font-semibold cursor-pointer"
+              className="text-[10px] text-[var(--accent-text)] hover:underline font-semibold cursor-pointer"
             >
               Reset
             </button>
@@ -586,12 +609,12 @@ export default function BudgetScheduler({
       </div>
 
       {/* Main View Container */}
-      <div className="flex-1 overflow-y-auto p-3 sm:p-4">
+      <div className="flex-1 overflow-y-auto overflow-x-auto p-3 sm:p-4">
         {viewMode === "calendar" ? (
           /* Month Grid View with Dynamic Day Alignment */
-          <div className="flex flex-col h-full min-h-[460px]">
+          <div className="flex flex-col h-full min-h-[460px] min-w-[540px] sm:min-w-0">
             {/* Weekday Headers */}
-            <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold text-stone-500 pb-2 border-b border-stone-200">
+            <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold text-[var(--fg-muted)] pb-2 border-b border-[var(--border-subtle)]">
               <span>SUN</span>
               <span>MON</span>
               <span>TUE</span>
@@ -606,31 +629,39 @@ export default function BudgetScheduler({
               {calendarDays.map((cell) => (
                 <div
                   key={cell.key}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => handleOpenDayModal(cell.dateStr, cell.day)}
-                  className={`min-h-[85px] sm:min-h-[95px] p-1.5 rounded-xl border transition-all flex flex-col justify-between cursor-pointer group shadow-2xs ${
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      handleOpenDayModal(cell.dateStr, cell.day);
+                    }
+                  }}
+                  className={`min-h-[85px] sm:min-h-[95px] p-1.5 rounded-xl border transition-all flex flex-col justify-between cursor-pointer group shadow-2xs focus-visible:outline-2 focus-visible:outline-[var(--accent)] ${
                     cell.isToday
-                      ? "bg-amber-50/50 border-amber-400 shadow-xs hover:border-amber-500"
+                      ? "bg-[var(--accent-subtle)] border-[var(--accent-border)] shadow-xs"
                       : cell.isCurrentMonth
-                      ? "bg-white border-stone-200 hover:border-amber-300 hover:bg-stone-50/60"
-                      : "bg-stone-50/40 border-stone-100 text-stone-400 opacity-60 hover:opacity-80"
+                      ? "bg-[var(--surface-card)] border-[var(--border-subtle)] hover:border-[var(--accent-border)] hover:bg-[var(--surface-elevated)]"
+                      : "bg-[var(--surface-elevated)] border-[var(--border-subtle)] text-[var(--fg-muted)] opacity-55 hover:opacity-80"
                   }`}
-                  title={`Click to view or add bills for ${cell.dateStr}`}
+                  title={`Inspect ${cell.dateStr}`}
                 >
                   {/* Day Header */}
                   <div className="flex items-center justify-between">
                     <span
                       className={`text-xs font-mono font-semibold px-1.5 py-0.5 rounded ${
                         cell.isToday
-                          ? "bg-gradient-to-r from-amber-500 to-yellow-500 text-zinc-950 font-bold shadow-xs"
+                          ? "bg-[#0070ba] text-white font-bold shadow-xs"
                           : cell.isCurrentMonth
-                          ? "text-stone-700 group-hover:text-zinc-900"
-                          : "text-stone-400"
+                          ? "text-[var(--fg-secondary)] group-hover:text-[var(--fg-primary)]"
+                          : "text-[var(--fg-muted)]"
                       }`}
                     >
                       {cell.day}
                     </span>
                     {cell.isToday && (
-                      <span className="text-[9px] font-bold text-amber-800 uppercase tracking-tight">
+                      <span className="text-[9px] font-bold text-[var(--accent-text)] uppercase tracking-tight">
                         Today
                       </span>
                     )}
@@ -648,17 +679,17 @@ export default function BudgetScheduler({
                           key={evt.id}
                           className={`flex items-center justify-between w-full text-left p-1 rounded-md text-[10px] transition-all font-medium border shadow-2xs ${
                             isCompleted
-                              ? "bg-stone-100 border-stone-200 text-stone-400 line-through"
+                              ? "bg-[var(--surface-subtle)] border-[var(--border-subtle)] text-[var(--fg-muted)] line-through"
                               : isIncoming
-                              ? "bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100"
+                              ? "bg-[var(--status-success-bg)] border-[var(--status-success-border)] text-[var(--status-success-text)]"
                               : isOutgoing
-                              ? "bg-amber-50 border-amber-200 text-amber-900 hover:bg-amber-100"
-                              : "bg-purple-50 border-purple-200 text-purple-900 hover:bg-purple-100"
+                              ? "bg-[var(--status-info-bg)] border-[var(--status-info-border)] text-[var(--status-info-text)]"
+                              : "bg-[var(--status-milestone-bg)] border-[var(--status-milestone-border)] text-[var(--status-milestone-text)]"
                           }`}
                           title={`${evt.title} - $${evt.amount.toFixed(2)} (${evt.status})`}
                         >
                           <span className="truncate flex items-center gap-1">
-                            <span className="font-bold shrink-0">
+                            <span className="font-bold shrink-0 tabular-nums">
                               {evt.amount > 0 ? `$${evt.amount.toFixed(0)} ` : ""}
                             </span>
                             <span className="truncate">{evt.title}</span>
@@ -674,10 +705,10 @@ export default function BudgetScheduler({
                                   e.stopPropagation();
                                   onToggleStatus(evt.id, isCompleted ? "scheduled" : "completed");
                                 }}
-                                className="p-0.5 text-stone-400 hover:text-emerald-600 rounded cursor-pointer"
+                                className="p-0.5 text-[var(--fg-muted)] hover:text-[var(--status-success-text)] rounded cursor-pointer"
                               >
                                 {isCompleted ? (
-                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                  <CheckCircle2 className="w-3 h-3 text-[var(--status-success-text)]" />
                                 ) : (
                                   <Circle className="w-3 h-3" />
                                 )}
@@ -691,7 +722,7 @@ export default function BudgetScheduler({
                                   e.stopPropagation();
                                   onDeleteEvent(evt.id);
                                 }}
-                                className="p-0.5 text-stone-400 hover:text-rose-600 rounded cursor-pointer"
+                                className="p-0.5 text-[var(--fg-muted)] hover:text-[var(--status-danger-text)] rounded cursor-pointer"
                               >
                                 <Trash2 className="w-3 h-3" />
                               </button>
@@ -707,195 +738,203 @@ export default function BudgetScheduler({
           </div>
         ) : (
           /* Agenda / Chronological Timeline View */
-          <div className="flex flex-col gap-3">
-            <p className="text-xs text-stone-500 mb-1">
-              Upcoming financial milestones ordered chronologically. Click any item to inspect details or manage status.
-            </p>
+          <div className="flex flex-col gap-2.5">
+            {displayedEvents.map((evt) => {
+              const isIncoming = evt.type === "incoming";
+              const isOutgoing = evt.type === "outgoing";
+              const isCompleted = evt.status === "completed";
 
-            <div className="flex flex-col gap-2.5">
-              {displayedEvents.map((evt) => {
-                const isIncoming = evt.type === "incoming";
-                const isOutgoing = evt.type === "outgoing";
-                const isCompleted = evt.status === "completed";
+              return (
+                <div
+                  key={evt.id}
+                  onClick={() => {
+                    const day = evt.date ? parseInt(evt.date.split("-")[2], 10) : evt.dayOfMonth || 15;
+                    const dateStr = evt.date || `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                    handleOpenDayModal(dateStr, day);
+                  }}
+                  className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl border transition-all cursor-pointer gap-2 shadow-2xs ${
+                    isCompleted
+                      ? "bg-[var(--surface-elevated)] border-[var(--border-subtle)] opacity-60"
+                      : "bg-[var(--surface-card)] border-[var(--border-subtle)] hover:border-[var(--accent-border)]"
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${
+                        isCompleted
+                          ? "bg-[var(--surface-subtle)] border-[var(--border-subtle)] text-[var(--fg-muted)]"
+                          : isIncoming
+                          ? "bg-[var(--status-success-bg)] border-[var(--status-success-border)] text-[var(--status-success-text)]"
+                          : isOutgoing
+                          ? "bg-[var(--status-info-bg)] border-[var(--status-info-border)] text-[var(--status-info-text)]"
+                          : "bg-[var(--status-milestone-bg)] border-[var(--status-milestone-border)] text-[var(--status-milestone-text)]"
+                      }`}
+                    >
+                      {isIncoming ? (
+                        <ArrowDownLeft className="w-4 h-4" />
+                      ) : isOutgoing ? (
+                        <ArrowUpRight className="w-4 h-4" />
+                      ) : (
+                        <Sparkles className="w-4 h-4" />
+                      )}
+                    </div>
 
-                return (
-                  <div
-                    key={evt.id}
-                    onClick={() => {
-                      const day = evt.date ? parseInt(evt.date.split("-")[2], 10) : evt.dayOfMonth || 15;
-                      const dateStr = evt.date || `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-                      handleOpenDayModal(dateStr, day);
-                    }}
-                    className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl border transition-all cursor-pointer gap-2 shadow-2xs ${
-                      isCompleted
-                        ? "bg-stone-50 border-stone-200 opacity-60"
-                        : "bg-white border-stone-200 hover:border-amber-300"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${
-                          isCompleted
-                            ? "bg-stone-100 border-stone-200 text-stone-400"
-                            : isIncoming
-                            ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-                            : isOutgoing
-                            ? "bg-amber-50 border-amber-200 text-amber-800"
-                            : "bg-purple-50 border-purple-200 text-purple-700"
+                    <div className="min-w-0">
+                      <p
+                        className={`text-xs font-semibold flex flex-wrap items-center gap-2 ${
+                          isCompleted ? "text-[var(--fg-muted)] line-through" : "text-[var(--fg-primary)]"
                         }`}
                       >
-                        {isIncoming ? (
-                          <ArrowDownLeft className="w-4 h-4" />
-                        ) : isOutgoing ? (
-                          <ArrowUpRight className="w-4 h-4" />
-                        ) : (
-                          <Sparkles className="w-4 h-4" />
-                        )}
-                      </div>
-
-                      <div>
-                        <p
-                          className={`text-xs font-semibold flex items-center gap-2 ${
-                            isCompleted ? "text-stone-400 line-through" : "text-zinc-900"
-                          }`}
-                        >
-                          {evt.title}
-                          <span className="text-[10px] font-normal px-1.5 py-0.2 rounded bg-stone-100 text-stone-700 border border-stone-200">
-                            {evt.category}
+                        {evt.title}
+                        <span className="text-[10px] font-normal px-1.5 py-0.5 rounded bg-[var(--surface-subtle)] text-[var(--fg-secondary)] border border-[var(--border-subtle)]">
+                          {evt.category}
+                        </span>
+                        {isCompleted && (
+                          <span className="text-[9px] font-semibold text-[var(--status-success-text)] uppercase">
+                            Completed
                           </span>
-                          {isCompleted && (
-                            <span className="text-[9px] font-semibold text-emerald-700 uppercase">
-                              Completed
+                        )}
+                      </p>
+                      {(() => {
+                        const lifecycle = extractLifecycle(evt.counterparty, evt.date);
+                        return (
+                          <div className="text-[11px] text-[var(--fg-muted)] mt-0.5 flex items-center gap-1.5 flex-wrap">
+                            {lifecycle.cleanName && (
+                              <span>
+                                <span className="text-[var(--fg-secondary)] font-medium">{lifecycle.cleanName}</span> ·
+                              </span>
+                            )}
+                            <span>
+                              Due: <span className="text-[var(--fg-secondary)] font-mono font-medium">{evt.date}</span>
                             </span>
-                          )}
-                        </p>
-                        {(() => {
-                          const lifecycle = extractLifecycle(evt.counterparty, evt.date);
-                          return (
-                            <div className="text-[11px] text-stone-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
-                              {lifecycle.cleanName && (
-                                <span>Provider: <span className="text-zinc-800 font-medium">{lifecycle.cleanName}</span> ·</span>
-                              )}
-                              <span>Due: <span className="text-zinc-800 font-mono font-medium">{evt.date}</span></span>
-                              {evt.type === "outgoing" && (
-                                <>
-                                  <span>·</span>
-                                  <span
-                                    className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
-                                      lifecycle.isOngoing
-                                        ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                                        : "bg-amber-50 text-amber-900 border border-amber-200"
-                                    }`}
-                                  >
-                                    {lifecycle.contractStatus}
-                                  </span>
-                                </>
-                              )}
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between sm:justify-end gap-3 border-t sm:border-t-0 pt-2 sm:pt-0 border-stone-100">
-                      <div className="text-right">
-                        <span
-                          className={`text-sm font-bold font-mono block ${
-                            isCompleted
-                              ? "text-stone-400"
-                              : isIncoming
-                              ? "text-emerald-700"
-                              : isOutgoing
-                              ? "text-zinc-900"
-                              : "text-purple-700"
-                          }`}
-                        >
-                          {evt.amount > 0 ? `${isIncoming ? "+" : "-"}$${evt.amount.toFixed(2)}` : "Milestone"}
-                        </span>
-                        <span className="text-[10px] text-stone-400 uppercase font-medium">
-                          {evt.type === "incoming" ? "Expected In" : evt.type === "outgoing" ? "Bill Due" : "Action"}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-1.5">
-                        {onToggleStatus && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onToggleStatus(evt.id, isCompleted ? "scheduled" : "completed");
-                            }}
-                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition-colors shadow-2xs ${
-                              isCompleted
-                                ? "bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100"
-                                : "bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-300"
-                            }`}
-                          >
-                            {isCompleted ? "Reopen" : "Mark Paid"}
-                          </button>
-                        )}
-                        {onDeleteEvent && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onDeleteEvent(evt.id);
-                            }}
-                            title="Delete Event"
-                            className="p-1.5 rounded-lg bg-stone-100 hover:bg-rose-50 text-stone-400 hover:text-rose-600 border border-stone-200 transition-colors cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
+                            {evt.type === "outgoing" && (
+                              <>
+                                <span>·</span>
+                                <span
+                                  className={`text-[10px] px-1.5 py-0.5 rounded font-mono border ${
+                                    lifecycle.isOngoing
+                                      ? "bg-[var(--status-success-bg)] text-[var(--status-success-text)] border-[var(--status-success-border)]"
+                                      : "bg-[var(--status-info-bg)] text-[var(--status-info-text)] border-[var(--status-info-border)]"
+                                  }`}
+                                >
+                                  {lifecycle.contractStatus}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
-                );
-              })}
-            </div>
+
+                  <div className="flex items-center justify-between sm:justify-end gap-3 border-t sm:border-t-0 pt-2 sm:pt-0 border-[var(--border-subtle)]">
+                    <div className="text-right">
+                      <span
+                        className={`text-sm font-bold font-mono block tabular-nums ${
+                          isCompleted
+                            ? "text-[var(--fg-muted)]"
+                            : isIncoming
+                            ? "text-[var(--status-success-text)]"
+                            : isOutgoing
+                            ? "text-[var(--fg-primary)]"
+                            : "text-[var(--status-milestone-text)]"
+                        }`}
+                      >
+                        {evt.amount > 0 ? `${isIncoming ? "+" : "-"}$${evt.amount.toFixed(2)}` : "Milestone"}
+                      </span>
+                      <span className="text-[10px] text-[var(--fg-muted)] uppercase font-medium">
+                        {evt.type === "incoming" ? "Receivable" : evt.type === "outgoing" ? "Bill" : "Action"}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      {onToggleStatus && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleStatus(evt.id, isCompleted ? "scheduled" : "completed");
+                          }}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition-colors shadow-2xs focus-visible:outline-2 focus-visible:outline-[var(--accent)] ${
+                            isCompleted
+                              ? "bg-[var(--status-success-bg)] text-[var(--status-success-text)] border border-[var(--status-success-border)]"
+                              : "bg-[var(--surface-subtle)] hover:bg-[var(--surface-hover)] text-[var(--fg-primary)] border border-[var(--border-strong)]"
+                          }`}
+                        >
+                          {isCompleted ? "Reopen" : "Mark Paid"}
+                        </button>
+                      )}
+                      {onDeleteEvent && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteEvent(evt.id);
+                          }}
+                          title="Delete Event"
+                          className="p-1.5 rounded-lg bg-[var(--surface-subtle)] hover:bg-[var(--status-danger-bg)] text-[var(--fg-muted)] hover:text-[var(--status-danger-text)] border border-[var(--border-subtle)] transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
 
       {/* Bottom Status / Legend */}
-      <div className="flex flex-wrap items-center justify-between px-4 py-2 bg-stone-50 border-t border-stone-200 text-[11px] text-stone-500">
-        <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1 font-medium">
-            <span className="w-2 h-2 rounded-full bg-emerald-500" /> Receivables (Split Due)
+      <div className="flex flex-wrap items-center justify-between px-4 py-2 bg-[var(--surface-elevated)] border-t border-[var(--border-subtle)] text-[11px] text-[var(--fg-muted)]">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="flex items-center gap-1.5 font-medium">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" /> Receivables
           </span>
-          <span className="flex items-center gap-1 font-medium">
-            <span className="w-2 h-2 rounded-full bg-amber-500" /> Subscriptions & Bills
+          <span className="flex items-center gap-1.5 font-medium">
+            <span className="w-2 h-2 rounded-full bg-[#0070ba]" /> Subscriptions &amp; Bills
           </span>
-          <span className="flex items-center gap-1 font-medium">
-            <span className="w-2 h-2 rounded-full bg-purple-500" /> Checkpoints
+          <span className="flex items-center gap-1.5 font-medium">
+            <span className="w-2 h-2 rounded-full bg-indigo-500" /> Checkpoints
           </span>
         </div>
-        <span className="text-stone-400 text-[10px]">
-          Click any day to inspect summary, mark items done, or set reminders
-        </span>
       </div>
 
       {/* Dual-Pane Day Details & Scheduling Popup Modal (Portalled to document.body at z-[200]) */}
       {selectedDayModal && mounted && typeof document !== "undefined" && createPortal(
-        <div className="fixed inset-0 z-[200] bg-stone-900/50 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-150">
-          <div className="bg-white/98 border border-amber-300/80 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh] relative">
+        <div
+          className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-150"
+          onClick={() => setSelectedDayModal(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={selectedDayModal.formattedTitle}
+            onClick={(e) => e.stopPropagation()}
+            className="theme-modal border rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh] relative"
+          >
             {/* Prominent Liquid Flow Animation */}
             <div className="absolute top-0 left-0 right-0 z-10 liquid-bar" />
 
             {/* Modal Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 bg-amber-50/60 mt-[3.5px]">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-300 flex items-center justify-center text-amber-800 shadow-2xs">
+            <div className="theme-modal-header flex items-center justify-between px-5 py-4 border-b mt-[3px]">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center justify-center text-[var(--accent-text)] shadow-2xs shrink-0">
                   <CalendarIcon className="w-5 h-5" />
                 </div>
-                <div>
-                  <h3 className="text-sm sm:text-base font-bold text-zinc-900 flex items-center gap-2">
+                <div className="min-w-0">
+                  <h3 className="text-sm sm:text-base font-bold text-[var(--fg-primary)] truncate">
                     {selectedDayModal.formattedTitle}
                   </h3>
-                  <div className="flex items-center gap-3 text-xs mt-0.5 font-mono">
-                    <span className="text-rose-600 font-semibold">Bills Due: -${selectedDayTotalBills.toFixed(2)}</span>
-                    <span className="text-stone-300">·</span>
-                    <span className="text-emerald-700 font-semibold">Receivables: +${selectedDayTotalReceivables.toFixed(2)}</span>
+                  <div className="flex flex-wrap items-center gap-2.5 text-xs mt-0.5 font-mono tabular-nums">
+                    <span className="text-[var(--status-danger-text)] font-semibold">
+                      Due: -${selectedDayTotalBills.toFixed(2)}
+                    </span>
+                    <span className="text-[var(--fg-muted)]">·</span>
+                    <span className="text-[var(--status-success-text)] font-semibold">
+                      In: +${selectedDayTotalReceivables.toFixed(2)}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -903,35 +942,33 @@ export default function BudgetScheduler({
               <button
                 type="button"
                 onClick={() => setSelectedDayModal(null)}
-                className="text-stone-400 hover:text-zinc-900 p-1.5 rounded-lg hover:bg-stone-100 cursor-pointer transition-colors"
+                className="text-[var(--fg-muted)] hover:text-[var(--fg-primary)] p-1.5 rounded-lg hover:bg-[var(--surface-subtle)] active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--accent)] cursor-pointer transition-colors"
                 title="Close modal"
+                aria-label="Close modal"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Modal Body: Dual Pane Layout */}
-            <div className="grid grid-cols-1 md:grid-cols-12 flex-1 overflow-y-auto divide-y md:divide-y-0 md:divide-x divide-stone-200">
+            <div className="grid grid-cols-1 md:grid-cols-12 flex-1 overflow-y-auto divide-y md:divide-y-0 md:divide-x divide-[var(--border-subtle)]">
               {/* Left Pane (7 cols): List of Bills / Reminders for this Day */}
-              <div className="md:col-span-7 p-4 sm:p-5 flex flex-col gap-3 overflow-y-auto bg-white">
-                <div className="flex items-center justify-between pb-1 border-b border-stone-200">
-                  <h4 className="text-xs font-bold text-zinc-800 uppercase tracking-wider flex items-center gap-1.5">
-                    <span>Scheduled for this Day</span>
-                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-stone-100 text-stone-700 border border-stone-200 font-mono font-medium">
+              <div className="md:col-span-7 p-4 sm:p-5 flex flex-col gap-3 overflow-y-auto bg-[var(--surface-card)]">
+                <div className="flex items-center justify-between pb-1.5 border-b border-[var(--border-subtle)]">
+                  <h4 className="text-xs font-bold text-[var(--fg-primary)] uppercase tracking-wider flex items-center gap-1.5">
+                    <span>Scheduled</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--surface-subtle)] text-[var(--fg-secondary)] border border-[var(--border-subtle)] font-mono font-medium">
                       {selectedDayEvents.length}
                     </span>
                   </h4>
                 </div>
 
                 {selectedDayEvents.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center p-8 text-center bg-stone-50 rounded-xl border border-dashed border-stone-200 flex-1 min-h-[160px]">
-                    <div className="w-10 h-10 rounded-xl bg-stone-200/60 flex items-center justify-center text-stone-500 mb-2">
+                  <div className="flex flex-col items-center justify-center p-8 text-center bg-[var(--surface-elevated)] rounded-xl border border-dashed border-[var(--border-strong)] flex-1 min-h-[160px]">
+                    <div className="w-10 h-10 rounded-xl bg-[var(--surface-subtle)] flex items-center justify-center text-[var(--fg-muted)] mb-2">
                       <Clock className="w-5 h-5" />
                     </div>
-                    <p className="text-xs font-semibold text-zinc-800">No items scheduled for this day</p>
-                    <p className="text-[11px] text-stone-500 mt-0.5 max-w-xs">
-                      Use the quick-set form to add a bill, receivable, or checkpoint for this date.
-                    </p>
+                    <p className="text-xs font-semibold text-[var(--fg-primary)]">No scheduled items</p>
                   </div>
                 ) : (
                   <div className="flex flex-col gap-2.5">
@@ -946,21 +983,21 @@ export default function BudgetScheduler({
                           key={evt.id}
                           className={`p-3 rounded-xl border transition-all flex flex-col gap-2 shadow-2xs ${
                             isCompleted
-                              ? "bg-stone-50 border-stone-200 opacity-60"
-                              : "bg-white border-stone-200 hover:border-amber-300"
+                              ? "bg-[var(--surface-elevated)] border-[var(--border-subtle)] opacity-60"
+                              : "bg-[var(--surface-elevated)] border-[var(--border-subtle)] hover:border-[var(--accent-border)]"
                           }`}
                         >
                           <div className="flex items-start justify-between gap-2">
-                            <div className="flex items-center gap-2.5">
+                            <div className="flex items-center gap-2.5 min-w-0">
                               <div
                                 className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${
                                   isCompleted
-                                    ? "bg-stone-100 border-stone-200 text-stone-400"
+                                    ? "bg-[var(--surface-subtle)] border-[var(--border-subtle)] text-[var(--fg-muted)]"
                                     : isIncoming
-                                    ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                                    ? "bg-[var(--status-success-bg)] border-[var(--status-success-border)] text-[var(--status-success-text)]"
                                     : isOutgoing
-                                    ? "bg-amber-50 border-amber-200 text-amber-800"
-                                    : "bg-purple-50 border-purple-200 text-purple-700"
+                                    ? "bg-[var(--status-info-bg)] border-[var(--status-info-border)] text-[var(--status-info-text)]"
+                                    : "bg-[var(--status-milestone-bg)] border-[var(--status-milestone-border)] text-[var(--status-milestone-text)]"
                                 }`}
                               >
                                 {isIncoming ? (
@@ -972,36 +1009,40 @@ export default function BudgetScheduler({
                                 )}
                               </div>
 
-                              <div>
+                              <div className="min-w-0">
                                 <p
-                                  className={`text-xs font-semibold ${
-                                    isCompleted ? "text-stone-400 line-through" : "text-zinc-900"
+                                  className={`text-xs font-semibold truncate ${
+                                    isCompleted ? "text-[var(--fg-muted)] line-through" : "text-[var(--fg-primary)]"
                                   }`}
                                 >
                                   {evt.title}
                                 </p>
-                                <div className="flex flex-col gap-1 mt-0.5 text-[11px] text-stone-500">
-                                  <div className="flex items-center gap-2">
-                                    <span className="px-1.5 py-0.2 rounded bg-stone-100 text-stone-700 border border-stone-200 text-[10px]">
+                                <div className="flex flex-col gap-1 mt-0.5 text-[11px] text-[var(--fg-muted)]">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="px-1.5 py-0.5 rounded bg-[var(--surface-subtle)] text-[var(--fg-secondary)] border border-[var(--border-subtle)] text-[10px]">
                                       {evt.category}
                                     </span>
                                     {lifecycle.cleanName && (
-                                      <span>Provider: <span className="text-zinc-800 font-medium">{lifecycle.cleanName}</span></span>
+                                      <span className="text-[var(--fg-secondary)] font-medium">
+                                        {lifecycle.cleanName}
+                                      </span>
                                     )}
                                   </div>
                                   {evt.type === "outgoing" && (
-                                    <div className="flex items-center gap-1.5 text-[10px] text-stone-500">
+                                    <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-[var(--fg-muted)]">
                                       {lifecycle.startDate && (
-                                        <span>Started: <span className="text-zinc-800 font-mono font-medium">{lifecycle.startDate}</span></span>
+                                        <span>
+                                          Started: <span className="text-[var(--fg-secondary)] font-mono font-medium">{lifecycle.startDate}</span>
+                                        </span>
                                       )}
                                       <span>·</span>
                                       <span
                                         className={
                                           lifecycle.isCancelled
-                                            ? "text-rose-600 font-medium"
+                                            ? "text-[var(--status-danger-text)] font-medium"
                                             : lifecycle.isOngoing
-                                            ? "text-emerald-700"
-                                            : "text-amber-800 font-medium"
+                                            ? "text-[var(--status-success-text)]"
+                                            : "text-[var(--accent-text)] font-medium"
                                         }
                                       >
                                         {lifecycle.contractStatus}
@@ -1014,14 +1055,14 @@ export default function BudgetScheduler({
 
                             <div className="text-right shrink-0">
                               <span
-                                className={`text-sm font-bold font-mono block ${
+                                className={`text-sm font-bold font-mono block tabular-nums ${
                                   isCompleted
-                                    ? "text-stone-400 line-through"
+                                    ? "text-[var(--fg-muted)] line-through"
                                     : isIncoming
-                                    ? "text-emerald-700"
+                                    ? "text-[var(--status-success-text)]"
                                     : isOutgoing
-                                    ? "text-rose-600"
-                                    : "text-purple-700"
+                                    ? "text-[var(--status-danger-text)]"
+                                    : "text-[var(--status-milestone-text)]"
                                 }`}
                               >
                                 {evt.amount > 0 ? `${isIncoming ? "+" : "-"}$${evt.amount.toFixed(2)}` : "Milestone"}
@@ -1029,21 +1070,21 @@ export default function BudgetScheduler({
                               <span
                                 className={`text-[9px] uppercase font-semibold ${
                                   isCompleted
-                                    ? "text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-300"
+                                    ? "text-[var(--status-success-text)] bg-[var(--status-success-bg)] px-1.5 py-0.5 rounded border border-[var(--status-success-border)]"
                                     : isIncoming
-                                    ? "text-emerald-700"
-                                    : "text-stone-500"
+                                    ? "text-[var(--status-success-text)]"
+                                    : "text-[var(--fg-muted)]"
                                 }`}
                               >
-                                {isCompleted ? "✓ Paid / Settled" : evt.type}
+                                {isCompleted ? "Settled" : evt.type}
                               </span>
                             </div>
                           </div>
 
                           {/* Action Row */}
-                          <div className="flex items-center justify-between pt-2 border-t border-stone-100 text-xs">
-                            <span className="text-[10px] text-stone-500">
-                              Status: <span className="text-zinc-800 font-medium capitalize">{evt.status}</span>
+                          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[var(--border-subtle)] text-xs">
+                            <span className="text-[10px] text-[var(--fg-muted)]">
+                              Status: <span className="text-[var(--fg-primary)] font-medium capitalize">{evt.status}</span>
                             </span>
 
                             <div className="flex items-center gap-2">
@@ -1053,10 +1094,10 @@ export default function BudgetScheduler({
                                   onClick={() =>
                                     onToggleStatus(evt.id, isCompleted ? "scheduled" : "completed")
                                   }
-                                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition-colors shadow-2xs ${
+                                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition-colors shadow-2xs focus-visible:outline-2 focus-visible:outline-[var(--accent)] ${
                                     isCompleted
-                                      ? "bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200"
-                                      : "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                      ? "bg-[var(--surface-card)] hover:bg-[var(--surface-subtle)] text-[var(--fg-secondary)] border border-[var(--border-strong)]"
+                                      : "bg-[var(--status-success-bg)] hover:opacity-90 text-[var(--status-success-text)] border border-[var(--status-success-border)]"
                                   }`}
                                 >
                                   {isCompleted ? (
@@ -1074,7 +1115,7 @@ export default function BudgetScheduler({
                                 <button
                                   type="button"
                                   onClick={() => onDeleteEvent(evt.id)}
-                                  className="flex items-center gap-1 px-2 py-1 rounded-lg bg-stone-100 hover:bg-rose-50 text-stone-500 hover:text-rose-600 border border-stone-200 transition-colors cursor-pointer text-xs"
+                                  className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[var(--surface-card)] hover:bg-[var(--status-danger-bg)] text-[var(--fg-muted)] hover:text-[var(--status-danger-text)] border border-[var(--border-strong)] transition-colors cursor-pointer text-xs"
                                   title="Delete item"
                                 >
                                   <Trash2 className="w-3 h-3" />
@@ -1086,8 +1127,8 @@ export default function BudgetScheduler({
                                 <button
                                   type="button"
                                   onClick={() => handleCancelSubscriptionAction(evt.id, evt.counterparty)}
-                                  className="flex items-center gap-1 px-2 py-1 rounded-lg bg-stone-100 hover:bg-rose-50 text-stone-600 hover:text-rose-600 border border-stone-200 transition-colors cursor-pointer text-xs font-medium"
-                                  title="Cancel subscription (preserves past history, removes from future months)"
+                                  className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[var(--surface-card)] hover:bg-[var(--status-danger-bg)] text-[var(--fg-secondary)] hover:text-[var(--status-danger-text)] border border-[var(--border-strong)] transition-colors cursor-pointer text-xs font-medium"
+                                  title="Cancel subscription"
                                 >
                                   <span>Cancel</span>
                                 </button>
@@ -1102,40 +1143,40 @@ export default function BudgetScheduler({
               </div>
 
               {/* Right Pane (5 cols): Inline Form to Set Bill or Reminder for this Date */}
-              <div className="md:col-span-5 p-4 sm:p-5 bg-stone-50/70 flex flex-col justify-between">
+              <div className="md:col-span-5 p-4 sm:p-5 bg-[var(--surface-elevated)] flex flex-col justify-between">
                 <div>
-                  <div className="pb-1 mb-3 border-b border-stone-200">
-                    <h4 className="text-xs font-bold text-zinc-900 uppercase tracking-wider flex items-center gap-1.5">
-                      <Plus className="w-3.5 h-3.5 text-amber-700" />
-                      <span>Set Reminder for this Day</span>
+                  <div className="pb-2 mb-3 border-b border-[var(--border-subtle)] flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-[var(--fg-primary)] uppercase tracking-wider flex items-center gap-1.5">
+                      <Plus className="w-3.5 h-3.5 text-[var(--accent-text)]" />
+                      <span>Add Item</span>
                     </h4>
-                    <p className="text-[11px] text-stone-500 mt-0.5">
-                      Date locked: <span className="text-zinc-800 font-mono font-medium">{selectedDayModal.dateStr}</span>
-                    </p>
+                    <span className="text-[11px] text-[var(--fg-secondary)] font-mono">
+                      {selectedDayModal.dateStr}
+                    </span>
                   </div>
 
                   <form onSubmit={handleCreateEventForDay} className="flex flex-col gap-3">
                     <div>
-                      <label className="text-[11px] font-semibold text-zinc-700 block mb-1">
-                        Bill / Reminder Title
+                      <label className="text-[11px] font-semibold text-[var(--fg-secondary)] block mb-1">
+                        Title
                       </label>
                       <input
                         type="text"
-                        placeholder="e.g. WiFi Bill, Client Retainer, Split"
+                        placeholder="WiFi, Retainer, Split"
                         value={modalTitle}
                         onChange={(e) => setModalTitle(e.target.value)}
                         required
-                        className="w-full px-3 py-1.5 rounded-lg bg-white border border-stone-300 text-xs text-zinc-900 placeholder:text-stone-400 focus:outline-hidden focus:border-amber-500 shadow-2xs"
+                        className="w-full px-3 py-1.5 rounded-lg bg-[var(--surface-card)] border border-[var(--border-strong)] text-xs text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:outline-hidden focus:border-[var(--accent)] shadow-2xs"
                       />
                     </div>
 
                     <div className="grid grid-cols-2 gap-2.5">
                       <div>
-                        <label className="text-[11px] font-semibold text-zinc-700 block mb-1">
+                        <label className="text-[11px] font-semibold text-[var(--fg-secondary)] block mb-1">
                           Amount ($)
                         </label>
                         <div className="relative">
-                          <DollarSign className="w-3.5 h-3.5 absolute left-2 top-2 text-stone-400" />
+                          <DollarSign className="w-3.5 h-3.5 absolute left-2 top-2 text-[var(--fg-muted)]" />
                           <input
                             type="number"
                             step="0.01"
@@ -1143,19 +1184,19 @@ export default function BudgetScheduler({
                             value={modalAmount}
                             onChange={(e) => setModalAmount(e.target.value)}
                             required
-                            className="w-full pl-6 pr-2 py-1.5 rounded-lg bg-white border border-stone-300 text-xs text-zinc-900 font-mono focus:outline-hidden focus:border-amber-500 shadow-2xs"
+                            className="w-full pl-6 pr-2 py-1.5 rounded-lg bg-[var(--surface-card)] border border-[var(--border-strong)] text-xs text-[var(--fg-primary)] font-mono focus:outline-hidden focus:border-[var(--accent)] shadow-2xs"
                           />
                         </div>
                       </div>
 
                       <div>
-                        <label className="text-[11px] font-semibold text-zinc-700 block mb-1">
+                        <label className="text-[11px] font-semibold text-[var(--fg-secondary)] block mb-1">
                           Type
                         </label>
                         <select
                           value={modalType}
                           onChange={(e) => setModalType(e.target.value as "incoming" | "outgoing" | "milestone")}
-                          className="w-full px-2 py-1.5 rounded-lg bg-white border border-stone-300 text-[11px] text-zinc-900 focus:outline-hidden focus:border-amber-500 cursor-pointer shadow-2xs"
+                          className="w-full px-2 py-1.5 rounded-lg bg-[var(--surface-card)] border border-[var(--border-strong)] text-[11px] text-[var(--fg-primary)] focus:outline-hidden focus:border-[var(--accent)] cursor-pointer shadow-2xs"
                         >
                           <option value="outgoing">Bill Due</option>
                           <option value="incoming">Receivable</option>
@@ -1165,13 +1206,13 @@ export default function BudgetScheduler({
                     </div>
 
                     <div>
-                      <label className="text-[11px] font-semibold text-zinc-700 block mb-1">
+                      <label className="text-[11px] font-semibold text-[var(--fg-secondary)] block mb-1">
                         Category
                       </label>
                       <select
                         value={modalCategory}
                         onChange={(e) => setModalCategory(e.target.value)}
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-stone-300 text-[11px] text-zinc-900 focus:outline-hidden focus:border-amber-500 cursor-pointer shadow-2xs"
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--surface-card)] border border-[var(--border-strong)] text-[11px] text-[var(--fg-primary)] focus:outline-hidden focus:border-[var(--accent)] cursor-pointer shadow-2xs"
                       >
                         {categories.map((c) => (
                           <option key={c.id} value={c.name}>
@@ -1184,56 +1225,56 @@ export default function BudgetScheduler({
                     </div>
 
                     <div>
-                      <label className="text-[11px] font-semibold text-zinc-700 block mb-1">
-                        Counterparty / Merchant (Optional)
+                      <label className="text-[11px] font-semibold text-[var(--fg-secondary)] block mb-1">
+                        Counterparty
                       </label>
                       <input
                         type="text"
-                        placeholder="e.g. Netflix, Alex, Landlord"
+                        placeholder="Netflix, Alex, Landlord"
                         value={modalCounterparty}
                         onChange={(e) => setModalCounterparty(e.target.value)}
-                        className="w-full px-3 py-1.5 rounded-lg bg-white border border-stone-300 text-xs text-zinc-900 placeholder:text-stone-400 focus:outline-hidden focus:border-amber-500 shadow-2xs"
+                        className="w-full px-3 py-1.5 rounded-lg bg-[var(--surface-card)] border border-[var(--border-strong)] text-xs text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:outline-hidden focus:border-[var(--accent)] shadow-2xs"
                       />
                     </div>
 
                     {/* Subscription & Contract Lifecycle Fields */}
                     <div className="grid grid-cols-2 gap-2.5">
                       <div>
-                        <label className="text-[11px] font-semibold text-zinc-700 block mb-1">
-                          Start Date (Optional)
+                        <label className="text-[11px] font-semibold text-[var(--fg-secondary)] block mb-1">
+                          Start Date
                         </label>
                         <input
                           type="date"
                           value={modalStartDate}
                           onChange={(e) => setModalStartDate(e.target.value)}
-                          className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-stone-300 text-xs text-zinc-900 focus:outline-hidden focus:border-amber-500 shadow-2xs"
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--surface-card)] border border-[var(--border-strong)] text-xs text-[var(--fg-primary)] focus:outline-hidden focus:border-[var(--accent)] shadow-2xs"
                         />
                       </div>
 
                       <div>
-                        <label className="text-[11px] font-semibold text-zinc-700 block mb-1">
-                          End Date (Optional)
+                        <label className="text-[11px] font-semibold text-[var(--fg-secondary)] block mb-1">
+                          End Date
                         </label>
                         <input
                           type="date"
                           value={modalEndDate}
                           onChange={(e) => setModalEndDate(e.target.value)}
                           placeholder="Ongoing"
-                          className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-stone-300 text-xs text-zinc-900 focus:outline-hidden focus:border-amber-500 shadow-2xs"
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--surface-card)] border border-[var(--border-strong)] text-xs text-[var(--fg-primary)] focus:outline-hidden focus:border-[var(--accent)] shadow-2xs"
                         />
                       </div>
                     </div>
 
                     {/* Quick Duration Preset Chips */}
                     <div className="flex items-center gap-1.5 flex-wrap -mt-1">
-                      <span className="text-[10px] text-stone-500">Duration:</span>
+                      <span className="text-[10px] text-[var(--fg-muted)]">Duration:</span>
                       <button
                         type="button"
                         onClick={() => setModalEndDate("")}
                         className={`text-[10px] px-2 py-0.5 rounded cursor-pointer transition-colors border shadow-2xs ${
                           !modalEndDate
-                            ? "bg-amber-500/20 text-amber-950 border-amber-400 font-bold"
-                            : "bg-white text-stone-600 border-stone-200 hover:text-zinc-900"
+                            ? "bg-[var(--accent-subtle)] text-[var(--accent-text)] border-[var(--accent-border)] font-bold"
+                            : "bg-[var(--surface-card)] text-[var(--fg-secondary)] border-[var(--border-strong)] hover:text-[var(--fg-primary)]"
                         }`}
                       >
                         Ongoing (12 Mo)
@@ -1245,7 +1286,7 @@ export default function BudgetScheduler({
                           base.setMonth(base.getMonth() + 6);
                           setModalEndDate(base.toISOString().slice(0, 10));
                         }}
-                        className="text-[10px] px-2 py-0.5 rounded bg-white text-stone-600 border border-stone-200 hover:text-zinc-900 cursor-pointer transition-colors shadow-2xs"
+                        className="text-[10px] px-2 py-0.5 rounded bg-[var(--surface-card)] text-[var(--fg-secondary)] border border-[var(--border-strong)] hover:text-[var(--fg-primary)] cursor-pointer transition-colors shadow-2xs"
                       >
                         6 Months
                       </button>
@@ -1256,7 +1297,7 @@ export default function BudgetScheduler({
                           base.setFullYear(base.getFullYear() + 1);
                           setModalEndDate(base.toISOString().slice(0, 10));
                         }}
-                        className="text-[10px] px-2 py-0.5 rounded bg-white text-stone-600 border border-stone-200 hover:text-zinc-900 cursor-pointer transition-colors shadow-2xs"
+                        className="text-[10px] px-2 py-0.5 rounded bg-[var(--surface-card)] text-[var(--fg-secondary)] border border-[var(--border-strong)] hover:text-[var(--fg-primary)] cursor-pointer transition-colors shadow-2xs"
                       >
                         1 Year
                       </button>
@@ -1267,30 +1308,20 @@ export default function BudgetScheduler({
                           base.setFullYear(base.getFullYear() + 3);
                           setModalEndDate(base.toISOString().slice(0, 10));
                         }}
-                        className="text-[10px] px-2 py-0.5 rounded bg-white text-stone-600 border border-stone-200 hover:text-zinc-900 cursor-pointer transition-colors shadow-2xs"
-                        title="E.g. Spotify Student 3-Year Plan"
+                        className="text-[10px] px-2 py-0.5 rounded bg-[var(--surface-card)] text-[var(--fg-secondary)] border border-[var(--border-strong)] hover:text-[var(--fg-primary)] cursor-pointer transition-colors shadow-2xs"
                       >
-                        3 Years (Student)
+                        3 Years
                       </button>
                     </div>
 
-                    <p className="text-[10px] text-stone-500">
-                      Ongoing subscriptions project up to 12 months ahead until cancelled. Fixed contracts (e.g. 3-Year Spotify Student) project strictly until their End Date.
-                    </p>
-
                     <button
                       type="submit"
-                      className="mt-2 w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-400 hover:to-yellow-400 active:scale-95 text-zinc-950 text-xs font-bold cursor-pointer shadow-xs border border-amber-400/40 transition-all flex items-center justify-center gap-1.5"
+                      className="theme-btn-primary mt-2 w-full py-2.5 rounded-xl active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] text-xs font-semibold cursor-pointer transition-all flex items-center justify-center gap-1.5"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      <span>Add to this Day</span>
+                      <span>Add to Day</span>
                     </button>
                   </form>
-                </div>
-
-                <div className="pt-3 mt-4 border-t border-stone-200 text-[10px] text-stone-500 flex items-center gap-1.5">
-                  <AlertCircle className="w-3.5 h-3.5 shrink-0 text-amber-600" />
-                  <span>Items saved here update your calendar and cashflow projections in real time.</span>
                 </div>
               </div>
             </div>
