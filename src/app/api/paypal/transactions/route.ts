@@ -30,14 +30,60 @@ export async function GET(req: NextRequest) {
     const userEmail = verified?.email || "";
 
     if (!userEmail) {
+      // Query recent platform sandbox transactions for guest exploration & live preview
+      const allTxs = await paypalClient.fetchRecentTransactions(hoursBack);
+      const scopedTxs = allTxs.filter((t) => t.status !== "CANCELLED");
+
+      const formatted: TransactionRow[] = scopedTxs.map((t) => {
+        const dateObj = new Date(t.timestamp);
+        const isToday = new Date().toDateString() === dateObj.toDateString();
+        const timeStr = dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        const displayDate = isToday ? `Today, ${timeStr}` : `${dateObj.toLocaleDateString([], { month: "short", day: "numeric" })}, ${timeStr}`;
+
+        let rowStatus: "settled" | "pending" | "disputed" | "unresolved" = "pending";
+        if (t.status === "COMPLETED") rowStatus = "settled";
+        else if (t.status === "PENDING" || t.status === "DRAFT") rowStatus = "pending";
+        else if (t.status === "DISPUTED") rowStatus = "disputed";
+
+        const isSplit =
+          t.splitAllocation === "split" ||
+          Boolean(t.memo && (t.memo.toLowerCase().includes("split") || t.memo.toLowerCase().includes("share"))) ||
+          t.merchantName.toLowerCase().includes("split");
+
+        const debtorDisplay = isSplit
+          ? t.debtorName && !t.debtorName.toLowerCase().includes("self") && t.debtorName !== "Shared Split"
+            ? t.debtorName
+            : "Shared Split"
+          : t.debtorName || "Self";
+
+        const lowerMerchant = (t.merchantName || "").toLowerCase();
+        let category = "General";
+        if (/hotel|airline|uber|transit|flight|travel|suites/i.test(lowerMerchant)) category = "Travel";
+        else if (/whole foods|trader joe|market|grocer|food/i.test(lowerMerchant)) category = "Groceries";
+        else if (/bistro|cafe|coffee|chipotle|starbucks|restaurant|dining|taco/i.test(lowerMerchant)) category = "Dining";
+        else if (/netflix|spotify|amc|theatre|cinema|entertainment/i.test(lowerMerchant)) category = "Entertainment";
+        else if (/amazon|target|shopping|store|retail/i.test(lowerMerchant)) category = "Shopping";
+        else if (/shell|oil|chevron|gas|electric/i.test(lowerMerchant)) category = "Utilities";
+
+        return {
+          id: t.id,
+          date: displayDate,
+          merchant: t.merchantName,
+          category,
+          debtor_name: debtorDisplay,
+          amount: t.amount,
+          status: rowStatus,
+        };
+      });
+
       return NextResponse.json({
         success: true,
-        count: 0,
-        totalPlatformCount: 0,
-        activeScope: "personal",
+        count: formatted.length,
+        totalPlatformCount: formatted.length,
+        activeScope: "all",
         userRole: "GUEST",
         currentUser: null,
-        transactions: [],
+        transactions: formatted,
       });
     }
 

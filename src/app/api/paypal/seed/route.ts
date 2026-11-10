@@ -27,20 +27,16 @@ export async function POST(req: NextRequest) {
 
     const userCookie = req.cookies.get("pocketmate_user")?.value;
     const verified = verifySessionCookie(userCookie);
+    const userEmail = verified?.email;
 
-    if (!verified || !verified.email) {
-      return NextResponse.json(
-        { error: "Please log in with PayPal to synchronize and initialize your sandbox activity." },
-        { status: 401 }
-      );
-    }
-
-    const rawTxs = await paypalClient.syncUserTransactions(verified.email);
+    const rawTxs = userEmail
+      ? await paypalClient.syncUserTransactions(userEmail)
+      : await paypalClient.fetchRecentTransactions(720);
 
     // Reconcile and auto-detect recurring bills from fresh transaction activity
-    const user = await prisma.user.findUnique({ where: { email: verified.email } });
-    if (user) {
-      await reconcileAutopaySubscriptions(user.id, verified.email);
+    const user = userEmail ? await prisma.user.findUnique({ where: { email: userEmail } }) : null;
+    if (user && userEmail) {
+      await reconcileAutopaySubscriptions(user.id, userEmail);
     }
 
     let categoryMap = new Map<string, { category: string }>();
