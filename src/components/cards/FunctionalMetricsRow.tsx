@@ -16,12 +16,14 @@ import {
   CreditCard,
   Tag,
   RotateCcw,
+  X,
 } from "lucide-react";
 import type { CategoryItem } from "@/components/categories/CategoryControlBar";
 import type { TransactionRow } from "@/components/grid/TransactionGrid";
 import type { ScheduledEvent } from "@/components/scheduler/BudgetScheduler";
 import type { UserAccount } from "@/types/sandboxUser";
 import { ensureUniqueCategoryColors } from "@/lib/utils/categoryColors";
+import { InvoiceReminderModal, PendingInvoiceItem } from "@/components/modals/InvoiceReminderModal";
 
 export interface FunctionalMetricsRowProps {
   categories: CategoryItem[];
@@ -53,6 +55,7 @@ interface DebtorSummary {
   totalOwed: number;
   count: number;
   sampleMerchant: string;
+  invoices: PendingInvoiceItem[];
 }
 
 export interface SettledSplitSummary {
@@ -95,6 +98,8 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
 }) => {
   const [activeFlyout, setActiveFlyout] = useState<number | null>(null);
   const [pinnedFlyout, setPinnedFlyout] = useState<number | null>(null);
+  const [reminderModalDebtor, setReminderModalDebtor] = useState<DebtorSummary | null>(null);
+  const [reminderToast, setReminderToast] = useState<string | null>(null);
   const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -282,16 +287,24 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
         }
 
         const name = item.participantName;
+        const invDetail: PendingInvoiceItem = {
+          id: item.paypalInvoiceId || item.id || `inv_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+          amount: item.amount,
+          memo: split.description || "Shared Split Expense",
+        };
+
         const existing = map.get(name);
         if (existing) {
           existing.totalOwed += item.amount;
           existing.count += 1;
+          existing.invoices.push(invDetail);
         } else {
           map.set(name, {
             name,
             totalOwed: item.amount,
             count: 1,
             sampleMerchant: split.description || "Shared Split Expense",
+            invoices: [invDetail],
           });
         }
       });
@@ -312,16 +325,25 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
 
       if (isPendingSplit) {
         const name = t.debtor_name || "Friend";
+        const invDetail: PendingInvoiceItem = {
+          id: t.id,
+          amount: t.amount,
+          memo: t.memo || t.merchant || "Shared Split Expense",
+          date: t.date,
+        };
+
         const existing = map.get(name);
         if (existing) {
           existing.totalOwed += t.amount;
           existing.count += 1;
+          existing.invoices.push(invDetail);
         } else {
           map.set(name, {
             name,
             totalOwed: t.amount,
             count: 1,
             sampleMerchant: t.memo || t.merchant || "Shared Split Expense",
+            invoices: [invDetail],
           });
         }
       } else if (
@@ -849,17 +871,16 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                             >
                               <Filter className="w-3 h-3" />
                             </button>
-                            {/* Send Reminder via PocketMate */}
+                            {/* Send Reminder via PayPal Invoicing API */}
                             <button
-                              title="Send reminder"
-                              onClick={() => {
-                                onSendChatMessage(
-                                  `PocketMate, please draft and send a friendly payment reminder to ${debtor.name} for $${debtor.totalOwed.toFixed(2)} owed on split expenses.`
-                                );
+                              title={`Send PayPal reminder to ${debtor.name}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setReminderModalDebtor(debtor);
                                 setActiveFlyout(null);
                                 setPinnedFlyout(null);
                               }}
-                              className="p-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-950 border border-amber-400 transition-colors cursor-pointer shadow-2xs"
+                              className="p-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 active:scale-95 text-amber-950 border border-amber-400 transition-all cursor-pointer shadow-2xs focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-amber-500"
                             >
                               <Send className="w-3 h-3 text-amber-800" />
                             </button>
@@ -1320,6 +1341,36 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
           )}
         </div>
       </section>
+
+      {/* PayPal Reminder Toast Notification */}
+      {reminderToast && (
+        <div className="fixed bottom-6 right-6 z-[300] bg-emerald-950 text-emerald-100 border border-emerald-500/40 rounded-xl px-4 py-2.5 shadow-xl flex items-center gap-2.5 animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span className="text-xs font-medium">{reminderToast}</span>
+          <button
+            type="button"
+            onClick={() => setReminderToast(null)}
+            className="p-1 text-emerald-400 hover:text-white transition-colors cursor-pointer"
+            aria-label="Dismiss toast"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Invoice Reminder Modal */}
+      {reminderModalDebtor && (
+        <InvoiceReminderModal
+          isOpen={Boolean(reminderModalDebtor)}
+          debtorName={reminderModalDebtor.name}
+          invoices={reminderModalDebtor.invoices}
+          onClose={() => setReminderModalDebtor(null)}
+          onSuccess={(msg) => {
+            setReminderToast(msg);
+            setTimeout(() => setReminderToast(null), 4000);
+          }}
+        />
+      )}
     </div>
   );
 };
