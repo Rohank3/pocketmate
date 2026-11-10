@@ -567,8 +567,10 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
     return queue;
   }, [transactions, categoryBars, personalDebtBills, events, isClient]);
 
+  const isAnyFlyoutOpen = activeFlyout !== null || pinnedFlyout !== null;
+
   return (
-    <div ref={containerRef} className="relative z-40 mb-6">
+    <div ref={containerRef} className={`relative mb-6 ${isAnyFlyoutOpen ? "z-[80]" : "z-30"}`}>
       {/* 4 Responsive Actionable Glass Cards */}
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         {/* ========================================================= */}
@@ -580,8 +582,8 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
           onClick={() => handleCardClick(1)}
           className={`relative p-4 rounded-2xl border transition-all duration-200 cursor-pointer select-none backdrop-blur-xl ${
             isFlyoutOpen(1)
-              ? "z-50 bg-white/[0.08] border-amber-400/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_18px_40px_-10px_rgba(245,158,11,0.2)] ring-1 ring-amber-400/30 -translate-y-0.5"
-              : "bg-white/[0.035] border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_12px_32px_-8px_rgba(0,0,0,0.5)] hover:border-white/20 hover:bg-white/[0.06] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_16px_36px_-8px_rgba(0,0,0,0.6)] hover:-translate-y-0.5"
+              ? "z-[70] bg-white border-amber-400 shadow-lg ring-1 ring-amber-400/50 -translate-y-0.5"
+              : "bg-white/95 border-stone-200/90 shadow-2xs hover:border-amber-400/60 hover:shadow-md hover:bg-white hover:-translate-y-0.5"
           }`}
           role="button"
           tabIndex={0}
@@ -590,24 +592,24 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1 pr-2">
               <div className="flex items-center gap-1.5">
-                <span className="text-[11px] font-semibold text-zinc-400 tracking-wider uppercase">
+                <span className="text-[11px] font-bold text-stone-500 tracking-wider uppercase">
                   Monthly Budget
                 </span>
               </div>
-              <p className="text-xl font-bold text-zinc-100 font-mono mt-1 tracking-tight truncate">
+              <p className="text-xl font-bold text-zinc-900 font-mono mt-1 tracking-tight truncate">
                 ${totalSpent.toFixed(2)}{" "}
-                <span className="text-zinc-500 text-xs font-normal">/ ${totalBudgetCap.toFixed(0)}</span>
+                <span className="text-stone-500 text-xs font-normal">/ ${totalBudgetCap.toFixed(0)}</span>
               </p>
               <div className="mt-1 flex items-center">
                 <span
-                  className={`text-[11px] font-medium px-2 py-0.5 rounded-full inline-flex items-center gap-1 border truncate ${
+                  className={`text-[11px] font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1 border truncate ${
                     isBudgetOver
-                      ? "text-rose-300 bg-rose-500/15 border-rose-500/25"
-                      : "text-emerald-300 bg-emerald-500/15 border-emerald-500/25"
+                      ? "text-rose-700 bg-rose-50 border-rose-200"
+                      : "text-emerald-700 bg-emerald-50 border-emerald-200"
                   }`}
                 >
                   <span
-                    className={`w-1.5 h-1.5 rounded-full ${isBudgetOver ? "bg-rose-400" : "bg-emerald-400"}`}
+                    className={`w-1.5 h-1.5 rounded-full ${isBudgetOver ? "bg-rose-500" : "bg-emerald-500"}`}
                   />
                   {isBudgetOver
                     ? `$${Math.abs(remainingBudget).toFixed(2)} over (${budgetPercentUsed}%)`
@@ -616,10 +618,10 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
               </div>
             </div>
             <div
-              className={`w-11 h-11 rounded-xl border flex items-center justify-center shrink-0 shadow-inner transition-transform ${
+              className={`w-11 h-11 rounded-xl border flex items-center justify-center shrink-0 shadow-xs transition-transform ${
                 isBudgetOver
-                  ? "bg-rose-500/15 border-rose-500/25 text-rose-300"
-                  : "bg-emerald-500/15 border-emerald-500/25 text-emerald-300"
+                  ? "bg-rose-50 border-rose-200 text-rose-600"
+                  : "bg-emerald-50 border-emerald-200 text-emerald-600"
               }`}
             >
               <Wallet className="w-5 h-5" />
@@ -631,20 +633,20 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
             <div
               onMouseEnter={() => handleMouseEnter(1)}
               onMouseLeave={handleMouseLeave}
-              className="absolute left-0 top-[calc(100%+10px)] w-[calc(100vw-28px)] sm:w-[400px] p-5 rounded-2xl bg-zinc-950/92 border border-white/15 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_24px_64px_-12px_rgba(0,0,0,0.85)] backdrop-blur-2xl z-50 animate-in fade-in zoom-in-95 duration-150"
+              className="absolute left-0 top-[calc(100%+10px)] w-[calc(100vw-28px)] sm:w-[400px] p-5 rounded-2xl bg-white/98 border border-amber-200/90 shadow-[0_20px_50px_-10px_rgba(0,0,0,0.15),0_10px_20px_-5px_rgba(245,158,11,0.1)] backdrop-blur-2xl z-[100] animate-in fade-in zoom-in-95 duration-150 text-zinc-900"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Flyout Header */}
-              <div className="flex items-center justify-between pb-3.5 border-b border-white/10">
+              <div className="flex items-center justify-between pb-3.5 border-b border-stone-200">
                 <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-lg bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-emerald-300">
+                  <div className="w-6 h-6 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700">
                     <BarChart3 className="w-3.5 h-3.5" />
                   </div>
-                  <span className="text-xs font-semibold text-zinc-100 tracking-wider uppercase">
+                  <span className="text-xs font-bold text-zinc-900 tracking-wider uppercase">
                     Budget Breakdown
                   </span>
                 </div>
-                <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-white/5 text-zinc-300 border border-white/10">
+                <span className="text-[11px] font-mono font-semibold px-2.5 py-0.5 rounded-full bg-stone-100 text-stone-700 border border-stone-200">
                   {budgetPercentUsed}% Used
                 </span>
               </div>
@@ -652,19 +654,19 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
               {/* Overall Progress Bar */}
               <div className="mt-4 mb-4">
                 <div className="flex justify-between text-xs mb-1.5 font-mono">
-                  <span className="text-zinc-400">Total Spent</span>
-                  <span className="text-zinc-100 font-bold">
+                  <span className="text-stone-500">Total Spent</span>
+                  <span className="text-zinc-900 font-bold">
                     ${totalSpent.toFixed(2)} of ${totalBudgetCap.toFixed(2)}
                   </span>
                 </div>
-                <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden p-0.5 border border-white/5">
+                <div className="h-2 w-full bg-stone-100 rounded-full overflow-hidden p-0.5 border border-stone-200">
                   <div
                     className={`h-full transition-all duration-500 rounded-full ${
                       isBudgetOver
-                        ? "bg-rose-500 shadow-sm shadow-rose-500/50"
+                        ? "bg-rose-500"
                         : budgetPercentUsed > 80
-                        ? "bg-amber-400 shadow-sm shadow-amber-400/50"
-                        : "bg-gradient-to-r from-emerald-500 to-teal-400 shadow-sm shadow-emerald-500/50"
+                        ? "bg-amber-500"
+                        : "bg-gradient-to-r from-emerald-500 to-teal-500"
                     }`}
                     style={{ width: `${Math.min(100, budgetPercentUsed)}%` }}
                   />
@@ -673,36 +675,36 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
 
               {/* Category Breakdown */}
               <div className="flex items-center justify-between mb-2">
-                <p className="text-[11px] font-medium text-zinc-400 tracking-wider uppercase">
+                <p className="text-[11px] font-bold text-stone-500 tracking-wider uppercase">
                   Category Limits
                 </p>
-                <span className="text-[10px] text-zinc-500">{categoryBars.length} categories</span>
+                <span className="text-[10px] text-stone-500 font-medium">{categoryBars.length} categories</span>
               </div>
 
               <div className="flex flex-col gap-2 max-h-56 overflow-y-auto pr-1">
                 {categoryBars.map((cat) => (
                   <div
                     key={cat.id}
-                    className="p-2 rounded-xl bg-white/[0.03] border border-white/5 hover:bg-white/[0.06] hover:border-white/10 transition-colors flex flex-col gap-1.5 text-xs"
+                    className="p-2 rounded-xl bg-stone-50 border border-stone-200/80 hover:bg-stone-100/70 transition-colors flex flex-col gap-1.5 text-xs"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 truncate">
                         <span
-                          className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm"
+                          className="w-2.5 h-2.5 rounded-full shrink-0 shadow-xs"
                           style={{ backgroundColor: cat.color }}
                         />
-                        <span className="font-medium text-zinc-200 truncate">{cat.name}</span>
+                        <span className="font-semibold text-zinc-900 truncate">{cat.name}</span>
                         {cat.isOver && (
-                          <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                          <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-rose-50 text-rose-700 border border-rose-200 font-semibold">
                             Exceeded
                           </span>
                         )}
                       </div>
-                      <span className="font-mono text-zinc-400 text-[11px] shrink-0">
+                      <span className="font-mono text-stone-600 text-[11px] shrink-0 font-medium">
                         ${cat.spent.toFixed(0)} / ${cat.monthlyCap}
                       </span>
                     </div>
-                    <div className="h-1.5 w-full bg-black/40 rounded-full overflow-hidden">
+                    <div className="h-1.5 w-full bg-stone-200 rounded-full overflow-hidden">
                       <div
                         className="h-full rounded-full transition-all duration-300"
                         style={{
@@ -716,15 +718,15 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
               </div>
 
               {/* Shortcut to full Studio */}
-              <div className="mt-4 pt-3.5 border-t border-white/10 flex items-center justify-between">
-                <span className="text-[11px] text-zinc-400">Detailed spending trends</span>
+              <div className="mt-4 pt-3.5 border-t border-stone-200 flex items-center justify-between">
+                <span className="text-[11px] text-stone-500">Detailed spending trends</span>
                 <button
                   onClick={() => {
                     onNavigateTab("insights");
                     setActiveFlyout(null);
                     setPinnedFlyout(null);
                   }}
-                  className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400 hover:text-emerald-300 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 transition-all cursor-pointer"
+                  className="flex items-center gap-1.5 text-xs font-semibold text-emerald-800 hover:text-emerald-900 px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-all cursor-pointer shadow-2xs"
                 >
                   <span>Open Insights</span>
                   <ArrowRight className="w-3.5 h-3.5" />
@@ -743,8 +745,8 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
           onClick={() => handleCardClick(2)}
           className={`relative p-4 rounded-2xl border transition-all duration-200 cursor-pointer select-none backdrop-blur-xl ${
             isFlyoutOpen(2)
-              ? "z-50 bg-white/[0.08] border-amber-400/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_18px_40px_-10px_rgba(245,158,11,0.2)] ring-1 ring-amber-400/30 -translate-y-0.5"
-              : "bg-white/[0.035] border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_12px_32px_-8px_rgba(0,0,0,0.5)] hover:border-white/20 hover:bg-white/[0.06] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_16px_36px_-8px_rgba(0,0,0,0.6)] hover:-translate-y-0.5"
+              ? "z-[70] bg-white border-amber-400 shadow-lg ring-1 ring-amber-400/50 -translate-y-0.5"
+              : "bg-white/95 border-stone-200/90 shadow-2xs hover:border-amber-400/60 hover:shadow-md hover:bg-white hover:-translate-y-0.5"
           }`}
           role="button"
           tabIndex={0}
@@ -752,16 +754,16 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
         >
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1 pr-2">
-              <p className="text-[11px] font-semibold text-zinc-400 tracking-wider uppercase">
+              <p className="text-[11px] font-bold text-stone-500 tracking-wider uppercase">
                 Pending Settlements
               </p>
-              <p className="text-xl font-bold text-amber-300 font-mono mt-1 tracking-tight truncate">
+              <p className="text-xl font-bold text-amber-800 font-mono mt-1 tracking-tight truncate">
                 ${totalFriendsOwe.toFixed(2)}{" "}
-                <span className="text-zinc-500 text-xs font-normal">Owed</span>
+                <span className="text-stone-500 text-xs font-normal">Owed</span>
               </p>
               <div className="mt-1 flex items-center">
-                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full inline-flex items-center gap-1 bg-amber-500/15 text-amber-300 border border-amber-500/25 truncate">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1 bg-amber-50 text-amber-900 border border-amber-200 truncate">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                   {debtorList.length > 0
                     ? `${debtorList.length} friend${debtorList.length > 1 ? "s" : ""} · ${totalPendingCount} pending`
                     : settledList.length > 0
@@ -770,7 +772,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                 </span>
               </div>
             </div>
-            <div className="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center text-amber-300 shrink-0 shadow-inner">
+            <div className="w-11 h-11 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-800 shrink-0 shadow-xs">
               <Users className="w-5 h-5" />
             </div>
           </div>
@@ -780,20 +782,20 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
             <div
               onMouseEnter={() => handleMouseEnter(2)}
               onMouseLeave={handleMouseLeave}
-              className="absolute left-0 sm:left-auto lg:left-0 top-[calc(100%+10px)] w-[calc(100vw-28px)] sm:w-[400px] p-5 rounded-2xl bg-zinc-950/92 border border-white/15 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_24px_64px_-12px_rgba(0,0,0,0.85)] backdrop-blur-2xl z-50 animate-in fade-in zoom-in-95 duration-150"
+              className="absolute left-0 sm:left-auto lg:left-0 top-[calc(100%+10px)] w-[calc(100vw-28px)] sm:w-[400px] p-5 rounded-2xl bg-white/98 border border-amber-200/90 shadow-[0_20px_50px_-10px_rgba(0,0,0,0.15),0_10px_20px_-5px_rgba(245,158,11,0.1)] backdrop-blur-2xl z-[100] animate-in fade-in zoom-in-95 duration-150 text-zinc-900"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="flex items-center justify-between pb-3.5 border-b border-white/10">
+              <div className="flex items-center justify-between pb-3.5 border-b border-stone-200">
                 <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-lg bg-amber-500/15 border border-amber-500/25 flex items-center justify-center text-amber-300">
+                  <div className="w-6 h-6 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-800">
                     <Users className="w-3.5 h-3.5" />
                   </div>
-                  <span className="text-xs font-semibold text-zinc-100 tracking-wider uppercase">
+                  <span className="text-xs font-bold text-zinc-900 tracking-wider uppercase">
                     Pending Settlements
                   </span>
                 </div>
-                <span className="text-xs font-mono font-bold text-amber-300 px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20">
+                <span className="text-xs font-mono font-bold text-amber-900 px-2.5 py-0.5 rounded-full bg-amber-50 border border-amber-200">
                   ${totalFriendsOwe.toFixed(2)} Total
                 </span>
               </div>
@@ -802,9 +804,9 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
               <div className="mt-3.5 flex flex-col gap-2.5 max-h-72 overflow-y-auto pr-1">
                 {debtorList.length === 0 && settledList.length === 0 ? (
                   <div className="py-6 text-center">
-                    <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-2 opacity-80" />
-                    <p className="text-xs font-semibold text-zinc-200">All Balances Settled</p>
-                    <p className="text-[11px] text-zinc-500 mt-0.5">
+                    <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto mb-2 opacity-80" />
+                    <p className="text-xs font-bold text-zinc-900">All Balances Settled</p>
+                    <p className="text-[11px] text-stone-500 mt-0.5">
                       No outstanding split balances with friends.
                     </p>
                   </div>
@@ -813,22 +815,22 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                     {debtorList.map((debtor) => (
                       <div
                         key={debtor.name}
-                        className="p-3 rounded-xl bg-white/[0.03] border border-white/8 hover:bg-white/[0.06] hover:border-white/15 transition-all flex items-center justify-between gap-3"
+                        className="p-3 rounded-xl bg-stone-50 border border-stone-200/80 hover:bg-stone-100/70 transition-all flex items-center justify-between gap-3"
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-500/20 to-amber-300/20 text-amber-300 border border-amber-500/30 flex items-center justify-center font-bold text-xs shrink-0 shadow-inner">
+                          <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-900 border border-amber-300 flex items-center justify-center font-bold text-xs shrink-0 shadow-xs">
                             {debtor.name.charAt(0).toUpperCase()}
                           </div>
                           <div className="min-w-0">
-                            <p className="text-xs font-semibold text-zinc-200 truncate">{debtor.name}</p>
-                            <p className="text-[10px] text-zinc-400 truncate">
+                            <p className="text-xs font-bold text-zinc-900 truncate">{debtor.name}</p>
+                            <p className="text-[10px] text-stone-500 truncate">
                               {debtor.count} pending · {debtor.sampleMerchant}
                             </p>
                           </div>
                         </div>
 
                         <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-xs font-bold font-mono text-amber-300">
+                          <span className="text-xs font-bold font-mono text-amber-800">
                             ${debtor.totalOwed.toFixed(2)}
                           </span>
                           <div className="flex items-center gap-1.5">
@@ -841,7 +843,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                                 setActiveFlyout(null);
                                 setPinnedFlyout(null);
                               }}
-                              className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white border border-white/5 transition-colors cursor-pointer"
+                              className="p-1.5 rounded-lg bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 transition-colors cursor-pointer"
                             >
                               <Filter className="w-3 h-3" />
                             </button>
@@ -855,9 +857,9 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                                 setActiveFlyout(null);
                                 setPinnedFlyout(null);
                               }}
-                              className="p-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 transition-colors cursor-pointer"
+                              className="p-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-950 border border-amber-400 transition-colors cursor-pointer shadow-2xs"
                             >
-                              <Send className="w-3 h-3" />
+                              <Send className="w-3 h-3 text-amber-800" />
                             </button>
                           </div>
                         </div>
@@ -866,12 +868,12 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
 
                     {/* Recently Settled Section */}
                     {settledList.length > 0 && (
-                      <div className="mt-2 pt-2.5 border-t border-white/10">
+                      <div className="mt-2 pt-2.5 border-t border-stone-200">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
+                          <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">
                             Recently Settled
                           </span>
-                          <span className="text-[10px] font-mono text-emerald-400">
+                          <span className="text-[10px] font-mono text-emerald-700 font-semibold">
                             {settledList.length} records
                           </span>
                         </div>
@@ -879,23 +881,23 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                           {settledList.map((item) => (
                             <div
                               key={item.id}
-                              className="p-2.5 rounded-xl bg-white/[0.025] border border-white/5 flex flex-col gap-2"
+                              className="p-2.5 rounded-xl bg-stone-50 border border-stone-200/80 flex flex-col gap-2"
                             >
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2 min-w-0">
-                                  <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center justify-center font-bold text-[10px] shrink-0">
+                                  <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center justify-center font-bold text-[10px] shrink-0">
                                     {item.name.charAt(0).toUpperCase()}
                                   </div>
                                   <div className="min-w-0">
                                     <div className="flex items-center gap-1.5">
-                                      <p className="text-xs font-semibold text-zinc-200 truncate">{item.name}</p>
+                                      <p className="text-xs font-bold text-zinc-900 truncate">{item.name}</p>
                                       <span
-                                        className={`text-[9px] px-1.5 py-0.2 rounded-full font-medium ${
+                                        className={`text-[9px] px-1.5 py-0.2 rounded-full font-semibold ${
                                           item.status === "CANCELLED"
-                                            ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                                            ? "bg-rose-50 text-rose-700 border border-rose-200"
                                             : item.isAdjusted
-                                            ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                                            : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                                            ? "bg-amber-50 text-amber-900 border border-amber-200"
+                                            : "bg-emerald-50 text-emerald-800 border border-emerald-200"
                                         }`}
                                       >
                                         {item.status === "CANCELLED"
@@ -905,16 +907,16 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                                           : "Settled"}
                                       </span>
                                     </div>
-                                    <p className="text-[10px] text-zinc-400 truncate">{item.sampleMerchant}</p>
+                                    <p className="text-[10px] text-stone-500 truncate">{item.sampleMerchant}</p>
                                   </div>
                                 </div>
 
                                 <div className="text-right shrink-0">
-                                  <span className="text-xs font-bold font-mono text-emerald-400">
+                                  <span className="text-xs font-bold font-mono text-emerald-700">
                                     +${item.amountPaid.toFixed(2)}
                                   </span>
                                   {item.isAdjusted && (
-                                    <p className="text-[9px] font-mono text-zinc-500 line-through">
+                                    <p className="text-[9px] font-mono text-stone-400 line-through">
                                       ${item.originalAmount.toFixed(2)}
                                     </p>
                                   )}
@@ -922,13 +924,13 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                               </div>
 
                               {item.reason && (
-                                <div className="px-2 py-1 rounded bg-black/40 border border-white/5 text-[10px] text-zinc-400 italic">
+                                <div className="px-2 py-1 rounded bg-stone-100 border border-stone-200 text-[10px] text-stone-600 italic">
                                   &ldquo;{item.reason}&rdquo;
                                 </div>
                               )}
 
                               {(item.isAdjusted || item.status === "CANCELLED") && (
-                                <div className="flex items-center gap-1.5 pt-1 border-t border-white/5 justify-end">
+                                <div className="flex items-center gap-1.5 pt-1 border-t border-stone-200 justify-end">
                                   <button
                                     onClick={() => {
                                       onSendChatMessage(
@@ -937,7 +939,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                                       setActiveFlyout(null);
                                       setPinnedFlyout(null);
                                     }}
-                                    className="px-2.5 py-1 rounded-lg text-[10px] font-medium bg-white/5 hover:bg-white/10 text-zinc-200 transition-colors cursor-pointer"
+                                    className="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-stone-100 hover:bg-stone-200 text-zinc-800 transition-colors cursor-pointer border border-stone-200"
                                   >
                                     Accept
                                   </button>
@@ -952,7 +954,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                                         setActiveFlyout(null);
                                         setPinnedFlyout(null);
                                       }}
-                                      className="px-2.5 py-1 rounded-lg text-[10px] font-medium bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 transition-colors cursor-pointer"
+                                      className="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-amber-500/15 hover:bg-amber-500/25 text-amber-950 border border-amber-400 transition-colors cursor-pointer"
                                     >
                                       Request ${item.difference.toFixed(2)}
                                     </button>
@@ -965,7 +967,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                                       setActiveFlyout(null);
                                       setPinnedFlyout(null);
                                     }}
-                                    className="px-2.5 py-1 rounded-lg text-[10px] font-medium bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/30 flex items-center gap-1 transition-colors cursor-pointer"
+                                    className="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 flex items-center gap-1 transition-colors cursor-pointer"
                                   >
                                     <RotateCcw className="w-2.5 h-2.5" />
                                     Rebalance
@@ -993,8 +995,8 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
           onClick={() => handleCardClick(3)}
           className={`relative p-4 rounded-2xl border transition-all duration-200 cursor-pointer select-none backdrop-blur-xl ${
             isFlyoutOpen(3)
-              ? "z-50 bg-white/[0.08] border-amber-400/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_18px_40px_-10px_rgba(245,158,11,0.2)] ring-1 ring-amber-400/30 -translate-y-0.5"
-              : "bg-white/[0.035] border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_12px_32px_-8px_rgba(0,0,0,0.5)] hover:border-white/20 hover:bg-white/[0.06] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_16px_36px_-8px_rgba(0,0,0,0.6)] hover:-translate-y-0.5"
+              ? "z-[70] bg-white border-amber-400 shadow-lg ring-1 ring-amber-400/50 -translate-y-0.5"
+              : "bg-white/95 border-stone-200/90 shadow-2xs hover:border-amber-400/60 hover:shadow-md hover:bg-white hover:-translate-y-0.5"
           }`}
           role="button"
           tabIndex={0}
@@ -1002,24 +1004,24 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
         >
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1 pr-2">
-              <p className="text-[11px] font-semibold text-zinc-400 tracking-wider uppercase">
+              <p className="text-[11px] font-bold text-stone-500 tracking-wider uppercase">
                 Upcoming Bills
               </p>
-              <p className="text-xl font-bold text-amber-200 font-mono mt-1 tracking-tight truncate">
+              <p className="text-xl font-bold text-amber-900 font-mono mt-1 tracking-tight truncate">
                 ${totalMonthlyDue.toFixed(2)}{" "}
-                <span className="text-zinc-500 text-xs font-normal">Due</span>
+                <span className="text-stone-500 text-xs font-normal">Due</span>
               </p>
               {/* Dual Summary Badges */}
               <div className="flex items-center gap-1.5 mt-1">
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/25 font-mono truncate">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200 font-mono font-semibold truncate">
                   Subs: ${totalSubscriptionsAmount.toFixed(0)}
                 </span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.05] text-zinc-300 border border-white/10 font-mono truncate">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-stone-100 text-stone-700 border border-stone-200 font-mono truncate">
                   Owed: ${totalPersonalDebtsAmount.toFixed(0)}
                 </span>
               </div>
             </div>
-            <div className="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center text-amber-300 shrink-0 shadow-inner">
+            <div className="w-11 h-11 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-800 shrink-0 shadow-xs">
               <Clock className="w-5 h-5" />
             </div>
           </div>
@@ -1029,16 +1031,16 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
             <div
               onMouseEnter={() => handleMouseEnter(3)}
               onMouseLeave={handleMouseLeave}
-              className="absolute right-0 sm:right-auto lg:right-auto top-[calc(100%+10px)] w-[calc(100vw-28px)] sm:w-[400px] p-5 rounded-2xl bg-zinc-950/92 border border-white/15 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_24px_64px_-12px_rgba(0,0,0,0.85)] backdrop-blur-2xl z-50 animate-in fade-in zoom-in-95 duration-150"
+              className="absolute right-0 sm:right-auto lg:right-auto top-[calc(100%+10px)] w-[calc(100vw-28px)] sm:w-[400px] p-5 rounded-2xl bg-white/98 border border-amber-200/90 shadow-[0_20px_50px_-10px_rgba(0,0,0,0.15),0_10px_20px_-5px_rgba(245,158,11,0.1)] backdrop-blur-2xl z-[100] animate-in fade-in zoom-in-95 duration-150 text-zinc-900"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="flex items-center justify-between pb-3.5 border-b border-white/10">
+              <div className="flex items-center justify-between pb-3.5 border-b border-stone-200">
                 <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-lg bg-amber-500/15 border border-amber-500/25 flex items-center justify-center text-amber-300">
+                  <div className="w-6 h-6 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-800">
                     <CalendarDays className="w-3.5 h-3.5" />
                   </div>
-                  <span className="text-xs font-semibold text-zinc-100 tracking-wider uppercase">
+                  <span className="text-xs font-bold text-zinc-900 tracking-wider uppercase">
                     Scheduled Payments
                   </span>
                 </div>
@@ -1048,7 +1050,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                     setActiveFlyout(null);
                     setPinnedFlyout(null);
                   }}
-                  className="text-[11px] font-semibold text-amber-400 hover:text-amber-300 px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 flex items-center gap-1 transition-all cursor-pointer"
+                  className="text-[11px] font-semibold text-amber-900 hover:text-amber-950 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
                 >
                   <span>Calendar</span>
                   <ArrowRight className="w-3 h-3" />
@@ -1059,16 +1061,16 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                 {/* Recurring Subscriptions */}
                 <div>
                   <div className="flex items-center justify-between text-xs mb-2">
-                    <span className="font-semibold text-amber-300 flex items-center gap-1.5">
+                    <span className="font-bold text-amber-900 flex items-center gap-1.5">
                       <CreditCard className="w-3.5 h-3.5" />
                       Recurring Subscriptions
                     </span>
-                    <span className="font-mono text-zinc-400">
+                    <span className="font-mono text-stone-600 font-semibold">
                       ${totalSubscriptionsAmount.toFixed(2)}
                     </span>
                   </div>
                   {subscriptionBills.length === 0 ? (
-                    <p className="text-[11px] text-zinc-500 p-2.5 bg-white/[0.02] border border-white/5 rounded-xl">
+                    <p className="text-[11px] text-stone-500 p-2.5 bg-stone-50 border border-stone-200 rounded-xl">
                       No recurring subscriptions due this month.
                     </p>
                   ) : (
@@ -1076,15 +1078,15 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                       {subscriptionBills.map((sub) => (
                         <div
                           key={sub.id}
-                          className="p-2.5 rounded-xl bg-white/[0.03] border border-white/5 hover:bg-white/[0.06] transition-colors flex items-center justify-between text-xs"
+                          className="p-2.5 rounded-xl bg-stone-50 border border-stone-200/80 hover:bg-stone-100/70 transition-colors flex items-center justify-between text-xs"
                         >
                           <div className="min-w-0">
-                            <p className="font-medium text-zinc-200 truncate">{sub.title}</p>
-                            <p className="text-[10px] text-zinc-400">
+                            <p className="font-bold text-zinc-900 truncate">{sub.title}</p>
+                            <p className="text-[10px] text-stone-500">
                               Due: {sub.date || `Day ${sub.dayOfMonth}`} · {sub.category}
                             </p>
                           </div>
-                          <span className="font-mono font-bold text-zinc-100 shrink-0">
+                          <span className="font-mono font-bold text-zinc-900 shrink-0">
                             ${sub.amount.toFixed(2)}
                           </span>
                         </div>
@@ -1094,18 +1096,18 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                 </div>
 
                 {/* Personal Debts */}
-                <div className="pt-2.5 border-t border-white/10">
+                <div className="pt-2.5 border-t border-stone-200">
                   <div className="flex items-center justify-between text-xs mb-2">
-                    <span className="font-semibold text-purple-300 flex items-center gap-1.5">
+                    <span className="font-bold text-stone-800 flex items-center gap-1.5">
                       <Users className="w-3.5 h-3.5" />
                       What We Owe
                     </span>
-                    <span className="font-mono text-zinc-400">
+                    <span className="font-mono text-stone-600 font-semibold">
                       ${totalPersonalDebtsAmount.toFixed(2)}
                     </span>
                   </div>
                   {personalDebtBills.length === 0 ? (
-                    <p className="text-[11px] text-zinc-500 p-2.5 bg-white/[0.02] border border-white/5 rounded-xl">
+                    <p className="text-[11px] text-stone-500 p-2.5 bg-stone-50 border border-stone-200 rounded-xl">
                       No pending balances owed to peers.
                     </p>
                   ) : (
@@ -1113,16 +1115,16 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                       {personalDebtBills.map((debt) => (
                         <div
                           key={debt.id}
-                          className="p-2.5 rounded-xl bg-white/[0.03] border border-white/5 flex items-center justify-between text-xs"
+                          className="p-2.5 rounded-xl bg-stone-50 border border-stone-200/80 flex items-center justify-between text-xs"
                         >
                           <div className="min-w-0">
-                            <p className="font-medium text-purple-200 truncate">{debt.title}</p>
-                            <p className="text-[10px] text-zinc-400">
+                            <p className="font-bold text-zinc-900 truncate">{debt.title}</p>
+                            <p className="text-[10px] text-stone-500">
                               Recipient: {debt.counterparty || "Peer"}
                             </p>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
-                            <span className="font-mono font-bold text-purple-300">
+                            <span className="font-mono font-bold text-stone-900">
                               ${debt.amount.toFixed(2)}
                             </span>
                             <button
@@ -1133,7 +1135,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                                 setActiveFlyout(null);
                                 setPinnedFlyout(null);
                               }}
-                              className="px-2.5 py-1 rounded-lg bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 border border-purple-500/30 text-[10px] font-semibold transition-colors cursor-pointer"
+                              className="px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-950 hover:bg-amber-500/25 border border-amber-400 text-[10px] font-semibold transition-colors cursor-pointer shadow-2xs"
                             >
                               Settle
                             </button>
@@ -1157,8 +1159,8 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
           onClick={() => handleCardClick(4)}
           className={`relative p-4 rounded-2xl border transition-all duration-200 cursor-pointer select-none backdrop-blur-xl ${
             isFlyoutOpen(4)
-              ? "z-50 bg-white/[0.08] border-rose-400/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_18px_40px_-10px_rgba(244,63,94,0.2)] ring-1 ring-rose-400/30 -translate-y-0.5"
-              : "bg-white/[0.035] border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_12px_32px_-8px_rgba(0,0,0,0.5)] hover:border-white/20 hover:bg-white/[0.06] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_16px_36px_-8px_rgba(0,0,0,0.6)] hover:-translate-y-0.5"
+              ? "z-[70] bg-white border-rose-400 shadow-lg ring-1 ring-rose-400/50 -translate-y-0.5"
+              : "bg-white/95 border-stone-200/90 shadow-2xs hover:border-amber-400/60 hover:shadow-md hover:bg-white hover:-translate-y-0.5"
           }`}
           role="button"
           tabIndex={0}
@@ -1166,36 +1168,36 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
         >
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1 pr-2">
-              <p className="text-[11px] font-semibold text-zinc-400 tracking-wider uppercase">
+              <p className="text-[11px] font-bold text-stone-500 tracking-wider uppercase">
                 Action Required
               </p>
               <p
                 className={`text-xl font-bold font-mono mt-1 tracking-tight truncate ${
-                  actionItems.length > 0 ? "text-rose-400" : "text-emerald-400"
+                  actionItems.length > 0 ? "text-rose-600" : "text-emerald-700"
                 }`}
               >
                 {actionItems.length} {actionItems.length === 1 ? "Item" : "Items"}
               </p>
               <div className="mt-1 flex items-center">
                 <span
-                  className={`text-[11px] font-medium px-2 py-0.5 rounded-full inline-flex items-center gap-1 border truncate ${
+                  className={`text-[11px] font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1 border truncate ${
                     actionItems.length > 0
-                      ? "bg-rose-500/15 text-rose-300 border-rose-500/25"
-                      : "bg-emerald-500/15 text-emerald-300 border-emerald-500/25"
+                      ? "bg-rose-50 text-rose-700 border-rose-200"
+                      : "bg-emerald-50 text-emerald-700 border-emerald-200"
                   }`}
                 >
                   <span
-                    className={`w-1.5 h-1.5 rounded-full ${actionItems.length > 0 ? "bg-rose-400" : "bg-emerald-400"}`}
+                    className={`w-1.5 h-1.5 rounded-full ${actionItems.length > 0 ? "bg-rose-500" : "bg-emerald-500"}`}
                   />
                   {actionItems.length > 0 ? "Needs Review" : "All Clear"}
                 </span>
               </div>
             </div>
             <div
-              className={`w-11 h-11 rounded-xl border flex items-center justify-center shrink-0 shadow-inner ${
+              className={`w-11 h-11 rounded-xl border flex items-center justify-center shrink-0 shadow-xs ${
                 actionItems.length > 0
-                  ? "bg-rose-500/15 border-rose-500/25 text-rose-300"
-                  : "bg-emerald-500/15 border-emerald-500/25 text-emerald-300"
+                  ? "bg-rose-50 border-rose-200 text-rose-600"
+                  : "bg-emerald-50 border-emerald-200 text-emerald-600"
               }`}
             >
               <ShieldAlert className="w-5 h-5" />
@@ -1207,16 +1209,16 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
             <div
               onMouseEnter={() => handleMouseEnter(4)}
               onMouseLeave={handleMouseLeave}
-              className="absolute right-0 top-[calc(100%+10px)] w-[calc(100vw-28px)] sm:w-[400px] p-5 rounded-2xl bg-zinc-950/92 border border-white/15 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_24px_64px_-12px_rgba(0,0,0,0.85)] backdrop-blur-2xl z-50 animate-in fade-in zoom-in-95 duration-150"
+              className="absolute right-0 top-[calc(100%+10px)] w-[calc(100vw-28px)] sm:w-[400px] p-5 rounded-2xl bg-white/98 border border-amber-200/90 shadow-[0_20px_50px_-10px_rgba(0,0,0,0.15),0_10px_20px_-5px_rgba(245,158,11,0.1)] backdrop-blur-2xl z-[100] animate-in fade-in zoom-in-95 duration-150 text-zinc-900"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="flex items-center justify-between pb-3.5 border-b border-white/10">
+              <div className="flex items-center justify-between pb-3.5 border-b border-stone-200">
                 <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-lg bg-rose-500/15 border border-rose-500/25 flex items-center justify-center text-rose-300">
+                  <div className="w-6 h-6 rounded-lg bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600">
                     <ShieldAlert className="w-3.5 h-3.5" />
                   </div>
-                  <span className="text-xs font-semibold text-zinc-100 tracking-wider uppercase">
+                  <span className="text-xs font-bold text-zinc-900 tracking-wider uppercase">
                     Action Required ({actionItems.length})
                   </span>
                 </div>
@@ -1229,9 +1231,9 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                       setActiveFlyout(null);
                       setPinnedFlyout(null);
                     }}
-                    className="text-[10px] px-2.5 py-1 rounded-lg bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 font-semibold border border-rose-500/30 transition-all flex items-center gap-1 cursor-pointer"
+                    className="text-[10px] px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 font-bold border border-rose-200 transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
                   >
-                    <Sparkles className="w-3 h-3 text-rose-400" />
+                    <Sparkles className="w-3 h-3 text-rose-500" />
                     <span>Triage All</span>
                   </button>
                 )}
@@ -1241,9 +1243,9 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
               <div className="mt-3.5 flex flex-col gap-2.5 max-h-64 overflow-y-auto pr-1">
                 {actionItems.length === 0 ? (
                   <div className="py-6 text-center">
-                    <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-2 opacity-80" />
-                    <p className="text-xs font-semibold text-zinc-200">All Clear</p>
-                    <p className="text-[11px] text-zinc-500 mt-0.5">
+                    <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto mb-2 opacity-80" />
+                    <p className="text-xs font-bold text-zinc-900">All Clear</p>
+                    <p className="text-[11px] text-stone-500 mt-0.5">
                       No disputes, unassigned records, or budget breaches require attention.
                     </p>
                   </div>
@@ -1251,35 +1253,35 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                   actionItems.map((item) => (
                     <div
                       key={item.id}
-                      className="p-3 rounded-xl bg-white/[0.03] border border-white/8 hover:bg-white/[0.06] hover:border-white/12 transition-colors flex flex-col gap-2"
+                      className="p-3 rounded-xl bg-stone-50 border border-stone-200/80 hover:bg-stone-100/70 transition-colors flex flex-col gap-2"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5 mb-1">
                             <span
-                              className={`text-[9px] px-2 py-0.2 rounded-full font-semibold uppercase ${
+                              className={`text-[9px] px-2 py-0.2 rounded-full font-bold uppercase ${
                                 item.severity === "high"
-                                  ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
-                                  : "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                                  ? "bg-rose-50 text-rose-700 border border-rose-200"
+                                  : "bg-amber-50 text-amber-900 border border-amber-200"
                               }`}
                             >
                               {item.type.replace("_", " ")}
                             </span>
-                            <span className="text-xs font-bold text-zinc-100 truncate">
+                            <span className="text-xs font-bold text-zinc-900 truncate">
                               {item.title}
                             </span>
                           </div>
-                          <p className="text-[11px] text-zinc-400">{item.description}</p>
+                          <p className="text-[11px] text-stone-600">{item.description}</p>
                         </div>
                         {item.amount && (
-                          <span className="text-xs font-mono font-bold text-rose-400 shrink-0">
+                          <span className="text-xs font-mono font-bold text-rose-600 shrink-0">
                             ${item.amount.toFixed(2)}
                           </span>
                         )}
                       </div>
 
                       {/* Interactive Buttons */}
-                      <div className="flex items-center justify-end gap-2 pt-1 border-t border-white/5">
+                      <div className="flex items-center justify-end gap-2 pt-1 border-t border-stone-200">
                         {item.type === "uncategorized" && onOpenReviewModal && (
                           <button
                             type="button"
@@ -1288,10 +1290,10 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                               setActiveFlyout(null);
                               setPinnedFlyout(null);
                             }}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/5 hover:bg-blue-600/30 text-zinc-300 hover:text-white border border-white/10 text-xs font-medium transition-all cursor-pointer"
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-stone-100 hover:bg-stone-200 text-zinc-800 border border-stone-200 text-xs font-semibold transition-all cursor-pointer shadow-2xs"
                             title="Open interactive categorization popup"
                           >
-                            <Tag className="w-3 h-3 text-blue-400" />
+                            <Tag className="w-3 h-3 text-amber-700" />
                             <span>Review in Popup ↗</span>
                           </button>
                         )}
@@ -1301,9 +1303,9 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                             setActiveFlyout(null);
                             setPinnedFlyout(null);
                           }}
-                          className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white/10 hover:bg-rose-600/30 text-zinc-200 hover:text-white border border-white/15 text-xs font-medium transition-all shadow-sm cursor-pointer"
+                          className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-950 border border-amber-400 text-xs font-semibold transition-all shadow-2xs cursor-pointer"
                         >
-                          <Sparkles className="w-3 h-3 text-rose-400" />
+                          <Sparkles className="w-3 h-3 text-amber-700" />
                           <span>{item.buttonLabel}</span>
                           <ArrowRight className="w-3 h-3" />
                         </button>

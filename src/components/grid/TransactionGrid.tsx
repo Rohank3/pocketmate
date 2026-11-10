@@ -8,7 +8,6 @@ import {
   ModuleRegistry,
   AllCommunityModule,
   themeQuartz,
-  colorSchemeDark,
 } from "ag-grid-community";
 import {
   DollarSign,
@@ -32,13 +31,15 @@ import type { CategoryItem } from "@/components/categories/CategoryControlBar";
 // Register all community features (RowSelection, Pagination, ColumnFilter, NumberFilter, Validation)
 ModuleRegistry.registerModules([AllCommunityModule]);
 
-const darkTheme = themeQuartz.withPart(colorSchemeDark).withParams({
-  backgroundColor: "rgba(9, 9, 11, 0.6)",
-  headerBackgroundColor: "rgba(18, 18, 22, 0.85)",
-  borderColor: "rgba(255, 255, 255, 0.08)",
-  foregroundColor: "#fcfcfd",
+const lightGoldTheme = themeQuartz.withParams({
+  backgroundColor: "#ffffff",
+  headerBackgroundColor: "#faf9f6",
+  borderColor: "#edebe4",
+  foregroundColor: "#18181b",
   accentColor: "#f59e0b",
-  rowHoverColor: "rgba(245, 158, 11, 0.06)",
+  rowHoverColor: "rgba(245, 158, 11, 0.04)",
+  selectedRowBackgroundColor: "rgba(245, 158, 11, 0.08)",
+  fontFamily: "inherit",
 });
 
 export interface TransactionRow {
@@ -169,17 +170,17 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
         return (
           <div className="flex flex-col justify-center py-0.5 leading-tight overflow-hidden">
             <div className="flex items-center gap-1.5 truncate">
-              <span className={`font-semibold truncate ${isDisputed ? "text-amber-400" : "text-zinc-100"}`}>
+              <span className={`font-semibold truncate ${isDisputed ? "text-amber-800" : "text-zinc-900"}`}>
                 {merchant}
               </span>
               {isDisputed && (
-                <span className="shrink-0 text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.2 rounded font-normal">
-                  Mismatch Flag
+                <span className="shrink-0 text-[10px] bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.2 rounded font-medium">
+                  Dispute Flag
                 </span>
               )}
             </div>
             {showMemo && (
-              <span className="text-[11px] text-zinc-400 font-normal truncate mt-0.5" title={memo}>
+              <span className="text-[11px] text-stone-500 font-normal truncate mt-0.5" title={memo}>
                 {memo}
               </span>
             )}
@@ -194,17 +195,17 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
       filter: true,
       cellRenderer: (params: ICellRendererParams<TransactionRow, string>) => {
         const colors: Record<string, string> = {
-          Groceries: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
-          Dining: "bg-blue-500/10 text-blue-400 border-blue-500/30",
-          Shopping: "bg-purple-500/10 text-purple-400 border-purple-500/30",
-          Entertainment: "bg-indigo-500/10 text-indigo-400 border-indigo-500/30",
-          Travel: "bg-amber-500/10 text-amber-400 border-amber-500/30",
+          Groceries: "bg-emerald-50 text-emerald-800 border-emerald-200",
+          Dining: "bg-amber-50 text-amber-800 border-amber-200",
+          Shopping: "bg-purple-50 text-purple-800 border-purple-200",
+          Entertainment: "bg-indigo-50 text-indigo-800 border-indigo-200",
+          Travel: "bg-amber-50 text-amber-900 border-amber-300",
         };
         const val = params.value || "Uncategorized";
         const isUncat = val.toLowerCase() === "uncategorized";
         const badgeClass = isUncat
-          ? "bg-amber-500/15 text-amber-300 border-amber-500/40 font-medium"
-          : colors[val] || "bg-zinc-700/50 text-zinc-300 border-zinc-600";
+          ? "bg-amber-100 text-amber-900 border-amber-300 font-medium"
+          : colors[val] || "bg-stone-100 text-stone-700 border-stone-200";
 
         return (
           <button
@@ -216,7 +217,7 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
               }
             }}
             title="Click to change category"
-            className={`group inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full border ${badgeClass} hover:ring-1 hover:ring-zinc-400/50 hover:brightness-110 active:scale-95 transition-all cursor-pointer`}
+            className={`group inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full border ${badgeClass} hover:ring-1 hover:ring-amber-400 hover:brightness-105 active:scale-95 transition-all cursor-pointer`}
           >
             <span>{val}</span>
             <Edit3 className="w-2.5 h-2.5 opacity-40 group-hover:opacity-100 transition-opacity" />
@@ -244,9 +245,9 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
           return (
             <span
               title="Multi-party shared expense with split allocation"
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-500/15 text-blue-300 border border-blue-500/30 font-sans"
+              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-500/10 text-amber-900 border border-amber-300/80 font-sans shadow-2xs"
             >
-              <Users className="w-3 h-3 text-blue-400 shrink-0" />
+              <Users className="w-3 h-3 text-amber-700 shrink-0" />
               <span className="truncate">{splitLabel}</span>
             </span>
           );
@@ -255,9 +256,9 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
         return (
           <span
             title="Personal single-party expense (100% Self)"
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 font-sans"
+            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-stone-100 text-stone-600 border border-stone-200 font-sans"
           >
-            <User className="w-3 h-3 text-zinc-500 shrink-0" />
+            <User className="w-3 h-3 text-stone-500 shrink-0" />
             <span>100% Self</span>
           </span>
         );
@@ -276,7 +277,7 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
         return (
           <span
             className={`font-semibold font-mono ${
-              isIncome ? "text-emerald-400 font-bold" : "text-zinc-100"
+              isIncome ? "text-emerald-700 font-bold" : "text-zinc-900"
             }`}
           >
             {isIncome ? "+" : ""}${Number(params.value ?? 0).toFixed(2)}
@@ -295,7 +296,7 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
           return (
             <span
               title="Settled: Payment successfully completed and cleared via PayPal Sandbox Wallet"
-              className="flex items-center gap-1.5 text-emerald-400 text-xs font-medium cursor-help"
+              className="flex items-center gap-1.5 text-emerald-700 text-xs font-semibold cursor-help"
             >
               <CheckCircle2 className="w-3.5 h-3.5" />
               Settled
@@ -306,7 +307,7 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
           return (
             <span
               title="Disputed: Transaction flagged for audit discrepancy or unverified surcharge"
-              className="flex items-center gap-1.5 text-amber-400 text-xs font-medium cursor-help"
+              className="flex items-center gap-1.5 text-amber-800 text-xs font-semibold cursor-help"
             >
               <ShieldAlert className="w-3.5 h-3.5" />
               Disputed
@@ -316,7 +317,7 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
         return (
           <span
             title="Pending: Awaiting counterparty payment or authorization clearance"
-            className="flex items-center gap-1.5 text-zinc-400 text-xs font-medium cursor-help"
+            className="flex items-center gap-1.5 text-stone-500 text-xs font-medium cursor-help"
           >
             <Clock className="w-3.5 h-3.5" />
             Pending
@@ -365,17 +366,29 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
   }, [filteredData]);
 
   return (
-    <div className="flex flex-col h-full glass-panel overflow-hidden relative shadow-2xl">
+    <div className="flex flex-col h-full bg-white/95 border border-stone-200/90 rounded-2xl overflow-hidden relative shadow-sm">
       {/* Top Banner / Reactive Agent Feedback */}
-      <div className="px-4 py-2.5 bg-zinc-950/70 border-b border-white/10 flex items-center justify-between backdrop-blur-md">
+      <div className="px-4 py-3 bg-stone-50/90 border-b border-stone-200/80 flex items-center justify-between backdrop-blur-md relative overflow-hidden">
+        {/* Tangible Liquid Stream Animation */}
+        <div className="absolute top-0 left-0 right-0 z-10 liquid-bar" />
+
         <div className="flex items-center gap-2">
-          <DollarSign className="w-4 h-4 text-amber-400" />
-          <h2 className="text-sm font-semibold text-zinc-100">Live Financial Ledger</h2>
-          <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700/60">
+          <div className="w-6 h-6 rounded-lg bg-amber-50 border border-amber-300/80 flex items-center justify-center text-amber-700">
+            <DollarSign className="w-3.5 h-3.5" />
+          </div>
+          <h2 className="text-sm font-bold text-zinc-900">Live Financial Ledger</h2>
+          <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-stone-100 text-stone-700 border border-stone-200">
             {filteredData.length} of {rowData.length} records
           </span>
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-300 text-amber-900 text-[10px] font-bold shadow-2xs">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+            </span>
+            <span>Liquid Flow Active</span>
+          </div>
           {selectedCategory && selectedCategory.toLowerCase() !== "all" && (
-            <span className="text-[11px] px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 font-medium">
+            <span className="text-[11px] px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-900 border border-amber-400/50 font-medium">
               Category: {selectedCategory}
             </span>
           )}
@@ -386,10 +399,10 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
                 setIsFilterDismissed(true);
                 onClearMutation?.();
               }}
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 text-xs font-semibold shadow-sm transition-all cursor-pointer hover:scale-105 active:scale-95"
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400 text-amber-950 text-xs font-semibold shadow-xs transition-all cursor-pointer hover:scale-105 active:scale-95"
               title="Exit triage mode and restore all transactions"
             >
-              <X className="w-3.5 h-3.5 text-amber-300" />
+              <X className="w-3.5 h-3.5 text-amber-700" />
               <span>Exit Triage / Show All</span>
             </button>
           )}
@@ -403,10 +416,10 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
               <button
                 type="button"
                 onClick={onOpenReviewModal}
-                className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 rounded-md text-xs font-semibold transition-all cursor-pointer"
+                className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-300/80 text-amber-900 rounded-lg text-xs font-semibold transition-all cursor-pointer"
                 title="Open interactive review and triage popup"
               >
-                <Tag className="w-3.5 h-3.5 text-amber-400" />
+                <Tag className="w-3.5 h-3.5 text-amber-700" />
                 <span>
                   Triage (
                   {
@@ -423,8 +436,8 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
             )}
 
           {gridMutation?.statusMessage && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/10 border border-blue-500/20 text-blue-300 rounded-md text-xs">
-              <Sparkles className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
+            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg text-xs">
+              <Sparkles className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
               <span>{gridMutation.statusMessage}</span>
             </div>
           )}
@@ -435,7 +448,7 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
       <div className="flex-1 w-full min-h-[380px]">
         <AgGridReact
           ref={gridRef}
-          theme={darkTheme}
+          theme={lightGoldTheme}
           rowData={filteredData}
           columnDefs={columnDefs}
           defaultColDef={defaultColDef}
@@ -457,15 +470,17 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
       {/* Reclassify Transaction Modal (3-Way Scope Choice with No Default)        */}
       {/* ========================================================================= */}
       {activeTxForEdit && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="glass-dropdown rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 bg-stone-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-amber-200/90 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 bg-zinc-950/80">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200/80 bg-amber-50/60">
               <div className="flex items-center gap-2">
-                <Tag className="w-4 h-4 text-blue-400" />
+                <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-300 flex items-center justify-center text-amber-700">
+                  <Tag className="w-3.5 h-3.5" />
+                </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-zinc-100">Change Category</h3>
-                  <p className="text-[11px] text-zinc-400">
+                  <h3 className="text-sm font-bold text-zinc-900">Change Category</h3>
+                  <p className="text-[11px] text-stone-500">
                     {activeTxForEdit.merchant} • ${activeTxForEdit.amount.toFixed(2)}
                   </p>
                 </div>
@@ -474,7 +489,7 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
                 type="button"
                 onClick={handleCloseModal}
                 disabled={isSubmitting}
-                className="text-zinc-400 hover:text-zinc-200 p-1 rounded-lg hover:bg-zinc-800 cursor-pointer disabled:opacity-50"
+                className="text-stone-400 hover:text-zinc-800 p-1 rounded-lg hover:bg-stone-100 cursor-pointer disabled:opacity-50"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -484,13 +499,13 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
             <div className="p-5 space-y-4">
               {/* Category Selector */}
               <div>
-                <label className="text-xs font-medium text-zinc-300 block mb-1.5">
+                <label className="text-xs font-semibold text-zinc-700 block mb-1.5">
                   Select Target Category
                 </label>
                 <select
                   value={selectedNewCategory}
                   onChange={(e) => setSelectedNewCategory(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-700 text-xs text-zinc-100 font-medium focus:outline-hidden focus:border-blue-500 transition-colors cursor-pointer"
+                  className="w-full px-3 py-2 rounded-xl bg-white border border-stone-300 text-xs text-zinc-900 font-medium focus:outline-hidden focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-colors cursor-pointer"
                 >
                   <option value="" disabled>Choose a category...</option>
                   {categories.map((c) => (
@@ -504,8 +519,8 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
 
               {/* 3 Scope Options (No Default Pre-selected) */}
               <div>
-                <label className="text-xs font-medium text-zinc-300 block mb-2">
-                  Choose Application Scope <span className="text-amber-400">*</span>
+                <label className="text-xs font-semibold text-zinc-700 block mb-2">
+                  Choose Application Scope <span className="text-amber-600">*</span>
                 </label>
                 <div className="space-y-2">
                   {/* Scope 1: Single */}
@@ -514,17 +529,17 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
                     onClick={() => setSelectedScope("single")}
                     className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer flex items-center gap-3 ${
                       selectedScope === "single"
-                        ? "bg-blue-950/40 border-blue-500 ring-1 ring-blue-500"
-                        : "bg-zinc-950/60 border-zinc-800 hover:border-zinc-700"
+                        ? "bg-amber-500/10 border-amber-500 ring-1 ring-amber-500"
+                        : "bg-stone-50 border-stone-200 hover:border-amber-300"
                     }`}
                   >
-                    <div className="p-1.5 rounded-lg bg-blue-500/10 text-blue-400 shrink-0">
+                    <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-700 shrink-0">
                       <Tag className="w-3.5 h-3.5" />
                     </div>
                     <div className="flex-1 min-w-0 flex items-center justify-between">
-                      <span className="text-xs font-semibold text-zinc-100">Only this transaction</span>
+                      <span className="text-xs font-semibold text-zinc-900">Only this transaction</span>
                       {selectedScope === "single" && (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                        <CheckCircle2 className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                       )}
                     </div>
                   </button>
@@ -535,19 +550,19 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
                     onClick={() => setSelectedScope("merchant")}
                     className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer flex items-center gap-3 ${
                       selectedScope === "merchant"
-                        ? "bg-emerald-950/40 border-emerald-500 ring-1 ring-emerald-500"
-                        : "bg-zinc-950/60 border-zinc-800 hover:border-zinc-700"
+                        ? "bg-amber-500/10 border-amber-500 ring-1 ring-amber-500"
+                        : "bg-stone-50 border-stone-200 hover:border-amber-300"
                     }`}
                   >
-                    <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 shrink-0">
+                    <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-700 shrink-0">
                       <Store className="w-3.5 h-3.5" />
                     </div>
                     <div className="flex-1 min-w-0 flex items-center justify-between">
-                      <span className="text-xs font-semibold text-zinc-100 truncate">
+                      <span className="text-xs font-semibold text-zinc-900 truncate">
                         All &apos;{activeTxForEdit.merchant}&apos; transactions
                       </span>
                       {selectedScope === "merchant" && (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <CheckCircle2 className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                       )}
                     </div>
                   </button>
@@ -558,17 +573,17 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
                     onClick={() => setSelectedScope("similar")}
                     className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer flex items-center gap-3 ${
                       selectedScope === "similar"
-                        ? "bg-purple-950/40 border-purple-500 ring-1 ring-purple-500"
-                        : "bg-zinc-950/60 border-zinc-800 hover:border-zinc-700"
+                        ? "bg-amber-500/10 border-amber-500 ring-1 ring-amber-500"
+                        : "bg-stone-50 border-stone-200 hover:border-amber-300"
                     }`}
                   >
-                    <div className="p-1.5 rounded-lg bg-purple-500/10 text-purple-400 shrink-0">
+                    <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-700 shrink-0">
                       <Layers className="w-3.5 h-3.5" />
                     </div>
                     <div className="flex-1 min-w-0 flex items-center justify-between">
-                      <span className="text-xs font-semibold text-zinc-100">All similar transactions</span>
+                      <span className="text-xs font-semibold text-zinc-900">All similar transactions</span>
                       {selectedScope === "similar" && (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                        <CheckCircle2 className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                       )}
                     </div>
                   </button>
@@ -577,16 +592,16 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
 
               {/* Feedback Alert */}
               {actionFeedback && (
-                <div className="p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs text-blue-300 flex items-center gap-2">
-                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-center gap-2">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0 text-amber-600" />
                   <span>{actionFeedback}</span>
                 </div>
               )}
             </div>
 
             {/* Modal Footer */}
-            <div className="flex items-center justify-between px-5 py-3 border-t border-zinc-800 bg-zinc-900/90">
-              <span className="text-[11px] text-zinc-500">
+            <div className="flex items-center justify-between px-5 py-3 border-t border-stone-200 bg-stone-50">
+              <span className="text-[11px] text-stone-500">
                 {!selectedScope ? "Select a scope to proceed" : "Ready to apply"}
               </span>
               <div className="flex items-center gap-2">
@@ -594,7 +609,7 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
                   type="button"
                   onClick={handleCloseModal}
                   disabled={isSubmitting}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-400 hover:bg-zinc-800 cursor-pointer disabled:opacity-50"
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-stone-600 hover:bg-stone-200/60 cursor-pointer disabled:opacity-50"
                 >
                   Cancel
                 </button>
@@ -602,7 +617,7 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
                   type="button"
                   onClick={handleConfirmReclassification}
                   disabled={!selectedNewCategory || !selectedScope || isSubmitting}
-                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white text-xs font-semibold shadow-md disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all"
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-semibold shadow-xs disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all"
                 >
                   {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   <span>{isSubmitting ? "Applying..." : "Save & Apply"}</span>

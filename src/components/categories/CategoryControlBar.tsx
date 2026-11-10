@@ -233,39 +233,39 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
   };
 
   return (
-    <div className="bg-white/[0.035] backdrop-blur-xl border border-white/10 rounded-2xl p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_8px_24px_-8px_rgba(0,0,0,0.5)] flex flex-col gap-2.5">
+    <div className="bg-white/95 backdrop-blur-xl border border-stone-200/90 rounded-2xl p-3 shadow-xs flex flex-col gap-2.5 text-zinc-900">
       {/* Top Bar: Roundabout Carousel + Budget Cap Meter + Action Buttons */}
       <div className="flex flex-wrap items-center justify-between gap-2.5">
         {/* Roundabout Category Navigator */}
-        <div className="flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-xl border border-white/10">
+        <div className="flex items-center gap-2 bg-stone-50 px-3 py-1.5 rounded-xl border border-stone-200 shadow-2xs">
           <span
-            className="w-3 h-3 rounded-sm shrink-0 shadow-sm shadow-amber-400/30"
+            className="w-3 h-3 rounded-sm shrink-0 shadow-xs"
             style={{
               backgroundColor: activeCategoryObj ? activeCategoryObj.color : "#f59e0b",
             }}
           />
 
-          <span className="text-xs font-semibold text-zinc-100 min-w-[75px]">
+          <span className="text-xs font-bold text-zinc-900 min-w-[75px]">
             {selectedCategory.toLowerCase() === "all" ? "All Categories" : selectedCategory}
           </span>
 
-          <div className="flex items-center gap-1 ml-1.5 border-l border-zinc-800 pl-1.5">
+          <div className="flex items-center gap-1 ml-1.5 border-l border-stone-200 pl-1.5">
             <button
               onClick={handlePrevRoundabout}
-              className="p-1 rounded hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 cursor-pointer transition-colors"
+              className="p-1 rounded hover:bg-stone-200/70 text-stone-500 hover:text-zinc-900 cursor-pointer transition-colors"
               title="Previous category"
               aria-label="Previous category"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
             </button>
 
-            <span className="font-mono text-[11px] text-zinc-300 px-1 font-medium select-none">
+            <span className="font-mono text-[11px] text-stone-600 px-1 font-semibold select-none">
               {currentIndex + 1} / {totalOptions}
             </span>
 
             <button
               onClick={handleNextRoundabout}
-              className="p-1 rounded hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 cursor-pointer transition-colors"
+              className="p-1 rounded hover:bg-stone-200/70 text-stone-500 hover:text-zinc-900 cursor-pointer transition-colors"
               title="Next category"
               aria-label="Next category"
             >
@@ -277,21 +277,21 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
         {/* Live Budget Cap Indicator */}
         <div className="hidden sm:flex items-center gap-2.5 text-xs">
           <div className="flex items-center gap-1.5 font-mono">
-            <span className="text-zinc-400">Spent:</span>
-            <span className="font-semibold text-zinc-100">${activeStats.spent.toFixed(2)}</span>
-            <span className="text-zinc-500">/</span>
-            <span className="text-zinc-400">${activeStats.cap.toFixed(2)} Cap</span>
+            <span className="text-stone-500">Spent:</span>
+            <span className="font-bold text-zinc-900">${activeStats.spent.toFixed(2)}</span>
+            <span className="text-stone-400">/</span>
+            <span className="text-stone-600 font-semibold">${activeStats.cap.toFixed(2)} Cap</span>
           </div>
 
           {activeCategoryObj && (
             <div
-              className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium border ${
+              className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${
                 isOverCap
-                  ? "bg-rose-500/15 text-rose-300 border-rose-500/25"
-                  : "bg-emerald-500/15 text-emerald-300 border-emerald-500/25"
+                  ? "bg-rose-50 text-rose-700 border-rose-200"
+                  : "bg-emerald-50 text-emerald-700 border-emerald-200"
               }`}
             >
-              <span className={`w-1.5 h-1.5 rounded-full ${isOverCap ? "bg-rose-400" : "bg-emerald-400"}`} />
+              <span className={`w-1.5 h-1.5 rounded-full ${isOverCap ? "bg-rose-500" : "bg-emerald-500"}`} />
               {isOverCap ? (
                 <span>+${(activeStats.spent - activeStats.cap).toFixed(2)} Over</span>
               ) : (
@@ -309,10 +309,10 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
               setEditingCategoryId(null);
               setIsModalOpen(true);
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 active:scale-[0.98] text-white text-xs font-semibold cursor-pointer border border-white/15 backdrop-blur-md shadow-sm transition-all focus-visible:outline-2 focus-visible:outline-white/30"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200/80 active:scale-[0.98] text-zinc-800 hover:text-zinc-900 text-xs font-semibold cursor-pointer border border-stone-200 hover:border-amber-300 shadow-2xs transition-all focus-visible:outline-2 focus-visible:outline-amber-400"
             title="Manage, rename, add, and set budget caps"
           >
-            <Settings2 className="w-3.5 h-3.5" />
+            <Settings2 className="w-3.5 h-3.5 text-amber-700" />
             <span>Manage Categories</span>
           </button>
         </div>
@@ -335,24 +335,24 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
                 onClick={() => onSelectCategory(optName)}
                 className={`flex items-center gap-1.5 pl-3 pr-2.5 py-1 rounded-xl text-xs font-medium transition-all cursor-pointer border ${
                   isSelected
-                    ? "bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-500/20 text-amber-200 border-amber-400/40 shadow-[0_2px_12px_rgba(245,158,11,0.2)] backdrop-blur-md"
-                    : "bg-white/[0.03] text-zinc-300 border-white/8 hover:border-white/15 hover:bg-white/[0.06] hover:text-white"
+                    ? "bg-amber-500/15 text-amber-950 border-amber-400/60 shadow-2xs font-semibold"
+                    : "bg-stone-50 text-stone-700 border-stone-200/80 hover:border-amber-300 hover:bg-stone-100 hover:text-zinc-900"
                 }`}
               >
                 {!isAll && (
                   <span
-                    className="w-2 h-2 rounded-full shrink-0 shadow-sm"
+                    className="w-2 h-2 rounded-full shrink-0 shadow-xs"
                     style={{ backgroundColor: catObj?.color || "#f59e0b" }}
                   />
                 )}
                 <span>{optName}</span>
                 <span
-                  className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
+                  className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full font-semibold ${
                     isSelected
-                      ? "bg-white/15 text-white"
+                      ? "bg-amber-500/20 text-amber-950"
                       : catOverCap
-                      ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
-                      : "bg-white/5 text-zinc-400"
+                      ? "bg-rose-50 text-rose-700 border border-rose-200"
+                      : "bg-stone-200/60 text-stone-600"
                   }`}
                 >
                   ${stat.spent.toFixed(0)}
@@ -374,8 +374,8 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
                         setActiveMenuCatId(activeMenuCatId === catObj.id ? null : catObj.id);
                       }
                     }}
-                    className={`ml-0.5 p-0.5 rounded hover:bg-black/30 transition-opacity cursor-pointer ${
-                      isSelected ? "text-blue-200 hover:text-white" : "text-zinc-400 hover:text-zinc-200"
+                    className={`ml-0.5 p-0.5 rounded hover:bg-stone-200/70 transition-opacity cursor-pointer ${
+                      isSelected ? "text-amber-900" : "text-stone-400 hover:text-stone-700"
                     } ${activeMenuCatId === catObj.id ? "opacity-100" : "opacity-60 group-hover/pill:opacity-100"}`}
                     title={`Options for ${catObj.name}`}
                     aria-label={`Options for ${catObj.name}`}
@@ -389,9 +389,9 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
               {!isAll && catObj && activeMenuCatId === catObj.id && (
                 <div
                   ref={menuRef}
-                  className="absolute left-0 top-full mt-1.5 z-40 w-44 rounded-xl bg-zinc-900 border border-zinc-700 shadow-xl py-1 text-xs text-zinc-200 animate-in fade-in zoom-in-95 duration-100"
+                  className="absolute left-0 top-full mt-1.5 z-40 w-44 rounded-xl bg-white border border-stone-200 shadow-xl py-1 text-xs text-zinc-800 animate-in fade-in zoom-in-95 duration-100"
                 >
-                  <div className="px-3 py-1 text-[10px] font-semibold text-zinc-400 border-b border-zinc-800 uppercase tracking-wider">
+                  <div className="px-3 py-1 text-[10px] font-bold text-stone-500 border-b border-stone-100 uppercase tracking-wider">
                     {catObj.name}
                   </div>
                   <button
@@ -404,9 +404,9 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
                       setEditReinitializeDraft(false);
                       setActiveMenuCatId(null);
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-800 text-left text-zinc-200 cursor-pointer"
+                    className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-amber-50 text-left text-zinc-800 cursor-pointer"
                   >
-                    <Edit2 className="w-3.5 h-3.5 text-blue-400" />
+                    <Edit2 className="w-3.5 h-3.5 text-amber-600" />
                     <span>Rename & Edit Cap</span>
                   </button>
                   <button
@@ -415,9 +415,9 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
                       setCategoryPendingDelete(catObj);
                       setActiveMenuCatId(null);
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-rose-500/10 text-left text-rose-400 cursor-pointer"
+                    className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-rose-50 text-left text-rose-600 cursor-pointer"
                   >
-                    <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                    <Trash2 className="w-3.5 h-3.5 text-rose-600" />
                     <span>Delete Category</span>
                   </button>
                 </div>
@@ -428,10 +428,10 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
       </div>
 
       {/* Progress Bar for Selected Category */}
-      <div className="w-full bg-zinc-950 rounded-full h-1.5 overflow-hidden border border-zinc-800/60">
+      <div className="w-full bg-stone-100 rounded-full h-1.5 overflow-hidden border border-stone-200/70">
         <div
           className={`h-full transition-all duration-300 rounded-full ${
-            isOverCap ? "bg-rose-500" : percentUsed > 80 ? "bg-amber-400" : "bg-emerald-400"
+            isOverCap ? "bg-rose-500" : percentUsed > 80 ? "bg-amber-500" : "bg-gradient-to-r from-amber-400 to-amber-500"
           }`}
           style={{ width: `${percentUsed}%` }}
         />
@@ -439,30 +439,30 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
 
       {/* Comprehensive Manage Categories & Add Category Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 bg-stone-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
             {/* Modal Header */}
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-800 bg-zinc-900/90">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-stone-200 bg-amber-50/50">
               <div className="flex items-center gap-2">
-                <Tag className="w-4 h-4 text-blue-400" />
-                <h3 className="text-sm font-semibold text-zinc-100">Category & Budget Cap Manager</h3>
+                <Tag className="w-4 h-4 text-amber-700" />
+                <h3 className="text-sm font-bold text-zinc-900">Category & Budget Cap Manager</h3>
               </div>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="text-zinc-400 hover:text-zinc-200 p-1 rounded-lg hover:bg-zinc-800 cursor-pointer"
+                className="text-stone-400 hover:text-zinc-800 p-1 rounded-lg hover:bg-stone-100 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Modal Tab Switcher */}
-            <div className="flex border-b border-zinc-800 bg-zinc-950 px-5 pt-2">
+            <div className="flex border-b border-stone-200 bg-stone-50 px-5 pt-2">
               <button
                 onClick={() => setModalTab("manage")}
                 className={`px-3 py-1.5 text-xs font-semibold border-b-2 cursor-pointer transition-all ${
                   modalTab === "manage"
-                    ? "border-blue-500 text-blue-400"
-                    : "border-transparent text-zinc-400 hover:text-zinc-200"
+                    ? "border-amber-500 text-amber-900"
+                    : "border-transparent text-stone-500 hover:text-zinc-800"
                 }`}
               >
                 Manage & Rename Categories ({categories.length})
@@ -471,8 +471,8 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
                 onClick={() => setModalTab("add")}
                 className={`px-3 py-1.5 text-xs font-semibold border-b-2 cursor-pointer transition-all ${
                   modalTab === "add"
-                    ? "border-blue-500 text-blue-400"
-                    : "border-transparent text-zinc-400 hover:text-zinc-200"
+                    ? "border-amber-500 text-amber-900"
+                    : "border-transparent text-stone-500 hover:text-zinc-800"
                 }`}
               >
                 + Add New Category
@@ -483,7 +483,7 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
             <div className="p-5">
               {modalTab === "manage" ? (
                 <div className="flex flex-col gap-3">
-                  <p className="text-xs text-zinc-400">
+                  <p className="text-xs text-stone-600">
                     Rename categories, adjust monthly spending ceilings, customize colors, or delete unneeded categories. Existing transactions will remain safely preserved.
                   </p>
 
@@ -497,22 +497,22 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
                         return (
                           <div
                             key={cat.id}
-                            className="p-3 rounded-xl bg-zinc-950 border border-blue-500/50 flex flex-col gap-2.5"
+                            className="p-3 rounded-xl bg-amber-50/40 border border-amber-400/60 flex flex-col gap-2.5"
                           >
                             <div className="flex items-center justify-between">
-                              <span className="text-xs font-semibold text-blue-400">Edit Category</span>
+                              <span className="text-xs font-bold text-amber-900">Edit Category</span>
                               <div className="flex items-center gap-1">
                                 <button
                                   type="button"
                                   onClick={() => handleSaveInlineEdit(cat.id)}
-                                  className="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold cursor-pointer"
+                                  className="px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold cursor-pointer shadow-xs"
                                 >
                                   Save
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => setEditingCategoryId(null)}
-                                  className="px-2 py-1 rounded bg-zinc-800 text-zinc-300 hover:text-white text-xs cursor-pointer"
+                                  className="px-2 py-1 rounded bg-stone-200 text-stone-700 hover:text-zinc-900 text-xs cursor-pointer"
                                 >
                                   Cancel
                                 </button>
@@ -521,29 +521,29 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                               <div>
-                                <label className="text-[11px] text-zinc-400 block mb-1">Name</label>
+                                <label className="text-[11px] text-stone-600 font-medium block mb-1">Name</label>
                                 <input
                                   type="text"
                                   value={editNameDraft}
                                   onChange={(e) => setEditNameDraft(e.target.value)}
-                                  className="w-full px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700 text-xs text-zinc-100 focus:outline-hidden focus:border-blue-500"
+                                  className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-stone-300 text-xs text-zinc-900 focus:outline-hidden focus:border-amber-500"
                                 />
                               </div>
                               <div>
-                                <label className="text-[11px] text-zinc-400 block mb-1">Monthly Cap ($)</label>
+                                <label className="text-[11px] text-stone-600 font-medium block mb-1">Monthly Cap ($)</label>
                                 <input
                                   type="number"
                                   min="10"
                                   step="10"
                                   value={editCapDraft}
                                   onChange={(e) => setEditCapDraft(e.target.value)}
-                                  className="w-full px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700 text-xs text-zinc-100 font-mono focus:outline-hidden focus:border-blue-500"
+                                  className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-stone-300 text-xs text-zinc-900 font-mono focus:outline-hidden focus:border-amber-500"
                                 />
                               </div>
                             </div>
 
                             <div>
-                              <label className="text-[11px] text-zinc-400 block mb-1">Badge Color</label>
+                              <label className="text-[11px] text-stone-600 font-medium block mb-1">Badge Color</label>
                               <div className="flex items-center gap-1.5">
                                 {PRESET_COLORS.map((c) => (
                                   <button
@@ -551,7 +551,7 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
                                     type="button"
                                     onClick={() => setEditColorDraft(c)}
                                     className={`w-5 h-5 rounded-full cursor-pointer transition-transform ${
-                                      editColorDraft === c ? "scale-125 ring-2 ring-white" : "hover:scale-110"
+                                      editColorDraft === c ? "scale-125 ring-2 ring-amber-500" : "hover:scale-110"
                                     }`}
                                     style={{ backgroundColor: c }}
                                   />
@@ -560,10 +560,10 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
                             </div>
 
                             {/* In-form Reinitialize & Reclassify Toggle (Default OFF) */}
-                            <div className="flex items-center justify-between p-2 rounded-lg bg-zinc-950/80 border border-zinc-800">
+                            <div className="flex items-center justify-between p-2 rounded-lg bg-white border border-stone-200">
                               <div className="flex flex-col pr-2">
-                                <span className="text-[11px] font-medium text-zinc-200">Reinitialize & reclassify with AI</span>
-                                <span className="text-[10px] text-zinc-400 leading-tight">
+                                <span className="text-[11px] font-medium text-zinc-900">Reinitialize & reclassify with AI</span>
+                                <span className="text-[10px] text-stone-500 leading-tight">
                                   Reset old rules and re-run Gemini AI over existing transactions
                                 </span>
                               </div>
@@ -574,7 +574,7 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
                                   onChange={(e) => setEditReinitializeDraft(e.target.checked)}
                                   className="sr-only peer"
                                 />
-                                <div className="w-8 h-4.5 bg-zinc-700 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-blue-600"></div>
+                                <div className="w-8 h-4.5 bg-stone-300 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-amber-600"></div>
                               </label>
                             </div>
                           </div>
@@ -584,23 +584,23 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
                       return (
                         <div
                           key={cat.id}
-                          className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-950 border border-zinc-800 hover:border-zinc-700/80 transition-colors"
+                          className="flex items-center justify-between p-2.5 rounded-xl bg-stone-50 border border-stone-200/90 hover:border-amber-300 transition-colors"
                         >
                           <div className="flex items-center gap-2.5">
                             <span
-                              className="w-3.5 h-3.5 rounded-full shrink-0"
+                              className="w-3.5 h-3.5 rounded-full shrink-0 shadow-xs"
                               style={{ backgroundColor: cat.color }}
                             />
                             <div>
-                              <p className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
+                              <p className="text-xs font-bold text-zinc-900 flex items-center gap-1.5">
                                 {cat.name}
                                 {isOver && (
-                                  <span className="text-[10px] text-rose-400 bg-rose-500/10 border border-rose-500/20 px-1 rounded">
+                                  <span className="text-[10px] text-rose-700 bg-rose-50 border border-rose-200 px-1 rounded font-medium">
                                     Over Cap
                                   </span>
                                 )}
                               </p>
-                              <p className="text-[11px] text-zinc-500 font-mono">
+                              <p className="text-[11px] text-stone-500 font-mono">
                                 Spent: ${stat.spent.toFixed(2)} / ${cat.monthlyCap.toFixed(0)} ({stat.count} tx)
                               </p>
                             </div>
@@ -610,7 +610,7 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
                             <button
                               type="button"
                               onClick={() => handleStartInlineEdit(cat)}
-                              className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                              className="p-1.5 rounded-lg bg-white border border-stone-200 hover:bg-stone-100 text-stone-600 hover:text-zinc-900 transition-colors cursor-pointer"
                               title={`Rename or edit ${cat.name}`}
                             >
                               <Edit2 className="w-3.5 h-3.5" />
@@ -619,7 +619,7 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
                             <button
                               type="button"
                               onClick={() => setCategoryPendingDelete(cat)}
-                              className="p-1.5 rounded-lg bg-zinc-900 hover:bg-rose-500/20 text-zinc-400 hover:text-rose-400 transition-colors cursor-pointer"
+                              className="p-1.5 rounded-lg bg-white border border-stone-200 hover:bg-rose-50 text-stone-500 hover:text-rose-600 transition-colors cursor-pointer"
                               title={`Delete ${cat.name}`}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -630,12 +630,12 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
                     })}
                   </div>
 
-                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-zinc-800 text-xs text-zinc-400">
+                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-stone-200 text-xs text-stone-600">
                     <span>{categories.length} active categories</span>
                     <button
                       type="button"
                       onClick={() => setIsModalOpen(false)}
-                      className="px-4 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium cursor-pointer"
+                      className="px-4 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-zinc-800 text-xs font-semibold cursor-pointer border border-stone-200"
                     >
                       Done
                     </button>
@@ -644,7 +644,7 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
               ) : (
                 <form onSubmit={handleCreateCategory} className="flex flex-col gap-3.5">
                   <div>
-                    <label className="text-xs font-medium text-zinc-300 block mb-1">
+                    <label className="text-xs font-semibold text-zinc-800 block mb-1">
                       Category Name
                     </label>
                     <input
@@ -653,16 +653,16 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
                       value={newName}
                       onChange={(e) => setNewName(e.target.value)}
                       required
-                      className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-hidden focus:border-blue-500"
+                      className="w-full px-3 py-2 rounded-lg bg-white border border-stone-300 text-sm text-zinc-900 placeholder:text-stone-400 focus:outline-hidden focus:border-amber-500"
                     />
                   </div>
 
                   <div>
-                    <label className="text-xs font-medium text-zinc-300 block mb-1">
+                    <label className="text-xs font-semibold text-zinc-800 block mb-1">
                       Monthly Budget Cap ($)
                     </label>
                     <div className="relative">
-                      <DollarSign className="w-4 h-4 absolute left-2.5 top-2.5 text-zinc-500" />
+                      <DollarSign className="w-4 h-4 absolute left-2.5 top-2.5 text-stone-400" />
                       <input
                         type="number"
                         min="10"
@@ -671,13 +671,13 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
                         value={newCap}
                         onChange={(e) => setNewCap(e.target.value)}
                         required
-                        className="w-full pl-8 pr-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-hidden focus:border-blue-500"
+                        className="w-full pl-8 pr-3 py-2 rounded-lg bg-white border border-stone-300 text-sm text-zinc-900 placeholder:text-stone-400 focus:outline-hidden focus:border-amber-500"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="text-xs font-medium text-zinc-300 block mb-1.5">
+                    <label className="text-xs font-semibold text-zinc-800 block mb-1.5">
                       Badge Color
                     </label>
                     <div className="flex items-center gap-2 flex-wrap">
@@ -687,7 +687,7 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
                           type="button"
                           onClick={() => setNewColor(c)}
                           className={`w-6 h-6 rounded-full cursor-pointer transition-transform ${
-                            newColor === c ? "scale-125 ring-2 ring-white" : "hover:scale-110"
+                            newColor === c ? "scale-125 ring-2 ring-amber-500" : "hover:scale-110"
                           }`}
                           style={{ backgroundColor: c }}
                         />
@@ -695,17 +695,17 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-zinc-800">
+                  <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-stone-200">
                     <button
                       type="button"
                       onClick={() => setIsModalOpen(false)}
-                      className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-zinc-400 hover:bg-zinc-800 cursor-pointer"
+                      className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-stone-600 hover:bg-stone-100 cursor-pointer"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold cursor-pointer shadow-md"
+                      className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-semibold cursor-pointer shadow-xs"
                     >
                       Save Category
                     </button>
@@ -719,16 +719,16 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
 
       {/* Quick Edit Single Category Modal (triggered from pill context menu) */}
       {quickEditCategory && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-800 bg-zinc-900/90">
+        <div className="fixed inset-0 z-50 bg-stone-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-stone-200 bg-amber-50/50">
               <div className="flex items-center gap-2">
-                <Edit2 className="w-4 h-4 text-blue-400" />
-                <h3 className="text-sm font-semibold text-zinc-100">Edit {quickEditCategory.name}</h3>
+                <Edit2 className="w-4 h-4 text-amber-700" />
+                <h3 className="text-sm font-bold text-zinc-900">Edit {quickEditCategory.name}</h3>
               </div>
               <button
                 onClick={() => setQuickEditCategory(null)}
-                className="text-zinc-400 hover:text-zinc-200 p-1 rounded-lg hover:bg-zinc-800 cursor-pointer"
+                className="text-stone-400 hover:text-zinc-800 p-1 rounded-lg hover:bg-stone-100 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -736,20 +736,20 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
 
             <form onSubmit={handleQuickEditSave} className="p-5 flex flex-col gap-3.5">
               <div>
-                <label className="text-xs font-medium text-zinc-300 block mb-1">Category Name</label>
+                <label className="text-xs font-semibold text-zinc-800 block mb-1">Category Name</label>
                 <input
                   type="text"
                   value={editNameDraft}
                   onChange={(e) => setEditNameDraft(e.target.value)}
                   required
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 focus:outline-hidden focus:border-blue-500"
+                  className="w-full px-3 py-2 rounded-lg bg-white border border-stone-300 text-sm text-zinc-900 focus:outline-hidden focus:border-amber-500"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-medium text-zinc-300 block mb-1">Monthly Budget Cap ($)</label>
+                <label className="text-xs font-semibold text-zinc-800 block mb-1">Monthly Budget Cap ($)</label>
                 <div className="relative">
-                  <DollarSign className="w-4 h-4 absolute left-2.5 top-2.5 text-zinc-500" />
+                  <DollarSign className="w-4 h-4 absolute left-2.5 top-2.5 text-stone-400" />
                   <input
                     type="number"
                     min="10"
@@ -757,14 +757,14 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
                     value={editCapDraft}
                     onChange={(e) => setEditCapDraft(e.target.value)}
                     required
-                    className="w-full pl-8 pr-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 font-mono focus:outline-hidden focus:border-blue-500"
+                    className="w-full pl-8 pr-3 py-2 rounded-lg bg-white border border-stone-300 text-sm text-zinc-900 font-mono focus:outline-hidden focus:border-amber-500"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-xs font-medium text-zinc-300 block mb-1.5 flex items-center gap-1.5">
-                  <Palette className="w-3.5 h-3.5 text-zinc-400" />
+                <label className="text-xs font-semibold text-zinc-800 block mb-1.5 flex items-center gap-1.5">
+                  <Palette className="w-3.5 h-3.5 text-stone-500" />
                   <span>Category Color</span>
                 </label>
                 <div className="flex items-center gap-2 flex-wrap">
@@ -774,7 +774,7 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
                       type="button"
                       onClick={() => setEditColorDraft(c)}
                       className={`w-6 h-6 rounded-full cursor-pointer transition-transform ${
-                        editColorDraft === c ? "scale-125 ring-2 ring-white" : "hover:scale-110"
+                        editColorDraft === c ? "scale-125 ring-2 ring-amber-500" : "hover:scale-110"
                       }`}
                       style={{ backgroundColor: c }}
                     />
@@ -783,10 +783,10 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
               </div>
 
               {/* In-form Reinitialize & Reclassify Toggle (Default OFF) */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-950/80 border border-zinc-800">
+              <div className="flex items-center justify-between p-3 rounded-xl bg-stone-50 border border-stone-200">
                 <div className="flex flex-col pr-2">
-                  <span className="text-xs font-medium text-zinc-200">Reinitialize & reclassify with AI</span>
-                  <span className="text-[10px] text-zinc-400">
+                  <span className="text-xs font-semibold text-zinc-900">Reinitialize & reclassify with AI</span>
+                  <span className="text-[10px] text-stone-500">
                     Reset old rules and re-run Gemini AI over existing transactions
                   </span>
                 </div>
@@ -797,21 +797,21 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
                     onChange={(e) => setEditReinitializeDraft(e.target.checked)}
                     className="sr-only peer"
                   />
-                  <div className="w-9 h-5 bg-zinc-700 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                  <div className="w-9 h-5 bg-stone-300 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-600"></div>
                 </label>
               </div>
 
-              <div className="flex items-center justify-end gap-2 mt-2 pt-3 border-t border-zinc-800">
+              <div className="flex items-center justify-end gap-2 mt-2 pt-3 border-t border-stone-200">
                 <button
                   type="button"
                   onClick={() => setQuickEditCategory(null)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-400 hover:bg-zinc-800 cursor-pointer"
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-stone-600 hover:bg-stone-100 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold cursor-pointer shadow-md"
+                  className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-semibold cursor-pointer shadow-xs"
                 >
                   Save Changes
                 </button>
@@ -823,38 +823,38 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
 
       {/* Delete Confirmation Safeguard Modal */}
       {categoryPendingDelete && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-5 animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 bg-stone-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-5 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 shrink-0">
                 <Trash2 className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-zinc-100">
+                <h3 className="text-sm font-bold text-zinc-900">
                   Delete &ldquo;{categoryPendingDelete.name}&rdquo;?
                 </h3>
-                <p className="text-xs text-zinc-400 mt-0.5">
+                <p className="text-xs text-stone-500 mt-0.5">
                   Are you sure you want to remove this category?
                 </p>
               </div>
             </div>
 
-            <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-400 mb-4">
-              Transactions currently marked as <span className="text-zinc-200 font-semibold">{categoryPendingDelete.name}</span> will be safely reassigned to <span className="text-blue-400 font-medium">Uncategorized</span> so no financial history is lost.
+            <div className="p-3 rounded-xl bg-stone-50 border border-stone-200 text-xs text-stone-600 mb-4">
+              Transactions currently marked as <span className="text-zinc-900 font-bold">{categoryPendingDelete.name}</span> will be safely reassigned to <span className="text-amber-800 font-semibold">Uncategorized</span> so no financial history is lost.
             </div>
 
             <div className="flex items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setCategoryPendingDelete(null)}
-                className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-zinc-400 hover:bg-zinc-800 cursor-pointer"
+                className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-stone-600 hover:bg-stone-100 cursor-pointer"
               >
                 Keep Category
               </button>
               <button
                 type="button"
                 onClick={handleConfirmDelete}
-                className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold cursor-pointer shadow-md shadow-rose-600/20"
+                className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold cursor-pointer shadow-xs"
               >
                 Yes, Delete Category
               </button>
