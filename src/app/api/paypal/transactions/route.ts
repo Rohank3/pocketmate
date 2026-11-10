@@ -95,9 +95,6 @@ export async function GET(req: NextRequest) {
       const timeStr = dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
       const displayDate = isToday ? `Today, ${timeStr}` : `${dateObj.toLocaleDateString([], { month: "short", day: "numeric" })}, ${timeStr}`;
 
-      const catEntry = categoryMap.get(t.id);
-      const category = catEntry?.category || "Uncategorized";
-
       let rowStatus: "settled" | "pending" | "disputed" | "unresolved" = "pending";
       if (t.status === "COMPLETED") rowStatus = "settled";
       else if (t.status === "PENDING" || t.status === "DRAFT") rowStatus = "pending";
@@ -121,6 +118,13 @@ export async function GET(req: NextRequest) {
           : t.isOutgoingSplit
           ? "outgoing_split"
           : "outgoing");
+
+      const catEntry = categoryMap.get(t.id);
+      let category = catEntry?.category || "Uncategorized";
+      // If general incoming money has no explicit category, classify as Income
+      if (direction === "incoming" && (!catEntry || category === "Uncategorized") && !isSplit) {
+        category = "Income";
+      }
 
       return {
         id: t.id,

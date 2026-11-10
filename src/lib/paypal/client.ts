@@ -309,6 +309,12 @@ class PayPalSandboxClient {
             }
           }
 
+          // Determine if this reporting transaction is incoming (received by user) or outgoing (spent by user)
+          const isIncoming = Boolean(
+            targetEmailClean && payerEmail && payerEmail !== targetEmailClean
+          );
+          const direction: "incoming" | "outgoing" = isIncoming ? "incoming" : "outgoing";
+
           results.push({
             id: (info.transaction_id as string) || `tx_${Math.random().toString(36).substring(7)}`,
             status: ((info.transaction_status as string) || "S") === "S" ? "COMPLETED" : "PENDING",
@@ -327,6 +333,7 @@ class PayPalSandboxClient {
                 : "Shared Split"
               : "100% Self",
             recipientEmail: payerEmail,
+            direction,
           });
         }
       }
