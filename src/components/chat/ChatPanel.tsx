@@ -277,7 +277,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       className="h-full w-full rounded-[28px]"
       contentClassName="relative flex flex-col h-full overflow-hidden rounded-[28px]"
       borderRadius={28}
-      cursorSize={32}
+      cursorSize={36}
       showCursor={true}
       glass={{
         blur: 24,
@@ -288,7 +288,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         distortion: 26,
       }}
       accent="#f59e0b"
-      intensity={0.85}
+      intensity={0.9}
       rippleStrength={1}
     >
       {/* Hidden file picker for real receipt audits */}
@@ -301,7 +301,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       />
 
       {/* Header with Agent Status & Controls */}
-      <div className="px-3.5 sm:px-4 py-2.5 sm:py-3 bg-white/45 backdrop-blur-md border-b border-white/60 flex items-center justify-between gap-2 shrink-0">
+      <div className="px-3.5 sm:px-4 py-2.5 sm:py-3 bg-white/45 backdrop-blur-md border-b border-white/60 flex items-center justify-between gap-2 shrink-0 rounded-t-[28px]">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-400/60 flex items-center justify-center text-amber-800 shrink-0 shadow-2xs backdrop-blur-xs">
             <Bot className="w-4 h-4" />
@@ -683,7 +683,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       )}
 
       {/* Liquid Input Area */}
-      <div className="relative">
+      <div className="relative rounded-b-[28px] overflow-hidden">
         <div className="h-[1px] w-full bg-gradient-to-r from-amber-400/10 via-amber-400/60 to-amber-400/10" />
         <form onSubmit={handleSubmit} className="p-3 bg-white/35 backdrop-blur-md border-t border-white/50 relative">
           <div className="relative flex items-center rounded-[30px] bg-white/75 border border-white/90 shadow-[inset_0_1px_3px_rgba(0,0,0,0.06),inset_0_-1px_1px_rgba(255,255,255,0.95),0_2px_8px_rgba(0,0,0,0.03)] p-1 transition-all focus-within:border-amber-400/80 focus-within:ring-2 focus-within:ring-amber-400/25">

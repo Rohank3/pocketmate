@@ -4,7 +4,6 @@ import React, {
   useEffect,
   useId,
   useRef,
-  useState,
   useLayoutEffect,
   type CSSProperties,
   type ReactNode,
@@ -14,7 +13,7 @@ import React, {
 export interface LiquidGlassSettings {
   blur?: number; // 0..40
   opacity?: number; // 0.04..0.95
-  saturation?: number; // 0.5..2
+  saturation?: number; // 0.5..2.5
   tint?: string; // hex color or css color variable
   edge?: number; // 0..1
   distortion?: number; // 0..60
@@ -32,7 +31,7 @@ export interface LiquidGlassContainerProps {
   rippleStrength?: number; // click ripple intensity: 0..1.5
   showCursor?: boolean; // pointer lens follower
   cursorSize?: number; // 18..56
-  borderRadius?: number; // default: 24px
+  borderRadius?: number; // default: 28px
   contentClassName?: string;
 }
 
@@ -56,7 +55,6 @@ const smoothstep = (x: number) => {
 };
 
 const PADDING = 32;
-const CONTROL_SELECTOR = "a, button, input, textarea, select, [contenteditable], .ag-root, .ag-cell, .ag-header-cell";
 
 /**
  * Chromium-only SVG FeDisplacementMap generator via 2D Canvas Normal Mapping.
@@ -111,7 +109,7 @@ function useLiquidOptics(scope: RefObject<HTMLDivElement | null>) {
 
       defs.querySelector(`[id="${id}"]`)?.remove();
 
-      const radius = Math.min(parseFloat(style.borderTopLeftRadius) || 24, w / 2, h / 2);
+      const radius = Math.min(parseFloat(style.borderTopLeftRadius) || 28, w / 2, h / 2);
       const canvas = document.createElement("canvas");
       canvas.width = Math.ceil(w * 0.5);
       canvas.height = Math.ceil(h * 0.5);
@@ -226,25 +224,24 @@ interface Ripple extends Point {
 function LiquidGlassMotion({
   containerRef,
   clipId,
-  reduced,
   elasticEdges = true,
-  intensity = 0.85,
+  intensity = 0.9,
   rippleStrength = 1,
   showCursor = true,
-  cursorSize = 32,
+  cursorSize = 36,
 }: {
   containerRef: RefObject<HTMLElement | null>;
   clipId: string;
-  reduced: boolean;
   elasticEdges?: boolean;
   intensity?: number;
   rippleStrength?: number;
   showCursor?: boolean;
   cursorSize?: number;
 }) {
-  const diameter = clamp(cursorSize, 18, 56, 32);
+  const diameter = clamp(cursorSize, 24, 56, 36);
   const svgRef = useRef<SVGSVGElement>(null);
   const clipRef = useRef<SVGPathElement>(null);
+  const rimGlowRef = useRef<SVGPathElement>(null);
   const rimRef = useRef<SVGPathElement>(null);
   const cursorRef = useRef<HTMLDivElement>(null);
   const rippleLayerRef = useRef<SVGGElement>(null);
@@ -253,14 +250,14 @@ function LiquidGlassMotion({
     const container = containerRef.current;
     const surface = svgRef.current;
     const outline = rimRef.current;
+    const outlineGlow = rimGlowRef.current;
     const clipping = clipRef.current;
     const lens = cursorRef.current;
 
-    if (!container || !surface || !outline || !clipping || !lens) return;
+    if (!container || !surface || !outline || !outlineGlow || !clipping || !lens) return;
 
-    const amount = elasticEdges && !reduced ? clamp(intensity, 0, 1.5, 0.85) : 0;
-    const strength = !reduced ? clamp(rippleStrength, 0, 1.5, 1) : 0;
-    const enabled = !reduced;
+    const amount = elasticEdges ? clamp(intensity, 0, 1.5, 0.9) : 0;
+    const strength = clamp(rippleStrength, 0, 1.5, 1);
 
     const rippleNodes = Array.from(
       rippleLayerRef.current?.querySelectorAll<SVGGElement>(".g-liquid-ripple") ?? []
@@ -276,19 +273,20 @@ function LiquidGlassMotion({
       center: 0,
     }));
 
+    // Resting position on left rim (similar to reference wordmark card)
     const pointer = {
       x: 0,
-      y: 0,
+      y: 120,
       targetX: 0,
-      targetY: 0,
-      visible: 0,
-      targetVisible: 0,
-      initialized: false,
+      targetY: 120,
+      visible: 1,
+      targetVisible: 1,
+      initialized: true,
     };
 
-    let width = 1;
-    let height = 1;
-    let radius = 24;
+    let width = Math.max(1, container.offsetWidth);
+    let height = Math.max(1, container.offsetHeight);
+    let radius = Math.min(parseFloat(getComputedStyle(container).borderTopLeftRadius) || 28, width / 2, height / 2);
     let raf = 0;
     let last = 0;
     let inView = true;
@@ -329,6 +327,7 @@ function LiquidGlassMotion({
         }
       }
 
+      // Top edge
       curve(
         (t) => {
           const x = radius + t * (width - 2 * radius);
@@ -338,6 +337,7 @@ function LiquidGlassMotion({
       );
       d += " Q" + p({ x: width, y: 0 }) + " " + p({ x: width, y: radius });
 
+      // Right edge
       curve(
         (t) => {
           const y = radius + t * (height - 2 * radius);
@@ -347,6 +347,7 @@ function LiquidGlassMotion({
       );
       d += " Q" + p({ x: width, y: height }) + " " + p({ x: width - radius, y: height });
 
+      // Bottom edge
       curve(
         (t) => {
           const x = width - radius - t * (width - 2 * radius);
@@ -356,6 +357,7 @@ function LiquidGlassMotion({
       );
       d += " Q" + p({ x: 0, y: height }) + " " + p({ x: 0, y: height - radius });
 
+      // Left edge
       curve(
         (t) => {
           const y = height - radius - t * (height - 2 * radius);
@@ -366,6 +368,7 @@ function LiquidGlassMotion({
       d += " Q" + p({ x: 0, y: 0 }) + " " + p({ x: radius, y: 0 }) + " Z";
 
       outline!.setAttribute("d", d);
+      outlineGlow!.setAttribute("d", d);
       clipping!.setAttribute("d", d);
     }
 
@@ -379,10 +382,10 @@ function LiquidGlassMotion({
       ];
       locations.forEach(({ at, out, length }, i) => {
         const edge = edges[i];
-        if (hasPointer && at > radius && at < length - radius && Math.abs(out) < 75) {
+        if (hasPointer && at > radius && at < length - radius && Math.abs(out) < 85) {
           edge.center = at;
-          const proximity = smoothstep(1 - Math.abs(out) / 75);
-          edge.target = Math.max(-12, Math.min(22, 12 + out * 0.8)) * proximity * amount;
+          const proximity = smoothstep(1 - Math.abs(out) / 85);
+          edge.target = Math.max(-14, Math.min(24, 14 + out * 0.85)) * proximity * amount;
         } else {
           edge.target = 0;
         }
@@ -397,12 +400,11 @@ function LiquidGlassMotion({
     }
 
     function ripple(event: PointerEvent) {
-      if (!enabled || strength === 0 || !inView || document.hidden || event.button !== 0 || !event.isPrimary)
-        return;
+      if (strength === 0 || !inView || document.hidden || event.button !== 0 || !event.isPrimary) return;
       const point = locate(event);
       if (point.x < 0 || point.x > width || point.y < 0 || point.y > height || !waves.length) return;
       const slot = nextWave++ % waves.length;
-      waves[slot] = { ...point, age: 0, reach: Math.max(90, Math.min(260, width * 0.35)) };
+      waves[slot] = { ...point, age: 0, reach: Math.max(120, Math.min(320, width * 0.4)) };
       rippleNodes[slot].setAttribute("transform", `translate(${point.x + PADDING} ${point.y + PADDING})`);
       rippleNodes[slot].style.opacity = "0";
       wake();
@@ -412,10 +414,10 @@ function LiquidGlassMotion({
       waves.forEach((wave, i) => {
         if (!wave) return;
         wave.age += dt;
-        const progress = Math.min(1, wave.age / 1.25);
+        const progress = Math.min(1, wave.age / 1.3);
         const r = 18 + wave.reach * (1 - (1 - progress) ** 2);
-        const fadeIn = smoothstep(wave.age / 0.09);
-        rippleNodes[i].style.opacity = String(Math.min(1, strength * 0.75 * fadeIn * (1 - progress) ** 1.4));
+        const fadeIn = smoothstep(wave.age / 0.08);
+        rippleNodes[i].style.opacity = String(Math.min(1, strength * 0.85 * fadeIn * (1 - progress) ** 1.3));
         rippleCircles[i].forEach((circle) => circle.setAttribute("r", String(round(r))));
         if (progress === 1) {
           waves[i] = null;
@@ -426,18 +428,22 @@ function LiquidGlassMotion({
 
     function tick(now: number) {
       raf = 0;
-      if (disposed || !enabled || !inView || document.hidden) {
+      if (disposed || !inView || document.hidden) {
         last = 0;
         return;
       }
       const dt = Math.min(0.05, Math.max(0.001, (now - (last || now - 16.67)) / 1000));
       last = now;
 
-      const follow = 1 - Math.exp(-18 * dt);
-      const fade = 1 - Math.exp(-16 * dt);
+      const follow = 1 - Math.exp(-20 * dt);
+      const fade = 1 - Math.exp(-14 * dt);
       pointer.x += (pointer.targetX - pointer.x) * follow;
       pointer.y += (pointer.targetY - pointer.y) * follow;
       pointer.visible += (pointer.targetVisible - pointer.visible) * fade;
+
+      // Update surface light caustic reflection
+      container!.style.setProperty("--mouse-x", `${round(pointer.x)}px`);
+      container!.style.setProperty("--mouse-y", `${round(pointer.y)}px`);
 
       targets();
 
@@ -445,10 +451,10 @@ function LiquidGlassMotion({
       const h = dt / steps;
       for (let step = 0; step < steps; step++) {
         for (const edge of edges) {
-          edge.velocity += (-260 * (edge.value - edge.target) - 18 * edge.velocity) * h;
+          edge.velocity += (-280 * (edge.value - edge.target) - 20 * edge.velocity) * h;
           edge.value += edge.velocity * h;
-          if (Math.abs(edge.value) > 29) {
-            edge.value = Math.sign(edge.value) * 29;
+          if (Math.abs(edge.value) > 30) {
+            edge.value = Math.sign(edge.value) * 30;
             edge.velocity = 0;
           }
         }
@@ -483,34 +489,22 @@ function LiquidGlassMotion({
     }
 
     function wake() {
-      if (enabled && inView && !document.hidden && !disposed && !raf) {
+      if (inView && !document.hidden && !disposed && !raf) {
         raf = requestAnimationFrame(tick);
       }
     }
 
-    function reset(immediate = false) {
+    function reset() {
       hasPointer = false;
       contact = null;
-      pointer.targetVisible = 0;
+      // Gently return lens to left rim bead resting position
+      pointer.targetX = 0;
+      pointer.targetY = 120;
+      pointer.targetVisible = 0.95;
       edges.forEach((e) => {
         e.target = 0;
       });
-      if (immediate) {
-        cancelAnimationFrame(raf);
-        raf = 0;
-        last = 0;
-        pointer.visible = 0;
-        pointer.initialized = false;
-        clearRipples();
-        edges.forEach((e) => {
-          e.value = 0;
-          e.velocity = 0;
-        });
-        lens!.style.opacity = "0";
-        draw();
-      } else {
-        wake();
-      }
+      wake();
     }
 
     function locate(event: PointerEvent) {
@@ -522,15 +516,13 @@ function LiquidGlassMotion({
     }
 
     function update(event: PointerEvent) {
-      if (!enabled || !inView || document.hidden) return;
+      if (!inView || document.hidden) return;
       const pt = locate(event);
-      const near = pt.x > -75 && pt.x < width + 75 && pt.y > -75 && pt.y < height + 75;
+      const near = pt.x > -80 && pt.x < width + 80 && pt.y > -80 && pt.y < height + 80;
       if (!near) {
         if (hasPointer) reset();
         return;
       }
-      const isOverControl =
-        event.target instanceof Element && Boolean(event.target.closest(CONTROL_SELECTOR));
 
       if (!pointer.initialized) {
         pointer.x = pt.x;
@@ -539,9 +531,7 @@ function LiquidGlassMotion({
       }
       pointer.targetX = pt.x;
       pointer.targetY = pt.y;
-
-      // Softly adjust pointer lens when over inputs/table cells while keeping the lens bead visibly floating
-      pointer.targetVisible = showCursor ? (isOverControl ? 0.45 : 0.95) : 0;
+      pointer.targetVisible = showCursor ? 1 : 0;
       hasPointer = true;
       wake();
     }
@@ -565,7 +555,7 @@ function LiquidGlassMotion({
 
     function release(event: PointerEvent) {
       if (event.type === "pointercancel") {
-        reset(true);
+        reset();
         return;
       }
       if (event.pointerId === contact) reset();
@@ -574,9 +564,10 @@ function LiquidGlassMotion({
     function resize() {
       width = Math.max(1, container!.offsetWidth);
       height = Math.max(1, container!.offsetHeight);
-      radius = Math.min(parseFloat(getComputedStyle(container!).borderTopLeftRadius) || 24, width / 2, height / 2);
+      radius = Math.min(parseFloat(getComputedStyle(container!).borderTopLeftRadius) || 28, width / 2, height / 2);
       surface!.setAttribute("viewBox", `0 0 ${width + PADDING * 2} ${height + PADDING * 2}`);
-      reset(true);
+      draw();
+      wake();
     }
 
     const size = new ResizeObserver(resize);
@@ -585,16 +576,18 @@ function LiquidGlassMotion({
 
     const intersection = new IntersectionObserver(([entry]) => {
       inView = entry.isIntersecting;
-      if (!inView) reset(true);
+      if (inView) wake();
     });
     intersection.observe(container);
 
-    if (enabled) {
-      window.addEventListener("pointermove", move, { passive: true });
-      window.addEventListener("pointerdown", down, { passive: true });
-      window.addEventListener("pointerup", release, { passive: true });
-      window.addEventListener("pointercancel", release, { passive: true });
-    }
+    window.addEventListener("pointermove", move, { passive: true });
+    window.addEventListener("pointerdown", down, { passive: true });
+    window.addEventListener("pointerup", release, { passive: true });
+    window.addEventListener("pointercancel", release, { passive: true });
+
+    // Initial draw & wake to ensure resting droplet is immediately visible
+    draw();
+    wake();
 
     return () => {
       disposed = true;
@@ -605,21 +598,20 @@ function LiquidGlassMotion({
       window.removeEventListener("pointerdown", down);
       window.removeEventListener("pointerup", release);
       window.removeEventListener("pointercancel", release);
-      lens.style.opacity = "0";
       clearRipples();
     };
-  }, [containerRef, reduced, elasticEdges, intensity, rippleStrength, diameter, showCursor]);
+  }, [containerRef, elasticEdges, intensity, rippleStrength, diameter, showCursor]);
 
   return (
     <>
+      {/* Living SVG Meniscus Outline & Refractive Ripples */}
       <svg
         ref={svgRef}
-        className="g-liquid-rim absolute pointer-events-none select-none z-10"
+        className="g-liquid-rim pointer-events-none absolute select-none z-25 overflow-visible"
         style={{
           width: "calc(100% + 64px)",
           height: "calc(100% + 64px)",
           inset: "-32px",
-          overflow: "visible",
         }}
         viewBox="0 0 1064 664"
         preserveAspectRatio="none"
@@ -630,39 +622,54 @@ function LiquidGlassMotion({
             <path ref={clipRef} />
           </clipPath>
         </defs>
+
+        {/* Expanding click ripples with specular crest and caustic ring */}
         <g ref={rippleLayerRef} clipPath={`url(#${clipId})`}>
-          {[0, 1, 2].map((index) => (
+          {[0, 1, 2, 3].map((index) => (
             <g key={index} className="g-liquid-ripple" opacity="0">
-              <circle stroke="rgba(217, 119, 6, 0.35)" strokeWidth="1.6" fill="none" cy="1.5" r="0" />
-              <circle stroke="rgba(255, 255, 255, 0.95)" strokeWidth="1.2" fill="none" r="0" />
+              <circle stroke="rgba(245, 158, 11, 0.45)" strokeWidth="2.4" fill="none" cy="1.2" r="0" />
+              <circle stroke="rgba(255, 255, 255, 0.95)" strokeWidth="1.5" fill="none" r="0" />
             </g>
           ))}
         </g>
+
+        {/* Outer amber caustic edge glow */}
+        <path
+          ref={rimGlowRef}
+          fill="none"
+          stroke="rgba(245, 158, 11, 0.45)"
+          strokeWidth="2.5px"
+          vectorEffect="non-scaling-stroke"
+          style={{
+            filter: "drop-shadow(0 0 6px rgba(245, 158, 11, 0.35))",
+          }}
+        />
+
+        {/* Inner crisp specular meniscus highlight */}
         <path
           ref={rimRef}
           fill="none"
-          stroke="rgba(255, 255, 255, 0.9)"
+          stroke="rgba(255, 255, 255, 0.95)"
           strokeWidth="1.4px"
           vectorEffect="non-scaling-stroke"
-          style={{
-            filter: "drop-shadow(0 0 4px rgba(245, 158, 11, 0.25))",
-          }}
         />
       </svg>
+
+      {/* Living Glass Lens Droplet (3D spherical refraction bead) */}
       <div
         ref={cursorRef}
-        className="g-liquid-lens pointer-events-none absolute select-none opacity-0 z-30 rounded-full transition-opacity duration-150"
+        className="g-liquid-lens pointer-events-none absolute select-none z-30 rounded-full transition-opacity duration-200"
         style={{
           width: diameter,
           height: diameter,
           inset: "0 auto auto 0",
           background:
-            "radial-gradient(ellipse at 28% 20%, rgba(255, 255, 255, 0.75), transparent 40%), radial-gradient(ellipse at 72% 85%, rgba(245, 158, 11, 0.22), transparent 45%)",
-          border: "1px solid rgba(255, 255, 255, 0.85)",
+            "radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.6) 28%, rgba(245, 158, 11, 0.28) 55%, rgba(255, 255, 255, 0.2) 100%)",
+          border: "1.5px solid rgba(255, 255, 255, 0.95)",
           boxShadow:
-            "inset 0 1.5px 2px #ffffff, inset 0 -1px 1.5px rgba(24, 24, 27, 0.15), 0 4px 14px rgba(24, 24, 27, 0.12)",
-          backdropFilter: "blur(2px) saturate(1.4)",
-          WebkitBackdropFilter: "blur(2px) saturate(1.4)",
+            "inset 0 2px 4px #ffffff, inset 0 -2px 4px rgba(217, 119, 6, 0.25), 0 8px 24px -4px rgba(180, 120, 30, 0.35), 0 0 12px rgba(255, 255, 255, 0.8)",
+          backdropFilter: "blur(4px) saturate(1.8)",
+          WebkitBackdropFilter: "blur(4px) saturate(1.8)",
         }}
         aria-hidden="true"
       />
@@ -682,26 +689,15 @@ export const LiquidGlassContainer: React.FC<LiquidGlassContainerProps> = ({
   accent = "#f59e0b",
   motion = true,
   elasticEdges = true,
-  intensity = 0.85,
+  intensity = 0.9,
   rippleStrength = 1,
   showCursor = true,
-  cursorSize = 32,
-  borderRadius = 24,
+  cursorSize = 36,
+  borderRadius = 28,
   contentClassName = "",
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const clipId = "liquid-glass-" + useId().replace(/[^a-zA-Z0-9_-]/g, "");
-
-  const [reduced, setReduced] = useState(() =>
-    typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  );
-
-  useEffect(() => {
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setReduced(media.matches);
-    media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
-  }, []);
 
   useLiquidOptics(containerRef);
 
@@ -726,36 +722,56 @@ export const LiquidGlassContainer: React.FC<LiquidGlassContainerProps> = ({
   return (
     <div
       ref={containerRef}
-      className={`relative isolate ${className}`}
-      style={dynamicGlassStyle}
+      className={`relative isolate overflow-visible ${className}`}
+      style={{
+        ...dynamicGlassStyle,
+        borderRadius,
+        background:
+          "linear-gradient(135deg, rgba(255, 255, 255, 0.6) 0%, rgba(253, 251, 247, 0.45) 100%)",
+        border: "1.5px solid rgba(255, 255, 255, 0.85)",
+        boxShadow:
+          "0 20px 48px -12px rgba(24, 24, 27, 0.08), 0 0 32px rgba(245, 158, 11, 0.06), inset 0 1px 2px rgba(255, 255, 255, 0.95), inset 0 -2px 6px rgba(217, 119, 6, 0.04)",
+        backdropFilter: "blur(20px) saturate(1.8)",
+        WebkitBackdropFilter: "blur(20px) saturate(1.8)",
+      }}
     >
-      {/* Liquid Refraction Backdrop Surface */}
+      {/* Dynamic Cursor Light Sheen (Caustic Reflection that slides with pointer) */}
       <div
-        className="g-liquid-material absolute inset-0 pointer-events-none transition-shadow duration-300"
+        className="pointer-events-none absolute inset-0 z-10 transition-opacity duration-300"
         style={{
           borderRadius,
+          background:
+            "radial-gradient(circle 380px at var(--mouse-x, 0px) var(--mouse-y, 120px), rgba(255, 255, 255, 0.5) 0%, transparent 70%)",
+        }}
+        aria-hidden="true"
+      />
+
+      {/* Liquid Refraction Backdrop Surface (Overscan 32px to capture outward meniscus stretching) */}
+      <div
+        className="g-liquid-material pointer-events-none absolute -inset-8 transition-shadow duration-300 z-5"
+        style={{
           background: `linear-gradient(145deg, rgba(255, 255, 255, 0.35), transparent 36%, rgba(255, 255, 255, 0.05) 67%, rgba(255, 255, 255, 0.18)), color-mix(in srgb, ${tint} calc(${opacity} * 100%), transparent)`,
           backdropFilter: `blur(var(--glass-blur)) saturate(var(--glass-saturation)) var(--glass-refraction, blur(0px))`,
           WebkitBackdropFilter: `blur(var(--glass-blur)) saturate(var(--glass-saturation))`,
-          boxShadow: `inset 0 1px 2px rgba(255, 255, 255, calc(${edge} * 0.95)), inset 1px 0 2px rgba(255, 255, 255, calc(${edge} * 0.35)), inset -1px -1px 2px rgba(255, 255, 255, calc(${edge} * 0.55)), inset 0 -4px 8px rgba(13, 18, 15, 0.05), 0 16px 36px -12px rgba(24, 24, 27, 0.08), 0 0 24px rgba(245, 158, 11, 0.05)`,
           clipPath: `url(#${clipId})`,
         }}
         aria-hidden="true"
       />
 
       {/* Living Elastic Rim & Cursor Ripple Motion */}
-      <LiquidGlassMotion
-        containerRef={containerRef}
-        clipId={clipId}
-        reduced={reduced || !motion}
-        elasticEdges={elasticEdges}
-        intensity={intensity}
-        rippleStrength={rippleStrength}
-        showCursor={showCursor}
-        cursorSize={cursorSize}
-      />
+      {motion && (
+        <LiquidGlassMotion
+          containerRef={containerRef}
+          clipId={clipId}
+          elasticEdges={elasticEdges}
+          intensity={intensity}
+          rippleStrength={rippleStrength}
+          showCursor={showCursor}
+          cursorSize={cursorSize}
+        />
+      )}
 
-      {/* Actual Content Wrapper */}
+      {/* Content Wrapper */}
       <div className={`relative z-20 h-full w-full ${contentClassName}`}>
         {children}
       </div>
