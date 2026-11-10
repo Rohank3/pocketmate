@@ -274,8 +274,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
   return (
     <LiquidGlassContainer
-      className="h-full w-full rounded-2xl"
-      contentClassName="relative flex flex-col h-full overflow-hidden rounded-2xl"
+      className="h-full w-full rounded-[28px]"
+      contentClassName="relative flex flex-col h-full overflow-hidden rounded-[28px]"
+      borderRadius={28}
+      cursorSize={32}
+      showCursor={true}
       glass={{
         blur: 24,
         opacity: 0.82,
@@ -298,9 +301,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       />
 
       {/* Header with Agent Status & Controls */}
-      <div className="px-3.5 sm:px-4 py-2.5 sm:py-3 bg-stone-50/90 backdrop-blur-xl border-b border-stone-200/80 flex items-center justify-between gap-2 shrink-0">
+      <div className="px-3.5 sm:px-4 py-2.5 sm:py-3 bg-white/45 backdrop-blur-md border-b border-white/60 flex items-center justify-between gap-2 shrink-0">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-300 flex items-center justify-center text-amber-700 shrink-0 shadow-2xs">
+          <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-400/60 flex items-center justify-center text-amber-800 shrink-0 shadow-2xs backdrop-blur-xs">
             <Bot className="w-4 h-4" />
           </div>
           <div className="min-w-0">
@@ -321,7 +324,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400 ${
               isHistoryOpen
                 ? "bg-amber-500/20 border-amber-400 text-amber-950 shadow-2xs"
-                : "bg-stone-100 hover:bg-stone-200 text-stone-700 border-stone-200 hover:text-zinc-900"
+                : "bg-white/60 hover:bg-white/90 text-stone-700 border-white/80 hover:text-zinc-900 shadow-2xs backdrop-blur-xs"
             }`}
           >
             <History className="w-3.5 h-3.5 text-stone-500" />
@@ -342,7 +345,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                 setIsHistoryOpen(false);
               }}
               aria-label="Start a new chat session"
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 active:bg-amber-500/35 text-amber-950 text-xs font-bold border border-amber-400 transition-all cursor-pointer shadow-2xs focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 active:bg-amber-500/35 text-amber-950 text-xs font-bold border border-amber-400/80 transition-all cursor-pointer shadow-2xs backdrop-blur-xs focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400"
             >
               <Plus className="w-3.5 h-3.5 text-amber-700" />
               <span className="hidden sm:inline">New Chat</span>
@@ -350,7 +353,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           )}
 
           {/* Active Status Badge with Liquid Pulse */}
-          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-300 text-[11px] font-bold text-amber-900 shadow-2xs">
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-300/80 text-[11px] font-bold text-amber-900 shadow-2xs backdrop-blur-xs">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
@@ -366,10 +369,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           role="dialog"
           aria-modal="true"
           aria-label="Conversation History"
-          className="absolute inset-0 z-30 bg-white/98 backdrop-blur-md flex flex-col animate-in fade-in duration-150"
+          className="absolute inset-0 z-30 bg-white/92 backdrop-blur-xl rounded-[28px] flex flex-col animate-in fade-in duration-150"
         >
           {/* Drawer Header */}
-          <div className="px-4 py-3 bg-stone-50 border-b border-stone-200 flex items-center justify-between shrink-0">
+          <div className="px-4 py-3 bg-white/60 border-b border-stone-200/60 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
               <MessageSquare className="w-4 h-4 text-amber-700" />
               <h2 className="text-sm font-bold text-zinc-900">Conversation History</h2>
@@ -560,7 +563,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       <div
         ref={feedContainerRef}
         onScroll={handleFeedScroll}
-        className="flex-1 p-3 sm:p-4 overflow-y-auto space-y-4 relative bg-white/40 backdrop-blur-md"
+        className="flex-1 p-3 sm:p-4 overflow-y-auto space-y-4 relative bg-transparent"
       >
         {messages.map((m) => (
           <div
@@ -570,7 +573,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             }`}
           >
             {m.role === "assistant" && (
-              <div className="w-7 h-7 rounded-lg bg-amber-50 border border-amber-300 flex items-center justify-center text-amber-700 shrink-0 mt-0.5 shadow-2xs">
+              <div className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-400/50 flex items-center justify-center text-amber-800 shrink-0 mt-0.5 shadow-2xs backdrop-blur-xs">
                 <Bot className="w-3.5 h-3.5" />
               </div>
             )}
@@ -579,7 +582,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               className={`max-w-[85%] rounded-2xl px-4 py-3 leading-relaxed ${
                 m.role === "user"
                   ? "bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 text-white rounded-tr-xs shadow-xs"
-                  : "bg-white border border-stone-200/90 text-zinc-900 rounded-tl-xs shadow-2xs"
+                  : "bg-white/80 backdrop-blur-md border border-white/90 text-zinc-900 rounded-tl-xs shadow-[0_4px_16px_rgba(0,0,0,0.03)]"
               }`}
             >
               {/* Tool Execution Badges if any */}
@@ -647,10 +650,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
         {isLoading && (
           <div className="flex gap-3 text-sm justify-start">
-            <div className="w-7 h-7 rounded-lg bg-amber-50 border border-amber-300 flex items-center justify-center text-amber-700 shrink-0 shadow-2xs">
+            <div className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-400/50 flex items-center justify-center text-amber-800 shrink-0 shadow-2xs backdrop-blur-xs">
               <Bot className="w-3.5 h-3.5 animate-pulse" />
             </div>
-            <div className="bg-white border border-stone-200 rounded-2xl px-4 py-3 text-stone-700 text-xs flex items-center gap-2 shadow-2xs">
+            <div className="bg-white/80 backdrop-blur-md border border-white/90 rounded-2xl px-4 py-3 text-stone-700 text-xs flex items-center gap-2 shadow-2xs">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-bounce" />
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-bounce [animation-delay:0.2s]" />
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-bounce [animation-delay:0.4s]" />
@@ -672,7 +675,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             scrollToBottom(true);
           }}
           aria-label="Scroll to newest messages"
-          className="absolute bottom-20 right-6 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white hover:bg-stone-50 active:bg-stone-100 text-amber-900 border border-amber-300 text-xs font-semibold shadow-md backdrop-blur-md transition-all cursor-pointer animate-in fade-in slide-in-from-bottom-2 duration-150"
+          className="absolute bottom-20 right-6 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/90 hover:bg-white text-amber-900 border border-amber-300/80 text-xs font-semibold shadow-md backdrop-blur-md transition-all cursor-pointer animate-in fade-in slide-in-from-bottom-2 duration-150"
         >
           <ChevronDown className="w-3.5 h-3.5 text-amber-600" />
           <span>Latest</span>
@@ -681,73 +684,71 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
       {/* Liquid Input Area */}
       <div className="relative">
-        <div className="h-[1.5px] w-full bg-gradient-to-r from-amber-400/20 via-amber-400/80 to-amber-400/20 shadow-2xs" />
-        <form onSubmit={handleSubmit} className="p-3 bg-white/70 backdrop-blur-xl border-t border-stone-200/60 relative">
-        <div className="relative flex items-center">
-          <input
-            type="text"
-            value={inputText}
-            maxLength={2000}
-            onChange={(e) => setInputText(e.target.value)}
-            placeholder={
-              isListening
-                ? "Listening... speak your request"
-                : "Type or speak a request (e.g., 'split $80 dinner with Alex', 'add $1200 rent on 1st')..."
-            }
-            className={`w-full bg-white border rounded-xl pl-4 pr-32 py-3 text-sm text-zinc-900 placeholder-stone-400 focus:outline-hidden transition-all shadow-2xs ${
-              isListening
-                ? "border-rose-400 ring-2 ring-rose-400/30 animate-pulse bg-rose-50/30 placeholder-rose-400"
-                : "border-stone-300 focus:ring-2 focus:ring-amber-400/40 focus:border-amber-500 focus:shadow-[0_0_20px_rgba(245,158,11,0.2)]"
-            }`}
-          />
-
-          <div className="absolute right-2 flex items-center gap-1.5">
-            {/* Voice Input (Web Speech API) */}
-            <button
-              type="button"
-              title={
-                !speechSupported
-                  ? "Speech recognition is not supported in this browser"
-                  : isListening
-                  ? "Stop listening"
-                  : "Voice input"
-              }
-              onClick={toggleVoiceInput}
-              disabled={!speechSupported}
-              className={`p-1.5 rounded-lg transition-all cursor-pointer relative focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400 ${
+        <div className="h-[1px] w-full bg-gradient-to-r from-amber-400/10 via-amber-400/60 to-amber-400/10" />
+        <form onSubmit={handleSubmit} className="p-3 bg-white/35 backdrop-blur-md border-t border-white/50 relative">
+          <div className="relative flex items-center rounded-[30px] bg-white/75 border border-white/90 shadow-[inset_0_1px_3px_rgba(0,0,0,0.06),inset_0_-1px_1px_rgba(255,255,255,0.95),0_2px_8px_rgba(0,0,0,0.03)] p-1 transition-all focus-within:border-amber-400/80 focus-within:ring-2 focus-within:ring-amber-400/25">
+            <input
+              type="text"
+              value={inputText}
+              maxLength={2000}
+              onChange={(e) => setInputText(e.target.value)}
+              placeholder={
                 isListening
-                  ? "bg-rose-50 text-rose-700 border border-rose-300 shadow-2xs"
-                  : "text-stone-400 hover:text-amber-800 hover:bg-stone-100 active:bg-stone-200 disabled:opacity-40"
+                  ? "Listening... speak your request"
+                  : "Type or speak a request (e.g., 'split $80 dinner with Alex', 'add $1200 rent on 1st')..."
+              }
+              className={`w-full bg-transparent border-0 pl-3.5 pr-2 py-2 text-xs md:text-sm text-zinc-900 placeholder-stone-400 focus:outline-hidden transition-all ${
+                isListening ? "placeholder-rose-500 font-medium" : ""
               }`}
-            >
-              {isListening && (
-                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-rose-500 animate-ping" />
-              )}
-              <Mic className={`w-4 h-4 ${isListening ? "animate-pulse text-rose-500" : ""}`} />
-            </button>
+            />
 
-            {/* Upload Receipt / Document Image */}
-            <button
-              type="button"
-              title="Upload receipt or bill image"
-              onClick={() => fileInputRef.current?.click()}
-              className="p-1.5 text-stone-400 hover:text-amber-800 hover:bg-stone-100 active:bg-stone-200 rounded-lg transition-colors cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400"
-            >
-              <Paperclip className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-1 shrink-0 pr-1">
+              {/* Voice Input (Web Speech API) */}
+              <button
+                type="button"
+                title={
+                  !speechSupported
+                    ? "Speech recognition is not supported in this browser"
+                    : isListening
+                    ? "Stop listening"
+                    : "Voice input"
+                }
+                onClick={toggleVoiceInput}
+                disabled={!speechSupported}
+                className={`p-1.5 rounded-full transition-all cursor-pointer relative focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400 ${
+                  isListening
+                    ? "bg-rose-50 text-rose-700 border border-rose-300 shadow-2xs"
+                    : "text-stone-400 hover:text-amber-800 hover:bg-stone-200/50 active:bg-stone-200/80 disabled:opacity-40"
+                }`}
+              >
+                {isListening && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+                )}
+                <Mic className={`w-3.5 h-3.5 ${isListening ? "animate-pulse text-rose-500" : ""}`} />
+              </button>
 
-            {/* Fluid Gold Send Button */}
-            <button
-              type="submit"
-              disabled={!inputText.trim() || isLoading}
-              className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 via-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 active:scale-95 disabled:opacity-40 text-white font-bold rounded-lg transition-all flex items-center gap-1 text-xs shadow-xs cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400"
-            >
-              <span>Send</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
+              {/* Upload Receipt / Document Image */}
+              <button
+                type="button"
+                title="Upload receipt or bill image"
+                onClick={() => fileInputRef.current?.click()}
+                className="p-1.5 text-stone-400 hover:text-amber-800 hover:bg-stone-200/50 active:bg-stone-200/80 rounded-full transition-colors cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400"
+              >
+                <Paperclip className="w-3.5 h-3.5" />
+              </button>
+
+              {/* Fluid Gold Send Button */}
+              <button
+                type="submit"
+                disabled={!inputText.trim() || isLoading}
+                className="h-8 px-3.5 bg-gradient-to-r from-amber-500 via-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 active:scale-95 disabled:opacity-40 text-white font-bold rounded-full transition-all flex items-center gap-1 text-xs shadow-xs cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400"
+              >
+                <span>Send</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
-        </div>
-      </form>
+        </form>
       </div>
     </LiquidGlassContainer>
   );

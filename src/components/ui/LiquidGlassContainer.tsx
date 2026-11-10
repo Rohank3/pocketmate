@@ -540,8 +540,8 @@ function LiquidGlassMotion({
       pointer.targetX = pt.x;
       pointer.targetY = pt.y;
 
-      // Softly dim pointer lens when over inputs/table cells to avoid visual obstruction
-      pointer.targetVisible = showCursor ? (isOverControl ? 0.08 : 0.85) : 0;
+      // Softly adjust pointer lens when over inputs/table cells while keeping the lens bead visibly floating
+      pointer.targetVisible = showCursor ? (isOverControl ? 0.45 : 0.95) : 0;
       hasPointer = true;
       wake();
     }
@@ -651,15 +651,16 @@ function LiquidGlassMotion({
       </svg>
       <div
         ref={cursorRef}
-        className="g-liquid-lens pointer-events-none absolute select-none opacity-0 z-20 rounded-full"
+        className="g-liquid-lens pointer-events-none absolute select-none opacity-0 z-30 rounded-full transition-opacity duration-150"
         style={{
           width: diameter,
           height: diameter,
           inset: "0 auto auto 0",
           background:
-            "radial-gradient(ellipse at 28% 20%, rgba(255, 255, 255, 0.45), transparent 45%), radial-gradient(ellipse at 72% 85%, rgba(245, 158, 11, 0.15), transparent 45%)",
-          border: "1px solid rgba(255, 255, 255, 0.8)",
-          boxShadow: "inset 0 1px 2px #ffffff, 0 4px 12px rgba(24, 24, 27, 0.1)",
+            "radial-gradient(ellipse at 28% 20%, rgba(255, 255, 255, 0.75), transparent 40%), radial-gradient(ellipse at 72% 85%, rgba(245, 158, 11, 0.22), transparent 45%)",
+          border: "1px solid rgba(255, 255, 255, 0.85)",
+          boxShadow:
+            "inset 0 1.5px 2px #ffffff, inset 0 -1px 1.5px rgba(24, 24, 27, 0.15), 0 4px 14px rgba(24, 24, 27, 0.12)",
           backdropFilter: "blur(2px) saturate(1.4)",
           WebkitBackdropFilter: "blur(2px) saturate(1.4)",
         }}
@@ -733,10 +734,10 @@ export const LiquidGlassContainer: React.FC<LiquidGlassContainerProps> = ({
         className="g-liquid-material absolute inset-0 pointer-events-none transition-shadow duration-300"
         style={{
           borderRadius,
-          background: `linear-gradient(145deg, rgba(255, 255, 255, 0.25), transparent 36%, rgba(255, 255, 255, 0.05) 67%, rgba(255, 255, 255, 0.15)), color-mix(in srgb, ${tint} calc(${opacity} * 100%), transparent)`,
+          background: `linear-gradient(145deg, rgba(255, 255, 255, 0.35), transparent 36%, rgba(255, 255, 255, 0.05) 67%, rgba(255, 255, 255, 0.18)), color-mix(in srgb, ${tint} calc(${opacity} * 100%), transparent)`,
           backdropFilter: `blur(var(--glass-blur)) saturate(var(--glass-saturation)) var(--glass-refraction, blur(0px))`,
           WebkitBackdropFilter: `blur(var(--glass-blur)) saturate(var(--glass-saturation))`,
-          boxShadow: `inset 0 1px 1.5px rgba(255, 255, 255, calc(${edge} * 0.95)), inset 1px 0 2px rgba(255, 255, 255, calc(${edge} * 0.3)), inset -1px -1px 2px rgba(255, 255, 255, calc(${edge} * 0.5)), 0 16px 40px -10px rgba(24, 24, 27, 0.07), 0 0 30px rgba(245, 158, 11, 0.08)`,
+          boxShadow: `inset 0 1px 2px rgba(255, 255, 255, calc(${edge} * 0.95)), inset 1px 0 2px rgba(255, 255, 255, calc(${edge} * 0.35)), inset -1px -1px 2px rgba(255, 255, 255, calc(${edge} * 0.55)), inset 0 -4px 8px rgba(13, 18, 15, 0.05), 0 16px 36px -12px rgba(24, 24, 27, 0.08), 0 0 24px rgba(245, 158, 11, 0.05)`,
           clipPath: `url(#${clipId})`,
         }}
         aria-hidden="true"
