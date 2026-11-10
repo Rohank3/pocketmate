@@ -21,6 +21,7 @@ import {
 import ReactMarkdown from "react-markdown";
 import { ActionConfirmCard, ActionCardData } from "../cards/ActionConfirmCard";
 import type { ChatThreadItem } from "@/types/chat";
+import { LiquidWave } from "@/components/ui/LiquidWave";
 
 export interface ChatMessageItem {
   id: string;
@@ -272,9 +273,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   };
 
   return (
-    <div className="relative flex flex-col h-full bg-white/95 border border-stone-200/90 rounded-2xl overflow-hidden shadow-sm">
-      {/* Prominent Liquid Flow Animation */}
-      <div className="absolute top-0 left-0 right-0 z-20 liquid-bar" />
+    <div className="relative flex flex-col h-full glass-panel rounded-2xl overflow-hidden shadow-md">
+      {/* Living Liquid Wave Header Animation */}
+      <div className="absolute top-0 left-0 right-0 z-20 opacity-95">
+        <LiquidWave height={20} />
+      </div>
 
       {/* Hidden file picker for real receipt audits */}
       <input
@@ -394,9 +397,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           <div className="flex-1 overflow-y-auto p-3 space-y-2">
             {threads.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-48 text-center p-4">
-                <Clock className="w-8 h-8 text-zinc-600 mb-2" />
-                <p className="text-xs font-medium text-zinc-300">No saved conversations yet</p>
-                <p className="text-[11px] text-zinc-500 mt-1 max-w-xs">
+                <Clock className="w-8 h-8 text-amber-600/50 mb-2" />
+                <p className="text-xs font-semibold text-zinc-800">No saved conversations yet</p>
+                <p className="text-[11px] text-stone-500 mt-1 max-w-xs">
                   Your chat threads and financial queries will automatically appear here.
                 </p>
                 {onNewChat && (
@@ -406,7 +409,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                       onNewChat();
                       setIsHistoryOpen(false);
                     }}
-                    className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 text-xs font-semibold border border-emerald-500/30 transition-colors cursor-pointer"
+                    className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Start First Chat</span>
@@ -430,8 +433,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                     }}
                     className={`group relative p-3 rounded-xl border transition-all cursor-pointer ${
                       isActive
-                        ? "bg-emerald-950/30 border-emerald-500/40 shadow-sm"
-                        : "bg-zinc-900/60 hover:bg-zinc-900 active:bg-zinc-850 border-zinc-800/80 hover:border-zinc-700"
+                        ? "bg-amber-500/10 border-amber-300 shadow-xs ring-1 ring-amber-300/60"
+                        : "bg-white/80 hover:bg-amber-50/50 active:bg-amber-100/40 border-stone-200/90 hover:border-amber-300/70"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -453,13 +456,13 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                                   void handleSaveRename(thread.id);
                                 }
                               }}
-                              className="w-full bg-zinc-950 border border-emerald-500/50 rounded-lg px-2 py-1 text-xs text-zinc-100 focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
+                              className="w-full bg-white border border-amber-400 rounded-lg px-2.5 py-1 text-xs text-zinc-900 focus:outline-hidden focus:ring-1 focus:ring-amber-500 font-medium"
                             />
                             <button
                               type="button"
                               onClick={(e) => void handleSaveRename(thread.id, e)}
                               aria-label="Save title"
-                              className="p-1 rounded bg-emerald-600 hover:bg-emerald-500 text-zinc-950 cursor-pointer"
+                              className="p-1 rounded bg-amber-500 hover:bg-amber-600 text-white cursor-pointer shadow-2xs"
                             >
                               <Check className="w-3.5 h-3.5" />
                             </button>
@@ -470,7 +473,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                                 setEditingThreadId(null);
                               }}
                               aria-label="Cancel rename"
-                              className="p-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 cursor-pointer"
+                              className="p-1 rounded bg-stone-100 hover:bg-stone-200 text-stone-600 cursor-pointer"
                             >
                               <X className="w-3.5 h-3.5" />
                             </button>
@@ -478,14 +481,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                         ) : (
                           <div className="flex items-center gap-2">
                             <p
-                              className={`text-xs font-semibold truncate ${
-                                isActive ? "text-emerald-300" : "text-zinc-200"
+                              className={`text-xs font-bold truncate ${
+                                isActive ? "text-amber-950" : "text-zinc-800"
                               }`}
                             >
                               {thread.title}
                             </p>
                             {isActive && (
-                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-medium">
+                              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500/15 text-amber-900 border border-amber-300/80 font-bold">
                                 Active
                               </span>
                             )}
@@ -493,12 +496,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                         )}
 
                         {thread.lastMessageSnippet && !isEditing && (
-                          <p className="text-[11px] text-zinc-400 truncate mt-0.5">
+                          <p className="text-[11px] text-stone-500 truncate mt-0.5">
                             {thread.lastMessageSnippet}
                           </p>
                         )}
 
-                        <div className="flex items-center gap-2 mt-1.5 text-[10px] text-zinc-500">
+                        <div className="flex items-center gap-2 mt-1.5 text-[10px] text-stone-400 font-medium">
                           <span>{thread.messageCount} msg{thread.messageCount === 1 ? "" : "s"}</span>
                           <span>•</span>
                           <span>{formatRelativeTime(thread.updatedAt)}</span>
@@ -516,7 +519,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                               type="button"
                               onClick={(e) => handleStartRename(thread, e)}
                               aria-label={`Rename ${thread.title}`}
-                              className="p-1 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 active:bg-zinc-700 rounded transition-colors cursor-pointer"
+                              className="p-1 text-stone-400 hover:text-amber-800 hover:bg-amber-50 active:bg-amber-100 rounded transition-colors cursor-pointer"
                             >
                               <Pencil className="w-3.5 h-3.5" />
                             </button>
@@ -528,7 +531,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                               disabled={isDeleting}
                               onClick={(e) => void handleDeleteClick(thread.id, e)}
                               aria-label={`Delete ${thread.title}`}
-                              className="p-1 text-zinc-400 hover:text-rose-400 hover:bg-zinc-800 active:bg-zinc-700 rounded transition-colors cursor-pointer disabled:opacity-40"
+                              className="p-1 text-stone-400 hover:text-rose-600 hover:bg-rose-50 active:bg-rose-100 rounded transition-colors cursor-pointer disabled:opacity-40"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -548,7 +551,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       <div
         ref={feedContainerRef}
         onScroll={handleFeedScroll}
-        className="flex-1 p-3 sm:p-4 overflow-y-auto space-y-4 relative bg-stone-50/30"
+        className="flex-1 p-3 sm:p-4 overflow-y-auto space-y-4 relative bg-white/40 backdrop-blur-md"
       >
         {messages.map((m) => (
           <div
@@ -669,8 +672,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
       {/* Fluid Liquid Input Area */}
       <div className="relative">
-        <div className="h-[2px] w-full liquid-stream opacity-80" />
-        <form onSubmit={handleSubmit} className="p-3 bg-stone-50/90 backdrop-blur-xl relative">
+        <div className="h-[2px] w-full liquid-stream opacity-90 shadow-2xs" />
+        <form onSubmit={handleSubmit} className="p-3 bg-white/70 backdrop-blur-xl border-t border-stone-200/60 relative">
         <div className="relative flex items-center">
           <input
             type="text"
