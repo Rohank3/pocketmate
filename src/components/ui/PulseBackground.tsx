@@ -84,8 +84,8 @@ export const PulseBackground: React.FC<PulseBackgroundProps> = ({
     : "radial-gradient(75% 60% at 50% 35%, transparent 55%, rgba(203, 213, 225, 0.28) 92%)";
 
   const stripeBorderClass = isDark
-    ? "border-sky-400/[0.12]"
-    : "border-slate-900/[0.035]";
+    ? ""
+    : "border-r border-slate-900/[0.035]";
 
   return (
     <div
@@ -106,7 +106,7 @@ export const PulseBackground: React.FC<PulseBackgroundProps> = ({
         {Array.from({ length: n }, (_, i) => (
           <div
             key={i}
-            className={`relative flex-1 h-full overflow-hidden border-r ${stripeBorderClass}`}
+            className={`relative flex-1 h-full overflow-hidden ${stripeBorderClass}`}
           >
             <div
               className={`absolute left-0 right-0 h-3/5 -top-[60%] will-change-transform ${
