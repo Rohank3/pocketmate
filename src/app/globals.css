@@ -81,9 +81,9 @@
   --glass-tint: rgba(235, 243, 255, 0.28);
   --glass-highlight: #ffffff;
   --glass-edge: 0.94;
-  --glass-dropdown-surface: rgba(255, 255, 255, 0.62);
-  --glass-subpanel: rgba(255, 255, 255, 0.58);
-  --glass-subpanel-hover: rgba(255, 255, 255, 0.78);
+  --glass-dropdown-surface: rgba(255, 255, 255, 0.80);
+  --glass-subpanel: rgba(255, 255, 255, 0.72);
+  --glass-subpanel-hover: rgba(255, 255, 255, 0.90);
 
   --scrollbar-track: #f1f5f9;
   --scrollbar-thumb: #94a3b8;
@@ -165,9 +165,9 @@
     --glass-tint: rgba(56, 189, 248, 0.08);
     --glass-highlight: rgba(186, 230, 253, 0.68);
     --glass-edge: 0.48;
-    --glass-dropdown-surface: rgba(15, 23, 42, 0.66);
-    --glass-subpanel: rgba(30, 41, 59, 0.52);
-    --glass-subpanel-hover: rgba(30, 41, 59, 0.72);
+    --glass-dropdown-surface: rgba(15, 23, 42, 0.82);
+    --glass-subpanel: rgba(30, 41, 59, 0.66);
+    --glass-subpanel-hover: rgba(30, 41, 59, 0.84);
 
     --scrollbar-track: #0f172a;
     --scrollbar-thumb: #475569;
@@ -245,9 +245,9 @@ html[data-theme="dark"] {
   --glass-tint: rgba(56, 189, 248, 0.08);
   --glass-highlight: rgba(186, 230, 253, 0.68);
   --glass-edge: 0.48;
-  --glass-dropdown-surface: rgba(15, 23, 42, 0.66);
-  --glass-subpanel: rgba(30, 41, 59, 0.52);
-  --glass-subpanel-hover: rgba(30, 41, 59, 0.72);
+  --glass-dropdown-surface: rgba(15, 23, 42, 0.82);
+  --glass-subpanel: rgba(30, 41, 59, 0.66);
+  --glass-subpanel-hover: rgba(30, 41, 59, 0.84);
 
   --scrollbar-track: #0f172a;
   --scrollbar-thumb: #475569;
@@ -441,8 +441,8 @@ html[data-theme="dark"] .theme-icon-moon {
 .glass-dropdown {
   isolation: isolate;
   background: var(--glass-dropdown-surface);
-  backdrop-filter: blur(34px) saturate(190%);
-  -webkit-backdrop-filter: blur(34px) saturate(190%);
+  backdrop-filter: blur(36px) saturate(185%);
+  -webkit-backdrop-filter: blur(36px) saturate(185%);
   border: 1px solid var(--border-dropdown);
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) calc(var(--glass-edge) * 100%), transparent),
