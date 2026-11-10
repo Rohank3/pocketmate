@@ -1180,24 +1180,6 @@ export default function Home() {
 
       const data = await res.json();
 
-      // Register invoices in SandboxStore for cross-account synchronization
-      if (cardData.recipients && cardData.recipients.length > 0) {
-        cardData.recipients.forEach((r) => {
-          SandboxStore.createInvoice({
-            senderId: currentUser?.id || `usr_${Date.now()}`,
-            senderName: currentUser?.name || currentUser?.email?.split("@")[0].replace(/[._]/g, " ") || "Host",
-            senderEmail: currentUser?.email || "",
-            recipientId: `usr_${r.email.replace(/[^a-z0-9]/gi, "_")}`,
-            recipientName: r.name || "Recipient",
-            recipientEmail: r.email,
-            amount: r.amount,
-            currency: "USD",
-            description: r.description || "Shared Expense Split",
-          });
-        });
-        setInvoices(SandboxStore.getInvoices());
-      }
-
       setMessages((prev) => [
         ...prev,
         {
