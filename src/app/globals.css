@@ -81,9 +81,9 @@
   --glass-tint: rgba(235, 243, 255, 0.28);
   --glass-highlight: #ffffff;
   --glass-edge: 0.94;
-  --glass-dropdown-surface: rgba(255, 255, 255, 0.80);
-  --glass-subpanel: rgba(255, 255, 255, 0.72);
-  --glass-subpanel-hover: rgba(255, 255, 255, 0.90);
+  --glass-dropdown-surface: rgba(255, 255, 255, 0.94);
+  --glass-subpanel: rgba(248, 250, 252, 0.92);
+  --glass-subpanel-hover: rgba(241, 245, 249, 0.98);
 
   --scrollbar-track: #f1f5f9;
   --scrollbar-thumb: #94a3b8;
@@ -165,9 +165,9 @@
     --glass-tint: rgba(56, 189, 248, 0.08);
     --glass-highlight: rgba(186, 230, 253, 0.68);
     --glass-edge: 0.48;
-    --glass-dropdown-surface: rgba(15, 23, 42, 0.82);
-    --glass-subpanel: rgba(30, 41, 59, 0.66);
-    --glass-subpanel-hover: rgba(30, 41, 59, 0.84);
+    --glass-dropdown-surface: rgba(11, 17, 30, 0.94);
+    --glass-subpanel: rgba(22, 31, 49, 0.90);
+    --glass-subpanel-hover: rgba(30, 41, 59, 0.98);
 
     --scrollbar-track: #0f172a;
     --scrollbar-thumb: #475569;
@@ -245,9 +245,9 @@ html[data-theme="dark"] {
   --glass-tint: rgba(56, 189, 248, 0.08);
   --glass-highlight: rgba(186, 230, 253, 0.68);
   --glass-edge: 0.48;
-  --glass-dropdown-surface: rgba(15, 23, 42, 0.82);
-  --glass-subpanel: rgba(30, 41, 59, 0.66);
-  --glass-subpanel-hover: rgba(30, 41, 59, 0.84);
+  --glass-dropdown-surface: rgba(11, 17, 30, 0.94);
+  --glass-subpanel: rgba(22, 31, 49, 0.90);
+  --glass-subpanel-hover: rgba(30, 41, 59, 0.98);
 
   --scrollbar-track: #0f172a;
   --scrollbar-thumb: #475569;
