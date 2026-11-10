@@ -1067,7 +1067,7 @@ export default function Home() {
       {/* Living Ambient Pulse Stripe Background in Selected Color Theme */}
       <PulseBackground palette={theme} />
 
-      <main className="relative z-10 min-h-screen text-[var(--fg-primary)] flex flex-col p-3 md:p-6 lg:p-8">
+      <main className="relative z-10 min-h-screen overflow-x-clip text-[var(--fg-primary)] flex flex-col p-3 md:p-6 lg:p-8">
         {/* Top Navigation & Brand Header */}
         <header className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-[var(--border-subtle)]">
           <div>
@@ -1171,7 +1171,7 @@ export default function Home() {
         </div>
 
         {/* Main Split-View Workspace */}
-        <div className="relative z-10 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5 min-h-[580px]">
+        <div className="relative z-10 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-5 min-h-[580px]">
           {/* Left Column: Conversational Agent (5 Cols) */}
           <div className="lg:col-span-5 flex flex-col min-h-0 h-[640px] lg:h-[740px]">
             <ChatPanel

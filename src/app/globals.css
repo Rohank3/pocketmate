@@ -214,12 +214,16 @@ html[data-theme="dark"] {
   accent-color: var(--accent);
 }
 
+html,
+body {
+  overflow-x: clip;
+}
+
 body {
   background: var(--bg-canvas);
   color: var(--fg-primary);
   font-family: var(--font-geist-sans), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   min-height: 100vh;
-  overflow-x: hidden;
   transition: background-color 0.25s ease, color 0.25s ease;
 }
 
