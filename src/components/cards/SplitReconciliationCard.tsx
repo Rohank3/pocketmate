@@ -200,12 +200,12 @@ export const SplitReconciliationCard: React.FC<SplitReconciliationCardProps> = (
 
   if (completedMessage) {
     return (
-      <div className="my-3 p-4 rounded-xl border border-emerald-300 bg-emerald-50 text-xs text-emerald-900 flex items-center justify-between shadow-sm animate-in fade-in">
+      <div className="my-3 p-4 rounded-xl border border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-xs text-[var(--status-success-text)] flex items-center justify-between animate-in fade-in">
         <div className="flex items-center gap-2.5">
-          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+          <CheckCircle2 className="w-5 h-5 shrink-0" />
           <div>
-            <h4 className="font-semibold text-emerald-950">Rebalanced Split Executed</h4>
-            <p className="text-emerald-800 text-[11px] mt-0.5">{completedMessage}</p>
+            <h4 className="font-semibold">Split Rebalanced</h4>
+            <p className="text-[11px] opacity-90 mt-0.5">{completedMessage}</p>
           </div>
         </div>
       </div>
@@ -217,45 +217,40 @@ export const SplitReconciliationCard: React.FC<SplitReconciliationCardProps> = (
     const totalRefund = refundConfirmQueue.reduce((s, r) => s + r.amount, 0);
 
     return (
-      <div className="my-3 p-4 bg-white border border-amber-300/80 rounded-xl shadow-xl space-y-3 animate-in fade-in">
-        <div className="flex items-center justify-between pb-2 border-b border-stone-200">
+      <div className="my-3 p-4 bg-[var(--surface-card)] border border-[var(--accent-border)] rounded-xl shadow-lg space-y-3 animate-in fade-in text-[var(--fg-primary)]">
+        <div className="flex items-center justify-between pb-2 border-b border-[var(--border-subtle)]">
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-            <h4 className="text-xs font-semibold text-zinc-900 uppercase tracking-wider">
-              Authorize Refund Payouts (PayPal Payouts API)
+            <div className="w-2 h-2 rounded-full bg-[#0070ba] animate-pulse" />
+            <h4 className="text-xs font-semibold uppercase tracking-wider">
+              Refund Payouts
             </h4>
           </div>
-          <span className="text-xs font-mono font-bold text-amber-700">
-            ${totalRefund.toFixed(2)} Total Refund
+          <span className="text-xs font-mono tabular-nums font-bold text-[var(--accent-text)]">
+            ${totalRefund.toFixed(2)} Refund
           </span>
         </div>
-
-        <p className="text-xs text-zinc-600">
-          Rebalancing reduced the share for the following participant(s) below what they already paid.
-          Confirm to transfer refunds directly to their PayPal accounts:
-        </p>
 
         <div className="space-y-2">
           {refundConfirmQueue.map((ref, idx) => (
             <div
               key={idx}
-              className="p-2.5 rounded-lg bg-stone-50 border border-stone-200/90 flex items-center justify-between text-xs"
+              className="p-2.5 rounded-lg theme-card-inset border flex items-center justify-between text-xs"
             >
               <div>
-                <span className="font-semibold text-zinc-900">{ref.name}</span>
-                <p className="text-[11px] text-zinc-500">{ref.reason}</p>
+                <span className="font-semibold text-[var(--fg-primary)]">{ref.name}</span>
+                <p className="text-[11px] text-[var(--fg-muted)]">{ref.reason}</p>
               </div>
-              <span className="font-mono font-bold text-amber-700">${ref.amount.toFixed(2)}</span>
+              <span className="font-mono tabular-nums font-bold text-[var(--accent-text)]">${ref.amount.toFixed(2)}</span>
             </div>
           ))}
         </div>
 
-        <div className="pt-2 border-t border-stone-200 flex items-center justify-end gap-2">
+        <div className="pt-2 border-t border-[var(--border-subtle)] flex items-center justify-end gap-2">
           <button
             type="button"
             onClick={() => setRefundConfirmQueue(null)}
             disabled={loading}
-            className="px-3 py-1.5 text-xs text-zinc-500 hover:text-zinc-800 cursor-pointer transition-colors"
+            className="px-3 py-1.5 text-xs text-[var(--fg-muted)] hover:text-[var(--fg-primary)] cursor-pointer transition-colors"
           >
             Cancel
           </button>
@@ -263,7 +258,7 @@ export const SplitReconciliationCard: React.FC<SplitReconciliationCardProps> = (
             type="button"
             onClick={handleConfirmRefundPayouts}
             disabled={loading}
-            className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 transition-all shadow-md shadow-amber-500/20 flex items-center gap-1.5 cursor-pointer"
+            className="px-4 py-1.5 text-xs font-semibold rounded-lg theme-btn-primary transition-all flex items-center gap-1.5 cursor-pointer"
           >
             {loading ? (
               <>
@@ -273,7 +268,7 @@ export const SplitReconciliationCard: React.FC<SplitReconciliationCardProps> = (
             ) : (
               <>
                 <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Confirm & Transfer Refunds (${totalRefund.toFixed(2)})</span>
+                <span>Send Refunds (${totalRefund.toFixed(2)})</span>
               </>
             )}
           </button>
@@ -283,24 +278,24 @@ export const SplitReconciliationCard: React.FC<SplitReconciliationCardProps> = (
   }
 
   return (
-    <div className="my-3 p-4 bg-white/80 backdrop-blur-md border border-white/90 hover:border-amber-300/80 rounded-2xl shadow-[0_4px_16px_rgba(0,0,0,0.04),inset_0_1px_1.5px_rgba(255,255,255,0.95)] hover:shadow-[0_8px_24px_rgba(245,158,11,0.12)] transition-all duration-300 cursor-default">
+    <div className="my-3 p-4 bg-[var(--surface-card)] backdrop-blur-md border border-[var(--border-subtle)] hover:border-[var(--accent-border)] rounded-2xl shadow-sm transition-all duration-300 cursor-default text-[var(--fg-primary)]">
       {/* Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-stone-200">
+      <div className="flex items-center justify-between pb-3 border-b border-[var(--border-subtle)]">
         <div className="flex items-center gap-2">
-          <RotateCcw className="w-4 h-4 text-amber-600" />
+          <RotateCcw className="w-4 h-4 text-[var(--accent-text)]" />
           <div>
-            <h4 className="text-xs font-semibold text-zinc-900 uppercase tracking-wider">
-              Simultaneous Split Rebalancing
+            <h4 className="text-xs font-semibold text-[var(--fg-primary)] uppercase tracking-wider">
+              Split Rebalancing
             </h4>
-            <p className="text-[11px] text-zinc-500">
-              {merchantName} • ${totalBill.toFixed(2)} Total Bill
+            <p className="text-[11px] text-[var(--fg-muted)]">
+              {merchantName} • ${totalBill.toFixed(2)} Total
             </p>
           </div>
         </div>
         <button
           type="button"
           onClick={handleAutoRebalance}
-          className="text-[11px] px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg font-medium transition-colors cursor-pointer"
+          className="text-[11px] px-2.5 py-1 bg-[var(--status-info-bg)] hover:bg-[var(--accent-subtle-hover)] text-[var(--status-info-text)] border border-[var(--status-info-border)] rounded-lg font-medium transition-colors cursor-pointer"
         >
           Auto-Rebalance
         </button>
@@ -316,22 +311,22 @@ export const SplitReconciliationCard: React.FC<SplitReconciliationCardProps> = (
           return (
             <div
               key={p.id}
-              className="p-3 rounded-xl bg-stone-50 border border-stone-200/80 text-xs space-y-1.5"
+              className="p-3 rounded-xl theme-card-inset border text-xs space-y-1.5"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 min-w-0">
                   <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 ${
+                    className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 border ${
                       p.isHost
-                        ? "bg-amber-500/15 text-amber-900 border border-amber-300/80"
-                        : "bg-stone-200 text-stone-700 border border-stone-300"
+                        ? "bg-[var(--accent-subtle)] text-[var(--accent-text)] border-[var(--accent-border)]"
+                        : "bg-[var(--surface-subtle)] text-[var(--fg-secondary)] border-[var(--border-strong)]"
                     }`}
                   >
                     {p.name.charAt(0).toUpperCase()}
                   </div>
                   <div className="min-w-0">
-                    <span className="font-semibold text-zinc-900 truncate">{p.name}</span>
-                    <span className="text-[10px] text-zinc-500 block truncate font-mono">
+                    <span className="font-semibold text-[var(--fg-primary)] truncate">{p.name}</span>
+                    <span className="text-[10px] text-[var(--fg-muted)] block truncate font-mono">
                       {p.email || (p.isHost ? "Host" : "No email")}
                     </span>
                   </div>
@@ -340,14 +335,14 @@ export const SplitReconciliationCard: React.FC<SplitReconciliationCardProps> = (
                 {/* Target Share Editable Input */}
                 <div className="flex items-center gap-1.5 shrink-0">
                   <div className="relative">
-                    <DollarSign className="w-3 h-3 text-zinc-400 absolute left-2 top-2" />
+                    <DollarSign className="w-3 h-3 text-[var(--fg-muted)] absolute left-2 top-2" />
                     <input
                       type="number"
                       step="0.01"
                       min="0"
                       value={p.newShare}
                       onChange={(e) => handleShareChange(p.id, e.target.value)}
-                      className="w-20 bg-white border border-stone-200 hover:border-stone-400 focus:border-amber-500 rounded-lg pl-5 pr-2 py-1 text-xs text-zinc-900 font-mono outline-none text-right"
+                      className="w-20 bg-[var(--surface-card)] border border-[var(--border-strong)] focus:border-[#0070ba] rounded-lg pl-5 pr-2 py-1 text-xs text-[var(--fg-primary)] font-mono tabular-nums outline-none text-right"
                     />
                   </div>
 
@@ -356,10 +351,10 @@ export const SplitReconciliationCard: React.FC<SplitReconciliationCardProps> = (
                     onClick={() => handleToggleLock(p.id)}
                     className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
                       p.isLocked
-                        ? "bg-amber-500/15 text-amber-900 border-amber-400/80"
-                        : "bg-white text-stone-400 border-stone-200 hover:text-stone-700"
+                        ? "bg-[var(--accent-subtle)] text-[var(--accent-text)] border-[var(--accent-border)]"
+                        : "theme-btn-secondary"
                     }`}
-                    title={p.isLocked ? "Share locked" : "Click to lock share"}
+                    title={p.isLocked ? "Share locked" : "Lock share"}
                   >
                     {p.isLocked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
                   </button>
@@ -367,23 +362,23 @@ export const SplitReconciliationCard: React.FC<SplitReconciliationCardProps> = (
               </div>
 
               {/* Status & Computed Delta Indicator */}
-              <div className="pt-1 border-t border-stone-200/70 flex flex-wrap items-center justify-between text-[11px] gap-2">
+              <div className="pt-1 border-t border-[var(--border-subtle)] flex flex-wrap items-center justify-between text-[11px] gap-2">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-zinc-500">Paid:</span>
+                  <span className="text-[var(--fg-muted)]">Paid:</span>
                   <span
-                    className={`font-mono font-medium ${
-                      p.amountPaid > 0 ? "text-emerald-700" : "text-zinc-500"
+                    className={`font-mono tabular-nums font-medium ${
+                      p.amountPaid > 0 ? "text-[var(--status-success-text)]" : "text-[var(--fg-muted)]"
                     }`}
                   >
                     ${p.amountPaid.toFixed(2)}
                   </span>
                   {isDeclined && (
-                    <span className="px-1.5 py-0.2 rounded bg-rose-50 text-rose-700 border border-rose-200 text-[10px]">
+                    <span className="px-1.5 py-0.2 rounded bg-[var(--status-danger-bg)] text-[var(--status-danger-text)] border border-[var(--status-danger-border)] text-[10px]">
                       Declined
                     </span>
                   )}
                   {isPartial && (
-                    <span className="px-1.5 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[10px]">
+                    <span className="px-1.5 py-0.2 rounded bg-[var(--status-info-bg)] text-[var(--status-info-text)] border border-[var(--status-info-border)] text-[10px]">
                       Adjusted
                     </span>
                   )}
@@ -391,30 +386,30 @@ export const SplitReconciliationCard: React.FC<SplitReconciliationCardProps> = (
 
                 {/* Delta Action Indicator */}
                 {!p.isHost && (
-                  <div className="font-mono text-[11px]">
+                  <div className="font-mono tabular-nums text-[11px]">
                     {delta > 0 && p.amountPaid > 0 ? (
-                      <span className="text-amber-800 font-medium">
-                        Supplemental invoice: +${delta.toFixed(2)}
+                      <span className="text-[var(--accent-text)] font-medium">
+                        Supplemental: +${delta.toFixed(2)}
                       </span>
                     ) : delta < 0 ? (
-                      <span className="text-amber-700 font-medium">
-                        Refund owed: -${Math.abs(delta).toFixed(2)}
+                      <span className="text-[var(--accent-text)] font-medium">
+                        Refund: -${Math.abs(delta).toFixed(2)}
                       </span>
                     ) : isDeclined && p.newShare > 0 ? (
-                      <span className="text-amber-800 font-medium">
-                        Reissue invoice: ${p.newShare.toFixed(2)}
+                      <span className="text-[var(--accent-text)] font-medium">
+                        Reissue: ${p.newShare.toFixed(2)}
                       </span>
                     ) : (
-                      <span className="text-emerald-700 font-medium">Settled ($0.00)</span>
+                      <span className="text-[var(--status-success-text)] font-medium">Settled ($0.00)</span>
                     )}
                   </div>
                 )}
               </div>
 
-              {/* Prominent Stated Reason Callout */}
+              {/* Stated Reason Callout */}
               {p.reason && (
-                <div className="p-1.5 rounded-md bg-amber-50 border border-amber-200 text-[10px] text-amber-900">
-                  <span className="font-semibold text-amber-950">Stated Reason: </span>
+                <div className="p-1.5 rounded-md bg-[var(--surface-subtle)] border border-[var(--border-subtle)] text-[10px] text-[var(--fg-secondary)]">
+                  <span className="font-semibold">Reason: </span>
                   <span className="italic">&ldquo;{p.reason}&rdquo;</span>
                 </div>
               )}
@@ -424,33 +419,33 @@ export const SplitReconciliationCard: React.FC<SplitReconciliationCardProps> = (
       </div>
 
       {/* Penny-Balance Validation Bar */}
-      <div className="pt-2 border-t border-stone-200 flex items-center justify-between text-xs font-mono">
-        <span className="text-zinc-500">
-          Allocated: ${allocatedSum.toFixed(2)} of ${totalBill.toFixed(2)}
+      <div className="pt-2 border-t border-[var(--border-subtle)] flex items-center justify-between text-xs font-mono tabular-nums">
+        <span className="text-[var(--fg-muted)]">
+          Allocated: ${allocatedSum.toFixed(2)} / ${totalBill.toFixed(2)}
         </span>
         <span
           className={`font-semibold ${
-            isBalanced ? "text-emerald-700 flex items-center gap-1" : "text-amber-800"
+            isBalanced ? "text-[var(--status-success-text)] flex items-center gap-1" : "text-[var(--accent-text)]"
           }`}
         >
           {isBalanced ? (
             <>
               <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>Balanced (100% matched)</span>
+              <span>Balanced (100%)</span>
             </>
           ) : (
-            `Remaining: ${remaining > 0 ? `+$${remaining.toFixed(2)}` : `-$${Math.abs(remaining).toFixed(2)}`}`
+            `Diff: ${remaining > 0 ? `+$${remaining.toFixed(2)}` : `-$${Math.abs(remaining).toFixed(2)}`}`
           )}
         </span>
       </div>
 
       {/* Confirmation Actions */}
-      <div className="pt-3 border-t border-stone-200 flex items-center justify-end gap-2">
+      <div className="pt-3 border-t border-[var(--border-subtle)] flex items-center justify-end gap-2">
         <button
           type="button"
           onClick={onCancel}
           disabled={loading}
-          className="px-3 py-1.5 text-xs text-zinc-500 hover:text-zinc-800 cursor-pointer transition-colors"
+          className="px-3 py-1.5 text-xs text-[var(--fg-muted)] hover:text-[var(--fg-primary)] cursor-pointer transition-colors"
         >
           Cancel
         </button>
@@ -459,7 +454,7 @@ export const SplitReconciliationCard: React.FC<SplitReconciliationCardProps> = (
           type="button"
           onClick={handleExecuteRebalance}
           disabled={loading || !isBalanced}
-          className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 active:from-amber-600 active:to-amber-700 text-zinc-950 transition-all shadow-md shadow-amber-500/20 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+          className="px-4 py-1.5 text-xs font-semibold rounded-lg theme-btn-primary transition-all disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
         >
           {loading ? (
             <>
@@ -469,7 +464,7 @@ export const SplitReconciliationCard: React.FC<SplitReconciliationCardProps> = (
           ) : (
             <>
               <Send className="w-3.5 h-3.5" />
-              <span>Confirm & Execute Rebalanced Split</span>
+              <span>Execute Rebalance</span>
             </>
           )}
         </button>
