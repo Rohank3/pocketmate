@@ -54,8 +54,8 @@ export const InvoiceActionModal: React.FC<InvoiceActionModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-stone-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white border border-amber-200/90 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150 text-zinc-900">
+    <div className="fixed inset-0 z-[200] bg-stone-900/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+      <div className="bg-white/98 border border-amber-300/80 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150 text-zinc-900">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-stone-200 bg-amber-50/60">
           <div className="flex items-center gap-2">

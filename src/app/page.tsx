@@ -16,6 +16,7 @@ import { SandboxStore } from "@/lib/sandbox/sandboxStore";
 import { UserAccount, InvoiceRecord } from "@/types/sandboxUser";
 import { ScheduledEvent } from "@/components/scheduler/BudgetScheduler";
 import { PulseBackground } from "@/components/ui/PulseBackground";
+import { LiquidWave } from "@/components/ui/LiquidWave";
 import {
   Wallet,
   CreditCard,
@@ -1298,8 +1299,8 @@ export default function Home() {
           </div>
         </header>
 
-        {/* 4 Responsive Actionable Glass Cards with Dropdowns (Isolated in High Z-Index Layer) */}
-        <div className="relative z-40 mb-6">
+        {/* 4 Responsive Actionable Glass Cards with Dropdowns */}
+        <div className="relative z-20 mb-6">
           <FunctionalMetricsRow
             categories={categories}
             transactions={transactions}
@@ -1351,7 +1352,7 @@ export default function Home() {
           {/* Right Column: Transactions Ledger, Visual Insights & Upcoming Due Calendar (7 Cols) */}
           <div className="lg:col-span-7 flex flex-col min-h-0 h-[640px] lg:h-[740px] gap-3.5">
             {/* View Tab Switcher Styled with Frosted White Glass Segmented Control */}
-            <div className="flex items-center justify-between p-1.5 rounded-2xl bg-white/90 border border-stone-200/80 backdrop-blur-xl shadow-xs">
+            <div className="flex items-center justify-between p-1.5 rounded-2xl glass-panel shadow-sm">
               <div className="flex flex-wrap items-center gap-1.5">
                 <button
                   onClick={() => setActiveRightTab("transactions")}
@@ -1410,10 +1411,12 @@ export default function Home() {
                       >
                         {transactions.length} records
                       </span>
-                      {/* Visible Liquid Stream Wave in Ledger Toolbar */}
-                      <div className="hidden sm:flex items-center gap-1.5 pl-1" title="Live financial synchronization stream active">
-                        <div className="h-1.5 w-16 rounded-full liquid-stream shadow-xs" />
-                        <span className="text-[10px] font-mono font-semibold text-amber-800">LIVE SYNC</span>
+                      {/* Living Liquid Wave in Ledger Toolbar */}
+                      <div className="hidden sm:flex items-center gap-2 pl-1" title="Live financial synchronization stream active">
+                        <div className="w-20 h-4 rounded-full overflow-hidden border border-amber-300/80 shadow-2xs opacity-90">
+                          <LiquidWave height={16} />
+                        </div>
+                        <span className="text-[10px] font-mono font-bold text-amber-800">LIVE SYNC</span>
                       </div>
                     </div>
 

@@ -97,7 +97,7 @@ export const UncategorizedReviewModal: React.FC<UncategorizedReviewModalProps> =
   const completedCount = Object.keys(recentlyCategorized).length;
 
   return (
-    <div className="fixed inset-0 z-50 bg-stone-900/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[200] bg-stone-900/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
       <div className="bg-white/98 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl border border-amber-300/80 overflow-hidden relative">
         {/* Prominent Liquid Flow Animation */}
         <div className="absolute top-0 left-0 right-0 z-10 liquid-bar" />

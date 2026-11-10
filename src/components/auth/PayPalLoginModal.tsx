@@ -88,7 +88,7 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="paypal-auth-title"
-      className="fixed inset-0 z-50 bg-stone-900/40 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150"
+      className="fixed inset-0 z-[200] bg-stone-900/50 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150"
       onClick={isBlocking ? undefined : onClose}
     >
       <div

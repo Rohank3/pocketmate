@@ -570,7 +570,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
   const isAnyFlyoutOpen = activeFlyout !== null || pinnedFlyout !== null;
 
   return (
-    <div ref={containerRef} className={`relative mb-6 ${isAnyFlyoutOpen ? "z-[80]" : "z-30"}`}>
+    <div ref={containerRef} className={`relative mb-6 ${isAnyFlyoutOpen ? "z-30" : "z-10"}`}>
       {/* 4 Responsive Actionable Glass Cards */}
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         {/* ========================================================= */}
@@ -582,8 +582,8 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
           onClick={() => handleCardClick(1)}
           className={`relative p-4 rounded-2xl border transition-all duration-200 cursor-pointer select-none backdrop-blur-xl ${
             isFlyoutOpen(1)
-              ? "z-[70] bg-white border-amber-400 shadow-lg ring-1 ring-amber-400/50 -translate-y-0.5"
-              : "bg-white/95 border-stone-200/90 shadow-2xs hover:border-amber-400/60 hover:shadow-md hover:bg-white hover:-translate-y-0.5"
+              ? "z-25 bg-white border-amber-400 shadow-lg ring-1 ring-amber-400/50 -translate-y-0.5"
+              : "glass-panel-interactive border-stone-200/90 shadow-2xs hover:border-amber-400/60 hover:shadow-md hover:bg-white hover:-translate-y-0.5"
           }`}
           role="button"
           tabIndex={0}
@@ -633,7 +633,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
             <div
               onMouseEnter={() => handleMouseEnter(1)}
               onMouseLeave={handleMouseLeave}
-              className="absolute left-0 top-[calc(100%+10px)] w-[calc(100vw-28px)] sm:w-[400px] p-5 rounded-2xl bg-white/98 border border-amber-200/90 shadow-[0_20px_50px_-10px_rgba(0,0,0,0.15),0_10px_20px_-5px_rgba(245,158,11,0.1)] backdrop-blur-2xl z-[100] animate-in fade-in zoom-in-95 duration-150 text-zinc-900"
+              className="absolute left-0 top-[calc(100%+10px)] w-[calc(100vw-28px)] sm:w-[400px] p-5 rounded-2xl glass-dropdown z-40 animate-in fade-in zoom-in-95 duration-150 text-zinc-900"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Flyout Header */}
@@ -745,8 +745,8 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
           onClick={() => handleCardClick(2)}
           className={`relative p-4 rounded-2xl border transition-all duration-200 cursor-pointer select-none backdrop-blur-xl ${
             isFlyoutOpen(2)
-              ? "z-[70] bg-white border-amber-400 shadow-lg ring-1 ring-amber-400/50 -translate-y-0.5"
-              : "bg-white/95 border-stone-200/90 shadow-2xs hover:border-amber-400/60 hover:shadow-md hover:bg-white hover:-translate-y-0.5"
+              ? "z-25 bg-white border-amber-400 shadow-lg ring-1 ring-amber-400/50 -translate-y-0.5"
+              : "glass-panel-interactive border-stone-200/90 shadow-2xs hover:border-amber-400/60 hover:shadow-md hover:bg-white hover:-translate-y-0.5"
           }`}
           role="button"
           tabIndex={0}
@@ -782,7 +782,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
             <div
               onMouseEnter={() => handleMouseEnter(2)}
               onMouseLeave={handleMouseLeave}
-              className="absolute left-0 sm:left-auto lg:left-0 top-[calc(100%+10px)] w-[calc(100vw-28px)] sm:w-[400px] p-5 rounded-2xl bg-white/98 border border-amber-200/90 shadow-[0_20px_50px_-10px_rgba(0,0,0,0.15),0_10px_20px_-5px_rgba(245,158,11,0.1)] backdrop-blur-2xl z-[100] animate-in fade-in zoom-in-95 duration-150 text-zinc-900"
+              className="absolute left-0 sm:left-auto lg:left-0 top-[calc(100%+10px)] w-[calc(100vw-28px)] sm:w-[400px] p-5 rounded-2xl glass-dropdown z-40 animate-in fade-in zoom-in-95 duration-150 text-zinc-900"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
@@ -995,8 +995,8 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
           onClick={() => handleCardClick(3)}
           className={`relative p-4 rounded-2xl border transition-all duration-200 cursor-pointer select-none backdrop-blur-xl ${
             isFlyoutOpen(3)
-              ? "z-[70] bg-white border-amber-400 shadow-lg ring-1 ring-amber-400/50 -translate-y-0.5"
-              : "bg-white/95 border-stone-200/90 shadow-2xs hover:border-amber-400/60 hover:shadow-md hover:bg-white hover:-translate-y-0.5"
+              ? "z-25 bg-white border-amber-400 shadow-lg ring-1 ring-amber-400/50 -translate-y-0.5"
+              : "glass-panel-interactive border-stone-200/90 shadow-2xs hover:border-amber-400/60 hover:shadow-md hover:bg-white hover:-translate-y-0.5"
           }`}
           role="button"
           tabIndex={0}
@@ -1031,7 +1031,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
             <div
               onMouseEnter={() => handleMouseEnter(3)}
               onMouseLeave={handleMouseLeave}
-              className="absolute right-0 sm:right-auto lg:right-auto top-[calc(100%+10px)] w-[calc(100vw-28px)] sm:w-[400px] p-5 rounded-2xl bg-white/98 border border-amber-200/90 shadow-[0_20px_50px_-10px_rgba(0,0,0,0.15),0_10px_20px_-5px_rgba(245,158,11,0.1)] backdrop-blur-2xl z-[100] animate-in fade-in zoom-in-95 duration-150 text-zinc-900"
+              className="absolute right-0 sm:right-auto lg:right-auto top-[calc(100%+10px)] w-[calc(100vw-28px)] sm:w-[400px] p-5 rounded-2xl glass-dropdown z-40 animate-in fade-in zoom-in-95 duration-150 text-zinc-900"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
@@ -1159,8 +1159,8 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
           onClick={() => handleCardClick(4)}
           className={`relative p-4 rounded-2xl border transition-all duration-200 cursor-pointer select-none backdrop-blur-xl ${
             isFlyoutOpen(4)
-              ? "z-[70] bg-white border-rose-400 shadow-lg ring-1 ring-rose-400/50 -translate-y-0.5"
-              : "bg-white/95 border-stone-200/90 shadow-2xs hover:border-amber-400/60 hover:shadow-md hover:bg-white hover:-translate-y-0.5"
+              ? "z-25 bg-white border-rose-400 shadow-lg ring-1 ring-rose-400/50 -translate-y-0.5"
+              : "glass-panel-interactive border-stone-200/90 shadow-2xs hover:border-amber-400/60 hover:shadow-md hover:bg-white hover:-translate-y-0.5"
           }`}
           role="button"
           tabIndex={0}
@@ -1209,7 +1209,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
             <div
               onMouseEnter={() => handleMouseEnter(4)}
               onMouseLeave={handleMouseLeave}
-              className="absolute right-0 top-[calc(100%+10px)] w-[calc(100vw-28px)] sm:w-[400px] p-5 rounded-2xl bg-white/98 border border-amber-200/90 shadow-[0_20px_50px_-10px_rgba(0,0,0,0.15),0_10px_20px_-5px_rgba(245,158,11,0.1)] backdrop-blur-2xl z-[100] animate-in fade-in zoom-in-95 duration-150 text-zinc-900"
+              className="absolute right-0 top-[calc(100%+10px)] w-[calc(100vw-28px)] sm:w-[400px] p-5 rounded-2xl glass-dropdown z-40 animate-in fade-in zoom-in-95 duration-150 text-zinc-900"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
