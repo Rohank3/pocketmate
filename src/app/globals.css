@@ -68,6 +68,10 @@
   --shadow-glass: 0 12px 32px -6px rgba(15, 23, 42, 0.06), 0 2px 8px -2px rgba(0, 112, 186, 0.06), inset 0 1px 1px 0 rgba(255, 255, 255, 0.9);
   --shadow-glass-hover: 0 16px 36px -6px rgba(0, 112, 186, 0.14), 0 4px 12px rgba(15, 23, 42, 0.05), inset 0 1px 1px 0 #ffffff;
   --shadow-dropdown: 0 24px 56px -12px rgba(15, 23, 42, 0.14), 0 0 24px rgba(0, 112, 186, 0.08);
+  --border-kpi: rgba(0, 112, 186, 0.36);
+  --border-kpi-hover: rgba(0, 112, 186, 0.68);
+  --shadow-kpi: 0 8px 24px -6px rgba(0, 112, 186, 0.12), 0 0 12px rgba(0, 112, 186, 0.1), inset 0 1px 1px 0 rgba(255, 255, 255, 0.95);
+  --shadow-kpi-hover: 0 14px 32px -6px rgba(0, 112, 186, 0.22), 0 0 18px rgba(0, 112, 186, 0.18), inset 0 1px 1px 0 #ffffff;
 
   --scrollbar-track: #f1f5f9;
   --scrollbar-thumb: #94a3b8;
@@ -137,6 +141,10 @@
     --shadow-glass: 0 12px 32px -6px rgba(0, 0, 0, 0.5), inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
     --shadow-glass-hover: 0 16px 36px -6px rgba(0, 0, 0, 0.65), 0 0 20px rgba(0, 112, 186, 0.14), inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
     --shadow-dropdown: 0 24px 60px -12px rgba(0, 0, 0, 0.78), 0 0 0 1px rgba(148, 163, 184, 0.12);
+    --border-kpi: rgba(56, 189, 248, 0.44);
+    --border-kpi-hover: rgba(56, 189, 248, 0.78);
+    --shadow-kpi: 0 10px 28px -6px rgba(0, 0, 0, 0.55), 0 0 14px rgba(0, 140, 255, 0.16), inset 0 1px 0 0 rgba(186, 230, 253, 0.14);
+    --shadow-kpi-hover: 0 16px 36px -6px rgba(0, 0, 0, 0.7), 0 0 22px rgba(56, 189, 248, 0.28), inset 0 1px 0 0 rgba(186, 230, 253, 0.24);
 
     --scrollbar-track: #0f172a;
     --scrollbar-thumb: #475569;
@@ -202,6 +210,10 @@ html[data-theme="dark"] {
   --shadow-glass: 0 12px 32px -6px rgba(0, 0, 0, 0.5), inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
   --shadow-glass-hover: 0 16px 36px -6px rgba(0, 0, 0, 0.65), 0 0 20px rgba(0, 112, 186, 0.14), inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
   --shadow-dropdown: 0 24px 60px -12px rgba(0, 0, 0, 0.78), 0 0 0 1px rgba(148, 163, 184, 0.12);
+  --border-kpi: rgba(56, 189, 248, 0.44);
+  --border-kpi-hover: rgba(56, 189, 248, 0.78);
+  --shadow-kpi: 0 10px 28px -6px rgba(0, 0, 0, 0.55), 0 0 14px rgba(0, 140, 255, 0.16), inset 0 1px 0 0 rgba(186, 230, 253, 0.14);
+  --shadow-kpi-hover: 0 16px 36px -6px rgba(0, 0, 0, 0.7), 0 0 22px rgba(56, 189, 248, 0.28), inset 0 1px 0 0 rgba(186, 230, 253, 0.24);
 
   --scrollbar-track: #0f172a;
   --scrollbar-thumb: #475569;
@@ -355,16 +367,16 @@ html[data-theme="dark"] .theme-icon-moon {
   background: var(--surface-glass);
   backdrop-filter: blur(22px) saturate(165%);
   -webkit-backdrop-filter: blur(22px) saturate(165%);
-  border: 1px solid var(--border-glass);
-  box-shadow: var(--shadow-glass);
+  border: 1px solid var(--border-kpi);
+  box-shadow: var(--shadow-kpi);
   color: var(--fg-primary);
   transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .glass-panel-interactive:hover {
   background: var(--surface-glass-hover);
-  border-color: var(--accent-border);
-  box-shadow: var(--shadow-glass-hover);
+  border-color: var(--border-kpi-hover);
+  box-shadow: var(--shadow-kpi-hover);
   transform: translateY(-2px);
 }
 

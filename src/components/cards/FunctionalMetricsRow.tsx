@@ -669,10 +669,10 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
           onMouseEnter={() => handleMouseEnter(1)}
           onMouseLeave={handleMouseLeave}
           onClick={() => handleCardClick(1)}
-          className={`relative p-4 rounded-2xl border transition-all duration-200 cursor-pointer select-none backdrop-blur-xl ${
+          className={`relative p-4 rounded-2xl transition-all duration-200 cursor-pointer select-none backdrop-blur-xl ${
             isFlyoutOpen(1)
-              ? "z-25 bg-[var(--surface-glass-hover)] border-[var(--accent-border)] shadow-lg ring-1 ring-[#0070ba]/40 -translate-y-0.5"
-              : "glass-panel-interactive shadow-2xs"
+              ? "z-25 border bg-[var(--surface-glass-hover)] border-[var(--border-kpi-hover)] shadow-lg ring-1 ring-[#38bdf8]/45 -translate-y-0.5"
+              : "glass-panel-interactive"
           }`}
           role="button"
           tabIndex={0}
@@ -854,10 +854,10 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
           onMouseEnter={() => handleMouseEnter(2)}
           onMouseLeave={handleMouseLeave}
           onClick={() => handleCardClick(2)}
-          className={`relative p-4 rounded-2xl border transition-all duration-200 cursor-pointer select-none backdrop-blur-xl ${
+          className={`relative p-4 rounded-2xl transition-all duration-200 cursor-pointer select-none backdrop-blur-xl ${
             isFlyoutOpen(2)
-              ? "z-25 bg-[var(--surface-glass-hover)] border-[var(--accent-border)] shadow-lg ring-1 ring-[#0070ba]/40 -translate-y-0.5"
-              : "glass-panel-interactive shadow-2xs"
+              ? "z-25 border bg-[var(--surface-glass-hover)] border-[var(--border-kpi-hover)] shadow-lg ring-1 ring-[#38bdf8]/45 -translate-y-0.5"
+              : "glass-panel-interactive"
           }`}
           role="button"
           tabIndex={0}
@@ -1103,10 +1103,10 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
           onMouseEnter={() => handleMouseEnter(3)}
           onMouseLeave={handleMouseLeave}
           onClick={() => handleCardClick(3)}
-          className={`relative p-4 rounded-2xl border transition-all duration-200 cursor-pointer select-none backdrop-blur-xl ${
+          className={`relative p-4 rounded-2xl transition-all duration-200 cursor-pointer select-none backdrop-blur-xl ${
             isFlyoutOpen(3)
-              ? "z-25 bg-[var(--surface-glass-hover)] border-[var(--accent-border)] shadow-lg ring-1 ring-[#0070ba]/40 -translate-y-0.5"
-              : "glass-panel-interactive shadow-2xs"
+              ? "z-25 border bg-[var(--surface-glass-hover)] border-[var(--border-kpi-hover)] shadow-lg ring-1 ring-[#38bdf8]/45 -translate-y-0.5"
+              : "glass-panel-interactive"
           }`}
           role="button"
           tabIndex={0}
@@ -1267,12 +1267,12 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
           onMouseEnter={() => handleMouseEnter(4)}
           onMouseLeave={handleMouseLeave}
           onClick={() => handleCardClick(4)}
-          className={`relative p-4 rounded-2xl border transition-all duration-200 cursor-pointer select-none backdrop-blur-xl ${
+          className={`relative p-4 rounded-2xl transition-all duration-200 cursor-pointer select-none backdrop-blur-xl ${
             isFlyoutOpen(4)
               ? actionItems.length > 0
-                ? "z-25 bg-[var(--surface-glass-hover)] border-[var(--status-danger-border)] shadow-lg ring-1 ring-rose-500/35 -translate-y-0.5"
-                : "z-25 bg-[var(--surface-glass-hover)] border-[var(--accent-border)] shadow-lg ring-1 ring-[#0070ba]/40 -translate-y-0.5"
-              : "glass-panel-interactive shadow-2xs"
+                ? "z-25 border bg-[var(--surface-glass-hover)] border-[var(--status-danger-border)] shadow-lg ring-1 ring-rose-500/40 -translate-y-0.5"
+                : "z-25 border bg-[var(--surface-glass-hover)] border-[var(--border-kpi-hover)] shadow-lg ring-1 ring-[#38bdf8]/45 -translate-y-0.5"
+              : "glass-panel-interactive"
           }`}
           role="button"
           tabIndex={0}
