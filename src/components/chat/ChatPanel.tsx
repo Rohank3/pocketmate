@@ -72,7 +72,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   onRenameThread,
   onDeleteThread,
 }) => {
-  const { accentColor, tintColor } = useTheme();
+  const { accentColor, tintColor, isDark } = useTheme();
   const [inputText, setInputText] = useState("");
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
@@ -304,37 +304,34 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         className="hidden"
       />
 
-      {/* Floating Inset Header with Agent Status & Controls */}
-      <div className="px-3.5 sm:px-4 py-2.5 bg-white/55 backdrop-blur-md border border-white/80 flex items-center justify-between gap-2 shrink-0 rounded-2xl shadow-2xs">
+      {/* Floating Inset Header with Controls */}
+      <div className="px-3.5 sm:px-4 py-2.5 bg-[var(--surface-elevated)] backdrop-blur-md border border-[var(--border-subtle)] flex items-center justify-between gap-2 shrink-0 rounded-2xl shadow-2xs">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-400/60 flex items-center justify-center text-amber-800 shrink-0 shadow-2xs backdrop-blur-xs">
+          <div className="w-8 h-8 rounded-xl bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center justify-center text-[var(--accent-text)] shrink-0">
             <Bot className="w-4 h-4" />
           </div>
-          <div className="min-w-0">
-            <h1 className="text-sm font-bold text-zinc-900 flex items-center gap-1.5 truncate">
-              PocketMate <span className="text-[10px] text-stone-500 font-normal">v1.0</span>
-            </h1>
-            <p className="text-[11px] text-stone-500 truncate">Assistant</p>
-          </div>
+          <h1 className="text-sm font-bold text-[var(--fg-primary)] truncate">
+            PocketMate
+          </h1>
         </div>
 
-        {/* Action Controls: History Drawer, New Chat, Status */}
+        {/* Action Controls: History Drawer, New Chat */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {/* History Drawer Toggle Button */}
           <button
             type="button"
             onClick={() => setIsHistoryOpen((prev) => !prev)}
             aria-label="Toggle Conversation History Drawer"
-            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400 ${
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0070ba] ${
               isHistoryOpen
-                ? "bg-amber-500/20 border-amber-400 text-amber-950 shadow-2xs"
-                : "bg-white/60 hover:bg-white/90 text-stone-700 border-white/80 hover:text-zinc-900 shadow-2xs backdrop-blur-xs"
+                ? "bg-[var(--accent-subtle)] border-[var(--accent-border)] text-[var(--accent-text)] shadow-2xs"
+                : "theme-btn-secondary hover:border-[var(--accent-border)]"
             }`}
           >
-            <History className="w-3.5 h-3.5 text-stone-500" />
+            <History className="w-3.5 h-3.5 opacity-80" />
             <span className="hidden sm:inline">History</span>
             {threads.length > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full bg-stone-200/80 text-[10px] text-stone-700 font-mono">
+              <span className="px-1.5 py-0.2 rounded-full bg-[var(--surface-subtle)] text-[10px] text-[var(--fg-secondary)] font-mono border border-[var(--border-subtle)]">
                 {threads.length}
               </span>
             )}
@@ -349,9 +346,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                 setIsHistoryOpen(false);
               }}
               aria-label="Start a new chat session"
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 active:bg-amber-500/35 text-amber-950 text-xs font-bold border border-amber-400/80 transition-all cursor-pointer shadow-2xs backdrop-blur-xs focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[var(--accent-subtle)] hover:bg-[var(--accent-subtle-hover)] text-[var(--accent-text)] text-xs font-bold border border-[var(--accent-border)] transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0070ba]"
             >
-              <Plus className="w-3.5 h-3.5 text-amber-700" />
+              <Plus className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">New Chat</span>
             </button>
           )}
@@ -364,14 +361,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           role="dialog"
           aria-modal="true"
           aria-label="Conversation History"
-          className="absolute inset-0 z-30 bg-white/92 backdrop-blur-xl rounded-[28px] flex flex-col animate-in fade-in duration-150"
+          className="absolute inset-0 z-30 bg-[var(--surface-modal)]/95 backdrop-blur-xl rounded-[28px] flex flex-col animate-in fade-in duration-150 text-[var(--fg-primary)]"
         >
           {/* Drawer Header */}
-          <div className="px-4 py-3 bg-white/60 border-b border-stone-200/60 flex items-center justify-between shrink-0">
+          <div className="px-4 py-3 theme-modal-header border-b flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
-              <MessageSquare className="w-4 h-4 text-amber-700" />
-              <h2 className="text-sm font-bold text-zinc-900">Conversation History</h2>
-              <span className="text-[11px] text-stone-500 font-mono">({threads.length})</span>
+              <MessageSquare className="w-4 h-4 text-[var(--accent-text)]" />
+              <h2 className="text-sm font-bold text-[var(--fg-primary)]">History</h2>
+              <span className="text-[11px] text-[var(--fg-muted)] font-mono">({threads.length})</span>
             </div>
 
             <div className="flex items-center gap-2">
@@ -382,7 +379,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                     onNewChat();
                     setIsHistoryOpen(false);
                   }}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg theme-btn-primary text-xs font-bold transition-colors cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>New Chat</span>
@@ -393,7 +390,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                 type="button"
                 onClick={() => setIsHistoryOpen(false)}
                 aria-label="Close conversation history"
-                className="p-1 text-stone-400 hover:text-zinc-800 hover:bg-stone-100 rounded-lg transition-colors cursor-pointer"
+                className="p-1 text-[var(--fg-muted)] hover:text-[var(--fg-primary)] hover:bg-[var(--surface-subtle)] rounded-lg transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -404,11 +401,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           <div className="flex-1 overflow-y-auto p-3 space-y-2">
             {threads.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-48 text-center p-4">
-                <Clock className="w-8 h-8 text-amber-600/50 mb-2" />
-                <p className="text-xs font-semibold text-zinc-800">No saved conversations yet</p>
-                <p className="text-[11px] text-stone-500 mt-1 max-w-xs">
-                  Your chat threads and financial queries will automatically appear here.
-                </p>
+                <Clock className="w-8 h-8 text-[var(--accent-text)] opacity-60 mb-2" />
+                <p className="text-xs font-semibold text-[var(--fg-primary)]">No conversations yet</p>
                 {onNewChat && (
                   <button
                     type="button"
@@ -416,10 +410,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                       onNewChat();
                       setIsHistoryOpen(false);
                     }}
-                    className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
+                    className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg theme-btn-primary text-xs font-bold transition-all cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>Start First Chat</span>
+                    <span>New Chat</span>
                   </button>
                 )}
               </div>
@@ -440,8 +434,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                     }}
                     className={`group relative p-3 rounded-xl border transition-all cursor-pointer ${
                       isActive
-                        ? "bg-amber-500/10 border-amber-300 shadow-xs ring-1 ring-amber-300/60"
-                        : "bg-white/80 hover:bg-amber-50/50 active:bg-amber-100/40 border-stone-200/90 hover:border-amber-300/70"
+                        ? "bg-[var(--accent-subtle)] border-[var(--accent-border)] shadow-xs ring-1 ring-[#0070ba]/30"
+                        : "bg-[var(--surface-card)] hover:bg-[var(--surface-elevated)] border-[var(--border-subtle)] hover:border-[var(--accent-border)]"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -463,13 +457,13 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                                   void handleSaveRename(thread.id);
                                 }
                               }}
-                              className="w-full bg-white border border-amber-400 rounded-lg px-2.5 py-1 text-xs text-zinc-900 focus:outline-hidden focus:ring-1 focus:ring-amber-500 font-medium"
+                              className="w-full bg-[var(--surface-card)] border border-[var(--accent-border)] rounded-lg px-2.5 py-1 text-xs text-[var(--fg-primary)] focus:outline-none focus:ring-1 focus:ring-[#0070ba] font-medium"
                             />
                             <button
                               type="button"
                               onClick={(e) => void handleSaveRename(thread.id, e)}
                               aria-label="Save title"
-                              className="p-1 rounded bg-amber-500 hover:bg-amber-600 text-white cursor-pointer shadow-2xs"
+                              className="p-1 rounded theme-btn-primary cursor-pointer"
                             >
                               <Check className="w-3.5 h-3.5" />
                             </button>
@@ -480,7 +474,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                                 setEditingThreadId(null);
                               }}
                               aria-label="Cancel rename"
-                              className="p-1 rounded bg-stone-100 hover:bg-stone-200 text-stone-600 cursor-pointer"
+                              className="p-1 rounded theme-btn-secondary border cursor-pointer"
                             >
                               <X className="w-3.5 h-3.5" />
                             </button>
@@ -489,13 +483,13 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                           <div className="flex items-center gap-2">
                             <p
                               className={`text-xs font-bold truncate ${
-                                isActive ? "text-amber-950" : "text-zinc-800"
+                                isActive ? "text-[var(--accent-text)]" : "text-[var(--fg-primary)]"
                               }`}
                             >
                               {thread.title}
                             </p>
                             {isActive && (
-                              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500/15 text-amber-900 border border-amber-300/80 font-bold">
+                              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-[var(--accent-subtle-hover)] text-[var(--accent-text)] border border-[var(--accent-border)] font-bold">
                                 Active
                               </span>
                             )}
@@ -503,12 +497,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                         )}
 
                         {thread.lastMessageSnippet && !isEditing && (
-                          <p className="text-[11px] text-stone-500 truncate mt-0.5">
+                          <p className="text-[11px] text-[var(--fg-muted)] truncate mt-0.5">
                             {thread.lastMessageSnippet}
                           </p>
                         )}
 
-                        <div className="flex items-center gap-2 mt-1.5 text-[10px] text-stone-400 font-medium">
+                        <div className="flex items-center gap-2 mt-1.5 text-[10px] text-[var(--fg-muted)] font-medium">
                           <span>{thread.messageCount} msg{thread.messageCount === 1 ? "" : "s"}</span>
                           <span>•</span>
                           <span>{formatRelativeTime(thread.updatedAt)}</span>
@@ -518,7 +512,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                       {/* Action buttons (Edit & Delete) */}
                       {!isEditing && (
                         <div
-                          className="flex items-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity"
+                          className="flex items-center gap-1 opacity-75 group-hover:opacity-100 transition-opacity"
                           onClick={(e) => e.stopPropagation()}
                         >
                           {onRenameThread && (
@@ -526,7 +520,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                               type="button"
                               onClick={(e) => handleStartRename(thread, e)}
                               aria-label={`Rename ${thread.title}`}
-                              className="p-1 text-stone-400 hover:text-amber-800 hover:bg-amber-50 active:bg-amber-100 rounded transition-colors cursor-pointer"
+                              className="p-1 text-[var(--fg-muted)] hover:text-[var(--accent-text)] hover:bg-[var(--accent-subtle)] rounded transition-colors cursor-pointer"
                             >
                               <Pencil className="w-3.5 h-3.5" />
                             </button>
@@ -538,7 +532,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                               disabled={isDeleting}
                               onClick={(e) => void handleDeleteClick(thread.id, e)}
                               aria-label={`Delete ${thread.title}`}
-                              className="p-1 text-stone-400 hover:text-rose-600 hover:bg-rose-50 active:bg-rose-100 rounded transition-colors cursor-pointer disabled:opacity-40"
+                              className="p-1 text-[var(--fg-muted)] hover:text-[var(--status-danger-text)] hover:bg-[var(--status-danger-bg)] rounded transition-colors cursor-pointer disabled:opacity-40"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -568,7 +562,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             }`}
           >
             {m.role === "assistant" && (
-              <div className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-400/50 flex items-center justify-center text-amber-800 shrink-0 mt-0.5 shadow-2xs backdrop-blur-xs">
+              <div className="w-7 h-7 rounded-lg bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center justify-center text-[var(--accent-text)] shrink-0 mt-0.5">
                 <Bot className="w-3.5 h-3.5" />
               </div>
             )}
@@ -580,21 +574,21 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               {m.role === "user" ? (
                 <div className="whitespace-pre-line text-xs md:text-sm font-medium text-white">{m.content}</div>
               ) : (
-                <div className="text-xs md:text-sm text-zinc-800">
+                <div className="text-xs md:text-sm text-[var(--fg-primary)]">
                   <ReactMarkdown
                     components={{
-                      h1: ({ children }) => <h1 className="text-base font-bold text-zinc-950 my-2">{children}</h1>,
-                      h2: ({ children }) => <h2 className="text-sm font-bold text-zinc-900 my-1.5">{children}</h2>,
-                      h3: ({ children }) => <h3 className="text-xs md:text-sm font-bold text-amber-800 my-1">{children}</h3>,
-                      h4: ({ children }) => <h4 className="text-xs font-semibold text-zinc-800 mt-2 mb-0.5">{children}</h4>,
-                      p: ({ children }) => <p className="mb-1.5 last:mb-0 leading-relaxed text-zinc-800">{children}</p>,
-                      ul: ({ children }) => <ul className="list-disc pl-4 mb-2 space-y-0.5 text-zinc-700">{children}</ul>,
-                      ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 space-y-0.5 text-zinc-700">{children}</ol>,
-                      li: ({ children }) => <li className="text-zinc-700">{children}</li>,
-                      strong: ({ children }) => <strong className="font-bold text-zinc-950">{children}</strong>,
-                      hr: () => <hr className="border-stone-200 my-2.5" />,
+                      h1: ({ children }) => <h1 className="text-base font-bold text-[var(--fg-primary)] my-2">{children}</h1>,
+                      h2: ({ children }) => <h2 className="text-sm font-bold text-[var(--fg-primary)] my-1.5">{children}</h2>,
+                      h3: ({ children }) => <h3 className="text-xs md:text-sm font-bold text-[var(--accent-text)] my-1">{children}</h3>,
+                      h4: ({ children }) => <h4 className="text-xs font-semibold text-[var(--fg-primary)] mt-2 mb-0.5">{children}</h4>,
+                      p: ({ children }) => <p className="mb-1.5 last:mb-0 leading-relaxed text-[var(--fg-primary)]">{children}</p>,
+                      ul: ({ children }) => <ul className="list-disc pl-4 mb-2 space-y-0.5 text-[var(--fg-secondary)]">{children}</ul>,
+                      ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 space-y-0.5 text-[var(--fg-secondary)]">{children}</ol>,
+                      li: ({ children }) => <li className="text-[var(--fg-secondary)]">{children}</li>,
+                      strong: ({ children }) => <strong className="font-bold text-[var(--fg-primary)]">{children}</strong>,
+                      hr: () => <hr className="border-[var(--border-subtle)] my-2.5" />,
                       code: ({ children }) => (
-                        <code className="bg-stone-100 px-1 py-0.5 rounded text-[11px] font-mono text-amber-900 border border-stone-200">
+                        <code className="bg-[var(--surface-subtle)] px-1 py-0.5 rounded text-[11px] font-mono text-[var(--accent-text)] border border-[var(--border-subtle)]">
                           {children}
                         </code>
                       ),
@@ -618,7 +612,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             </ElasticChatBubble>
 
             {m.role === "user" && (
-              <div className="w-7 h-7 rounded-lg bg-amber-600 border border-amber-500 flex items-center justify-center text-white shrink-0 mt-0.5 shadow-2xs">
+              <div className="w-7 h-7 rounded-lg bg-[#0070ba] border border-[#005ea6] flex items-center justify-center text-white shrink-0 mt-0.5 shadow-2xs">
                 <User className="w-3.5 h-3.5" />
               </div>
             )}
@@ -627,14 +621,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
         {isLoading && (
           <div className="flex gap-3 text-sm justify-start">
-            <div className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-400/50 flex items-center justify-center text-amber-800 shrink-0 shadow-2xs backdrop-blur-xs">
+            <div className="w-7 h-7 rounded-lg bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center justify-center text-[var(--accent-text)] shrink-0">
               <Bot className="w-3.5 h-3.5 animate-pulse" />
             </div>
-            <div className="bg-white/80 backdrop-blur-md border border-white/90 rounded-2xl px-4 py-3 text-stone-700 text-xs flex items-center gap-2 shadow-2xs">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-bounce" />
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-bounce [animation-delay:0.2s]" />
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-bounce [animation-delay:0.4s]" />
-              <span className="ml-1 text-stone-600 font-medium">Orchestrating financial ledger...</span>
+            <div className="bg-[var(--surface-elevated)] backdrop-blur-md border border-[var(--border-subtle)] rounded-2xl px-4 py-3 text-[var(--fg-secondary)] text-xs flex items-center gap-2 shadow-2xs">
+              <span className={`w-1.5 h-1.5 rounded-full animate-bounce ${isDark ? "bg-sky-400" : "bg-[#0070ba]"}`} />
+              <span className={`w-1.5 h-1.5 rounded-full animate-bounce [animation-delay:0.2s] ${isDark ? "bg-sky-400" : "bg-[#0070ba]"}`} />
+              <span className={`w-1.5 h-1.5 rounded-full animate-bounce [animation-delay:0.4s] ${isDark ? "bg-sky-400" : "bg-[#0070ba]"}`} />
+              <span className="ml-1 text-[var(--fg-muted)] font-medium">Thinking...</span>
             </div>
           </div>
         )}
@@ -652,9 +646,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             scrollToBottom(true);
           }}
           aria-label="Scroll to newest messages"
-          className="absolute bottom-20 right-6 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/90 hover:bg-white text-amber-900 border border-amber-300/80 text-xs font-semibold shadow-md backdrop-blur-md transition-all cursor-pointer animate-in fade-in slide-in-from-bottom-2 duration-150"
+          className="absolute bottom-20 right-6 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-full theme-btn-secondary border border-[var(--accent-border)] text-[var(--accent-text)] text-xs font-semibold shadow-md backdrop-blur-md transition-all cursor-pointer animate-in fade-in slide-in-from-bottom-2 duration-150"
         >
-          <ChevronDown className="w-3.5 h-3.5 text-amber-600" />
+          <ChevronDown className="w-3.5 h-3.5" />
           <span>Latest</span>
         </button>
       )}
@@ -663,7 +657,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       <div className="relative shrink-0">
         <form onSubmit={handleSubmit} className="p-0 relative">
           <div
-            className="relative flex items-center rounded-[30px] bg-white/80 border border-white/90 shadow-[inset_0_1px_3px_rgba(0,0,0,0.06),inset_0_-1px_1px_rgba(255,255,255,0.95),0_2px_8px_rgba(0,0,0,0.03)] p-1 transition-all duration-300 hover:border-amber-300/80 hover:shadow-[0_4px_16px_rgba(245,158,11,0.1)] focus-within:border-amber-400/80 focus-within:ring-2 focus-within:ring-amber-400/25"
+            className="relative flex items-center rounded-[30px] bg-[var(--surface-card)] border border-[var(--border-strong)] p-1 transition-all duration-300 hover:border-[var(--accent-border)] focus-within:border-[#0070ba] focus-within:ring-2 focus-within:ring-[#0070ba]/25 shadow-xs"
             style={{
               transitionTimingFunction: "cubic-bezier(0.34, 1.56, 0.64, 1)",
             }}
@@ -675,11 +669,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               onChange={(e) => setInputText(e.target.value)}
               placeholder={
                 isListening
-                  ? "Listening... speak your request"
-                  : "Type or speak a request (e.g., 'split $80 dinner with Alex', 'add $1200 rent on 1st')..."
+                  ? "Listening..."
+                  : "Ask PocketMate..."
               }
-              className={`w-full bg-transparent border-0 pl-3.5 pr-2 py-2 text-xs md:text-sm text-zinc-900 placeholder-stone-400 focus:outline-hidden transition-all ${
-                isListening ? "placeholder-rose-500 font-medium" : ""
+              className={`w-full bg-transparent border-0 pl-3.5 pr-2 py-2 text-xs md:text-sm text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus:outline-none transition-all ${
+                isListening ? "placeholder:text-rose-500 font-medium" : ""
               }`}
             />
 
@@ -689,17 +683,17 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                 type="button"
                 title={
                   !speechSupported
-                    ? "Speech recognition is not supported in this browser"
+                    ? "Speech recognition unavailable"
                     : isListening
                     ? "Stop listening"
                     : "Voice input"
                 }
                 onClick={toggleVoiceInput}
                 disabled={!speechSupported}
-                className={`p-1.5 rounded-full transition-all cursor-pointer relative focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400 ${
+                className={`p-1.5 rounded-full transition-all cursor-pointer relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0070ba] ${
                   isListening
-                    ? "bg-rose-50 text-rose-700 border border-rose-300 shadow-2xs"
-                    : "text-stone-400 hover:text-amber-800 hover:bg-stone-200/50 active:bg-stone-200/80 disabled:opacity-40"
+                    ? "bg-[var(--status-danger-bg)] text-[var(--status-danger-text)] border border-[var(--status-danger-border)]"
+                    : "text-[var(--fg-muted)] hover:text-[var(--accent-text)] hover:bg-[var(--surface-subtle)] disabled:opacity-40"
                 }`}
               >
                 {isListening && (
@@ -711,18 +705,18 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               {/* Upload Receipt / Document Image */}
               <button
                 type="button"
-                title="Upload receipt or bill image"
+                title="Upload receipt"
                 onClick={() => fileInputRef.current?.click()}
-                className="p-1.5 text-stone-400 hover:text-amber-800 hover:bg-stone-200/50 active:bg-stone-200/80 rounded-full transition-colors cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400"
+                className="p-1.5 text-[var(--fg-muted)] hover:text-[var(--accent-text)] hover:bg-[var(--surface-subtle)] rounded-full transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0070ba]"
               >
                 <Paperclip className="w-3.5 h-3.5" />
               </button>
 
-              {/* Fluid Gold Send Button */}
+              {/* PayPal Blue Send Button */}
               <button
                 type="submit"
                 disabled={!inputText.trim() || isLoading}
-                className="h-8 px-3.5 bg-gradient-to-r from-amber-500 via-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 active:scale-95 disabled:opacity-40 text-white font-bold rounded-full transition-all flex items-center gap-1 text-xs shadow-xs cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-amber-400"
+                className="h-8 px-3.5 theme-btn-primary active:scale-95 disabled:opacity-40 font-bold rounded-full transition-all flex items-center gap-1 text-xs cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0070ba]"
               >
                 <span>Send</span>
                 <ArrowRight className="w-3.5 h-3.5" />
