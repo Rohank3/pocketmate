@@ -1260,9 +1260,9 @@ export default function Home() {
             </div>
 
             {/* Active View Container */}
-            <div className="flex-1 min-h-[560px] flex flex-col">
+            <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
               {activeRightTab === "transactions" && (
-                <div className="flex flex-col gap-3 h-full">
+                <div className="flex flex-col gap-3 h-full min-h-0">
                   {/* Actions Bar for Live PayPal Sandbox */}
                   <div className="flex flex-wrap items-center justify-between gap-2 px-1">
                     <div className="flex items-center gap-3">
@@ -1317,7 +1317,7 @@ export default function Home() {
                     onDeleteCategory={handleDeleteCategory}
                   />
 
-                <div className="flex-1 min-h-[480px]">
+                <div className="flex-1 min-h-0">
                   {transactions.length === 0 && !isLoadingTransactions ? (
                     <div className="h-full min-h-[440px] rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-card)] backdrop-blur-md flex flex-col items-center justify-center p-8 text-center shadow-xs">
                       <div className="w-12 h-12 rounded-2xl bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center justify-center text-[var(--accent-text)] mb-3 shadow-2xs">
