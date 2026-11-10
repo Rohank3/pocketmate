@@ -4,7 +4,6 @@ import React, { useState, useRef, useEffect, useSyncExternalStore } from "react"
 import {
   Bot,
   User,
-  Sparkles,
   ArrowRight,
   Paperclip,
   Plus,

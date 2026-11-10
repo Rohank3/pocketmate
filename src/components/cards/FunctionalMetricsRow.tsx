@@ -200,14 +200,12 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
       });
 
       const normalizedCats = ensureUniqueCategoryColors(categories);
-      let netTotalSpent = 0;
 
       const bars = normalizedCats.map((cat) => {
         const normKey = cat.name.toLowerCase();
         const outflow = catOutflowMap[normKey] || 0;
         const inflow = catInflowMap[normKey] || 0;
         const catSpent = Math.max(0, outflow - inflow);
-        netTotalSpent += catSpent;
 
         const catPercent = cat.monthlyCap > 0 ? Math.round((catSpent / cat.monthlyCap) * 100) : 0;
         const barWidth = Math.min(100, catPercent);
@@ -223,6 +221,8 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
           isOver: catOver,
         };
       });
+
+      const netTotalSpent = bars.reduce((sum, b) => sum + b.spent, 0);
 
       const cap = categories.reduce((sum, c) => sum + (c.monthlyCap || 0), 0);
       const over = netTotalSpent > cap;
