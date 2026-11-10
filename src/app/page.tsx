@@ -18,6 +18,8 @@ import { ScheduledEvent } from "@/components/scheduler/BudgetScheduler";
 import { PulseBackground } from "@/components/ui/PulseBackground";
 import { ensureUniqueCategoryColors } from "@/lib/utils/categoryColors";
 import { LiquidGlassContainer } from "@/components/ui/LiquidGlassContainer";
+import { useTheme } from "@/components/theme/ThemeContext";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import {
   Wallet,
   CreditCard,
@@ -68,6 +70,7 @@ const getStorageScope = (user?: UserAccount | null) =>
   user?.email ? user.email.toLowerCase().trim() : "guest";
 
 export default function Home() {
+  const { theme, accentColor, tintColor } = useTheme();
   const [activePersona, setActivePersona] = useState<"GENERAL" | "FREELANCER" | "BUSINESS">("GENERAL");
   const [activeRightTab, setActiveRightTab] = useState<"transactions" | "insights" | "upcoming">("transactions");
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
@@ -1063,8 +1066,8 @@ export default function Home() {
 
   return (
     <>
-      {/* Living Ambient Pulse Stripe Background in Signature Champagne & Warm Gold */}
-      <PulseBackground palette="gold" />
+      {/* Living Ambient Pulse Stripe Background in Selected Color Theme */}
+      <PulseBackground palette={theme} />
 
       <main className="relative z-10 min-h-screen text-zinc-900 flex flex-col p-3 md:p-6 lg:p-8">
         {/* Top Navigation & Brand Header */}
@@ -1090,6 +1093,9 @@ export default function Home() {
 
           {/* Connection & Auth Controls */}
           <div className="flex flex-wrap items-center gap-3">
+            {/* Color Theme Selector */}
+            <ThemeToggle />
+
             {/* Sandbox Status Badge */}
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/90 border border-stone-200 backdrop-blur-md text-xs text-zinc-700 shadow-xs">
               <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shadow-sm shadow-amber-500/50" />
@@ -1193,11 +1199,11 @@ export default function Home() {
                 blur: 24,
                 opacity: 0.82,
                 saturation: 1.8,
-                tint: "#fdfbf7",
+                tint: tintColor,
                 edge: 0.9,
                 distortion: 26,
               }}
-              accent="#f59e0b"
+              accent={accentColor}
               intensity={1}
             >
               {/* View Tab Switcher Styled with Frosted White Glass Segmented Control */}
