@@ -21,7 +21,7 @@ import {
 import ReactMarkdown from "react-markdown";
 import { ActionConfirmCard, ActionCardData } from "../cards/ActionConfirmCard";
 import type { ChatThreadItem } from "@/types/chat";
-import { LiquidWave } from "@/components/ui/LiquidWave";
+import { LiquidGlassContainer } from "@/components/ui/LiquidGlassContainer";
 
 export interface ChatMessageItem {
   id: string;
@@ -273,12 +273,21 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   };
 
   return (
-    <div className="relative flex flex-col h-full glass-panel rounded-2xl overflow-hidden shadow-md">
-      {/* Living Liquid Wave Header Animation */}
-      <div className="absolute top-0 left-0 right-0 z-20 opacity-95">
-        <LiquidWave height={20} />
-      </div>
-
+    <LiquidGlassContainer
+      className="h-full w-full rounded-2xl"
+      contentClassName="relative flex flex-col h-full overflow-hidden rounded-2xl"
+      glass={{
+        blur: 24,
+        opacity: 0.82,
+        saturation: 1.8,
+        tint: "#fdfbf7",
+        edge: 0.9,
+        distortion: 26,
+      }}
+      accent="#f59e0b"
+      intensity={0.85}
+      rippleStrength={1}
+    >
       {/* Hidden file picker for real receipt audits */}
       <input
         type="file"
@@ -670,9 +679,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         </button>
       )}
 
-      {/* Fluid Liquid Input Area */}
+      {/* Liquid Input Area */}
       <div className="relative">
-        <div className="h-[2px] w-full liquid-stream opacity-90 shadow-2xs" />
+        <div className="h-[1.5px] w-full bg-gradient-to-r from-amber-400/20 via-amber-400/80 to-amber-400/20 shadow-2xs" />
         <form onSubmit={handleSubmit} className="p-3 bg-white/70 backdrop-blur-xl border-t border-stone-200/60 relative">
         <div className="relative flex items-center">
           <input
@@ -740,6 +749,6 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         </div>
       </form>
       </div>
-    </div>
+    </LiquidGlassContainer>
   );
 };

@@ -16,7 +16,7 @@ import { SandboxStore } from "@/lib/sandbox/sandboxStore";
 import { UserAccount, InvoiceRecord } from "@/types/sandboxUser";
 import { ScheduledEvent } from "@/components/scheduler/BudgetScheduler";
 import { PulseBackground } from "@/components/ui/PulseBackground";
-import { LiquidWave } from "@/components/ui/LiquidWave";
+import { LiquidGlassWordmarkFooter } from "@/components/ui/liquid-glass-wordmark-footer";
 import {
   Wallet,
   CreditCard,
@@ -25,7 +25,6 @@ import {
   RefreshCw,
   Table2,
   BarChart3,
-  Layers,
 } from "lucide-react";
 
 // Dynamically import Financial Insights component
@@ -1411,11 +1410,12 @@ export default function Home() {
                       >
                         {transactions.length} records
                       </span>
-                      {/* Living Liquid Wave in Ledger Toolbar */}
+                      {/* Real-time Ledger Synchronization Status */}
                       <div className="hidden sm:flex items-center gap-2 pl-1" title="Live financial synchronization stream active">
-                        <div className="w-20 h-4 rounded-full overflow-hidden border border-amber-300/80 shadow-2xs opacity-90">
-                          <LiquidWave height={16} />
-                        </div>
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                        </span>
                         <span className="text-[10px] font-mono font-bold text-amber-800">LIVE SYNC</span>
                       </div>
                     </div>
@@ -1548,6 +1548,58 @@ export default function Home() {
         categories={categories}
         onAssignCategory={handleReclassifyTransaction}
       />
+
+      {/* Living Liquid Glass Wordmark Footer */}
+      <div className="relative z-10 mt-14 w-full">
+        <LiquidGlassWordmarkFooter
+          wordmark="PocketMate"
+          brand="PocketMate AI"
+          brandHref="/"
+          title="Intelligent Financial Workspace"
+          description="Autonomous multi-account auditing, split reconciliation, and budget governance."
+          groups={[
+            {
+              title: "Ledger",
+              links: [
+                { label: "Transactions", href: "#" },
+                { label: "Category Caps", href: "#" },
+                { label: "Split Reconciliation", href: "#" },
+              ],
+            },
+            {
+              title: "Agent Capabilities",
+              links: [
+                { label: "Receipt Vision Audit", href: "#" },
+                { label: "PayPal Disputes", href: "#" },
+                { label: "Autonomous Sweeps", href: "#" },
+              ],
+            },
+            {
+              title: "Sandbox & Tools",
+              links: [
+                { label: "PayPal Sandbox", href: "https://developer.paypal.com" },
+                { label: "Gemini 3.5 Flash", href: "https://ai.google.dev" },
+                { label: "Documentation", href: "#" },
+              ],
+            },
+          ]}
+          copyright="© 2026 PocketMate"
+          glass={{
+            blur: 20,
+            opacity: 0.85,
+            saturation: 1.8,
+            tint: "#fdfbf7",
+            edge: 0.85,
+            distortion: 28,
+          }}
+          accent="#f59e0b"
+          depth={0.3}
+          motionIntensity={0.8}
+          rippleStrength={1}
+          cursorSize={32}
+          showCursor={true}
+        />
+      </div>
       </main>
     </>
   );

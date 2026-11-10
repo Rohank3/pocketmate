@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useRef, useEffect } from "react";
+import React, { useMemo, useState, useRef, useEffect, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { AgGridReact } from "ag-grid-react";
 import {
@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import { GridMutationState } from "@/types/agent";
 import type { CategoryItem } from "@/components/categories/CategoryControlBar";
-import { LiquidWave } from "@/components/ui/LiquidWave";
+import { LiquidGlassContainer } from "@/components/ui/LiquidGlassContainer";
 
 // Register all community features (RowSelection, Pagination, ColumnFilter, NumberFilter, Validation)
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -104,11 +104,7 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
   const [selectedScope, setSelectedScope] = useState<ReclassifyScope | null>(null); // No default!
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
-  const [mounted, setMounted] = useState<boolean>(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useSyncExternalStore(() => () => {}, () => true, () => false);
 
   const handleOpenReclassify = (tx: TransactionRow) => {
     setActiveTxForEdit(tx);
@@ -373,14 +369,23 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
   }, [filteredData]);
 
   return (
-    <div className="flex flex-col h-full glass-panel rounded-2xl overflow-hidden relative shadow-md">
-      {/* Top Banner / Reactive Agent Feedback with Living Liquid Wave Header */}
+    <LiquidGlassContainer
+      className="h-full w-full rounded-2xl"
+      contentClassName="relative flex flex-col h-full overflow-hidden rounded-2xl"
+      glass={{
+        blur: 24,
+        opacity: 0.85,
+        saturation: 1.8,
+        tint: "#fdfbf7",
+        edge: 0.9,
+        distortion: 26,
+      }}
+      accent="#f59e0b"
+      intensity={0.85}
+      rippleStrength={1}
+    >
+      {/* Top Banner / Reactive Agent Feedback Header */}
       <div className="px-4 py-3 bg-white/60 border-b border-stone-200/70 flex items-center justify-between backdrop-blur-md relative overflow-hidden">
-        {/* Living Liquid Wave Stream Animation */}
-        <div className="absolute top-0 left-0 right-0 z-10 opacity-90">
-          <LiquidWave height={18} />
-        </div>
-
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 rounded-lg bg-amber-50 border border-amber-300/80 flex items-center justify-center text-amber-700">
             <DollarSign className="w-3.5 h-3.5" />
@@ -637,6 +642,6 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
         </div>,
         document.body
       )}
-    </div>
+    </LiquidGlassContainer>
   );
 };
