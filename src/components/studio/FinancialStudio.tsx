@@ -105,13 +105,11 @@ export default function FinancialStudio({
       }
     }
 
-    let totalSpent = 0;
     const items = allCategories.map((cat) => {
       const normKey = cat.name.toLowerCase();
       const outflow = catOutflowMap[normKey]?.amount || 0;
       const inflow = catInflowMap[normKey] || 0;
       const netSpent = Math.max(0, outflow - inflow);
-      totalSpent += netSpent;
 
       const isOver = netSpent > cat.monthlyCap;
       const diff = Math.abs(netSpent - cat.monthlyCap);
@@ -127,6 +125,8 @@ export default function FinancialStudio({
         shareOfTotal: 0,
       };
     });
+
+    const totalSpent = items.reduce((sum, i) => sum + i.spent, 0);
 
     const itemsWithShare = items.map((i) => ({
       ...i,
@@ -267,42 +267,41 @@ export default function FinancialStudio({
       <div className="absolute top-0 left-0 right-0 z-10 liquid-bar" />
 
       {/* Top Banner: Budget Health Summary */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-stone-50/90 border border-stone-200/90 mt-1 shadow-2xs">
+      <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-[var(--surface-elevated)] border border-[var(--border-strong)] mt-1 shadow-2xs">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-300 flex items-center justify-center text-amber-800 shadow-2xs">
+          <div className="w-10 h-10 rounded-xl bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center justify-center text-[var(--accent-text)] shadow-2xs">
             <TrendingUp className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-zinc-900 flex items-center gap-2">
-              Spending Insights & Budget Health
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-300 font-semibold">
+            <h2 className="text-sm font-bold text-[var(--fg-primary)] flex items-center gap-2">
+              Spending Insights
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--status-success-bg)] text-[var(--status-success-text)] border border-[var(--status-success-border)] font-semibold">
                 Real-Time
               </span>
             </h2>
-            <p className="text-xs text-stone-500">
-              Clear breakdown of monthly budget caps, spending distribution, and split receivables
-            </p>
           </div>
         </div>
 
         <div className="flex items-center gap-4 text-xs font-mono">
           <div>
-            <span className="text-stone-500 block text-[10px]">TOTAL SPENT</span>
-            <span className="text-zinc-900 font-bold text-sm">
+            <span className="text-[var(--fg-muted)] block text-[10px]">TOTAL SPENT</span>
+            <span className="text-[var(--fg-primary)] font-bold text-sm tabular-nums">
               ${categoryAnalytics.totalSpent.toFixed(2)}
             </span>
           </div>
-          <div className="border-l border-stone-200 pl-4">
-            <span className="text-stone-500 block text-[10px]">TOTAL CAP</span>
-            <span className="text-stone-600 font-semibold text-sm">
+          <div className="border-l border-[var(--border-subtle)] pl-4">
+            <span className="text-[var(--fg-muted)] block text-[10px]">TOTAL CAP</span>
+            <span className="text-[var(--fg-secondary)] font-semibold text-sm tabular-nums">
               ${categoryAnalytics.totalCap.toFixed(2)}
             </span>
           </div>
-          <div className="border-l border-stone-200 pl-4">
-            <span className="text-stone-500 block text-[10px]">UTILIZATION</span>
+          <div className="border-l border-[var(--border-subtle)] pl-4">
+            <span className="text-[var(--fg-muted)] block text-[10px]">UTILIZATION</span>
             <span
-              className={`font-bold text-sm ${
-                categoryAnalytics.overallPercent > 100 ? "text-rose-600" : "text-emerald-700"
+              className={`font-bold text-sm tabular-nums ${
+                categoryAnalytics.overallPercent > 100
+                  ? "text-[var(--status-danger-text)]"
+                  : "text-[var(--status-success-text)]"
               }`}
             >
               {categoryAnalytics.overallPercent}%
@@ -314,32 +313,28 @@ export default function FinancialStudio({
       {/* 2-Column Grid of 3 Core Visual Insights */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Insight 1: Budget Caps vs Actual Spend (7 Columns) */}
-        <div className="lg:col-span-7 bg-white border border-stone-200/90 rounded-2xl p-4 flex flex-col justify-between shadow-2xs">
+        <div className="lg:col-span-7 bg-[var(--surface-card)] border border-[var(--border-strong)] rounded-2xl p-4 flex flex-col justify-between shadow-2xs">
           <div>
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <BarChart2 className="w-4 h-4 text-amber-600" />
-                <h3 className="text-xs font-bold text-zinc-900 uppercase tracking-wider">
-                  Budget Caps vs. Actual Spend
+                <BarChart2 className="w-4 h-4 text-[var(--accent-text)]" />
+                <h3 className="text-xs font-bold text-[var(--fg-primary)] uppercase tracking-wider">
+                  Budget Caps vs. Spend
                 </h3>
               </div>
-              <span className="text-[11px] text-stone-500">
+              <span className="text-[11px] text-[var(--fg-muted)]">
                 {categoryAnalytics.items.filter((i) => i.isOver).length > 0 ? (
-                  <span className="text-rose-600 font-semibold flex items-center gap-1">
+                  <span className="text-[var(--status-danger-text)] font-semibold flex items-center gap-1">
                     <AlertTriangle className="w-3 h-3" />
-                    {categoryAnalytics.items.filter((i) => i.isOver).length} cap breached
+                    {categoryAnalytics.items.filter((i) => i.isOver).length} exceeded
                   </span>
                 ) : (
-                  <span className="text-emerald-700 font-semibold flex items-center gap-1">
+                  <span className="text-[var(--status-success-text)] font-semibold flex items-center gap-1">
                     <CheckCircle2 className="w-3 h-3" /> All caps healthy
                   </span>
                 )}
               </span>
             </div>
-
-            <p className="text-xs text-stone-500 mb-4">
-              Monthly spending ceilings compared to current transactions. Bars turn red when a ceiling is breached.
-            </p>
 
             {/* List of comparison bars */}
             <div className="flex flex-col gap-3.5">
@@ -349,32 +344,38 @@ export default function FinancialStudio({
 
                 return (
                   <div key={cat.id} className="flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-between text-xs gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
                         <span
-                          className="w-2.5 h-2.5 rounded-full"
+                          className="w-2.5 h-2.5 rounded-full shrink-0"
                           style={{ backgroundColor: cat.color }}
                         />
-                        <span className="font-semibold text-zinc-800">{cat.name}</span>
+                        <span className="font-semibold text-[var(--fg-primary)] truncate">
+                          {cat.name}
+                        </span>
                         {isOver && (
-                          <span className="text-[10px] bg-rose-50 text-rose-700 border border-rose-200 px-1.5 py-0.2 rounded font-semibold">
-                            +${cat.diff.toFixed(2)} Over Cap
+                          <span className="text-[10px] bg-[var(--status-danger-bg)] text-[var(--status-danger-text)] border border-[var(--status-danger-border)] px-1.5 py-0.5 rounded font-semibold shrink-0">
+                            +${cat.diff.toFixed(2)} Over
                           </span>
                         )}
                       </div>
 
-                      <div className="font-mono text-zinc-700">
-                        <span className={`font-semibold ${isOver ? "text-rose-600" : "text-zinc-900"}`}>
+                      <div className="font-mono text-[var(--fg-secondary)] tabular-nums shrink-0">
+                        <span
+                          className={`font-semibold ${
+                            isOver ? "text-[var(--status-danger-text)]" : "text-[var(--fg-primary)]"
+                          }`}
+                        >
                           ${cat.spent.toFixed(2)}
                         </span>
-                        <span className="text-stone-400"> / </span>
-                        <span className="text-stone-600">${cat.monthlyCap.toFixed(0)}</span>
-                        <span className="text-stone-400 text-[11px] ml-1.5">({cat.percent}%)</span>
+                        <span className="text-[var(--fg-muted)]"> / </span>
+                        <span className="text-[var(--fg-secondary)]">${cat.monthlyCap.toFixed(0)}</span>
+                        <span className="text-[var(--fg-muted)] text-[11px] ml-1.5">({cat.percent}%)</span>
                       </div>
                     </div>
 
                     {/* Comparative Track Bar */}
-                    <div className="w-full bg-stone-100 rounded-full h-2.5 overflow-hidden border border-stone-200">
+                    <div className="w-full bg-[var(--surface-subtle)] rounded-full h-2.5 overflow-hidden border border-[var(--border-subtle)]">
                       <div
                         className={`h-full rounded-full transition-all duration-500 ${
                           isOver ? "bg-rose-500" : cat.percent > 80 ? "bg-amber-500" : "bg-emerald-500"
@@ -388,36 +389,32 @@ export default function FinancialStudio({
             </div>
           </div>
 
-          <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between text-[11px] text-stone-500">
+          <div className="mt-4 pt-3 border-t border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-2 text-[11px] text-[var(--fg-muted)]">
             <span className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-500" /> Healthy
-              <span className="w-2 h-2 rounded-full bg-amber-500 ml-2" /> &gt;80% Warning
+              <span className="w-2 h-2 rounded-full bg-amber-500 ml-2" /> &gt;80%
               <span className="w-2 h-2 rounded-full bg-rose-500 ml-2" /> Exceeded
             </span>
-            <span className="font-mono text-stone-500">
-              {categoryAnalytics.items.length} Tracked Categories
+            <span className="font-mono text-[var(--fg-muted)]">
+              {categoryAnalytics.items.length} Categories
             </span>
           </div>
         </div>
 
         {/* Insight 2: Category Spending Share Donut (5 Columns) */}
-        <div className="lg:col-span-5 bg-white border border-stone-200/90 rounded-2xl p-4 flex flex-col justify-between shadow-2xs">
+        <div className="lg:col-span-5 bg-[var(--surface-card)] border border-[var(--border-strong)] rounded-2xl p-4 flex flex-col justify-between shadow-2xs">
           <div>
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <PieChart className="w-4 h-4 text-emerald-600" />
-                <h3 className="text-xs font-bold text-zinc-900 uppercase tracking-wider">
+                <PieChart className="w-4 h-4 text-[var(--accent-text)]" />
+                <h3 className="text-xs font-bold text-[var(--fg-primary)] uppercase tracking-wider">
                   Spending Share
                 </h3>
               </div>
-              <span className="text-[11px] font-mono text-stone-500">
-                100% of ${categoryAnalytics.totalSpent.toFixed(0)}
+              <span className="text-[11px] font-mono text-[var(--fg-muted)] tabular-nums">
+                ${categoryAnalytics.totalSpent.toFixed(0)}
               </span>
             </div>
-
-            <p className="text-xs text-stone-500 mb-3">
-              Proportion of total monthly expenses distributed across each spending category.
-            </p>
 
             {/* Custom SVG Donut Diagram */}
             <div className="flex items-center justify-center my-2">
@@ -449,30 +446,30 @@ export default function FinancialStudio({
 
                 {/* Donut Center Display */}
                 <div className="absolute flex flex-col items-center justify-center text-center pointer-events-none">
-                  <span className="text-[10px] text-stone-500 uppercase font-semibold">
+                  <span className="text-[10px] text-[var(--fg-muted)] uppercase font-semibold">
                     {hoveredSlice || "Total"}
                   </span>
-                  <span className="text-sm font-bold text-zinc-900 font-mono">
+                  <span className="text-sm font-bold text-[var(--fg-primary)] font-mono tabular-nums">
                     {hoveredSlice
                       ? `$${categoryAnalytics.items
                           .find((i) => i.name === hoveredSlice)
                           ?.spent.toFixed(0)}`
                       : `$${categoryAnalytics.totalSpent.toFixed(0)}`}
                   </span>
-                  <span className="text-[10px] text-stone-500 font-mono">
+                  <span className="text-[10px] text-[var(--fg-muted)] font-mono">
                     {hoveredSlice
                       ? `${
                           categoryAnalytics.items.find((i) => i.name === hoveredSlice)
                             ?.shareOfTotal
-                        }% share`
-                      : `${transactions.length} charges`}
+                        }%`
+                      : `${transactions.length} txns`}
                   </span>
                 </div>
               </div>
             </div>
 
             {/* Legend */}
-            <div className="grid grid-cols-2 gap-2 mt-2">
+            <div className="grid grid-cols-2 gap-2 mt-3">
               {donutSlices.map((slice) => (
                 <div
                   key={slice.id}
@@ -480,8 +477,8 @@ export default function FinancialStudio({
                   onMouseLeave={() => setHoveredSlice(null)}
                   className={`flex items-center justify-between p-1.5 rounded-lg border transition-all cursor-pointer shadow-2xs ${
                     hoveredSlice === slice.name
-                      ? "bg-amber-50/70 border-amber-300 scale-[1.02]"
-                      : "bg-stone-50 border-stone-200 hover:border-amber-300"
+                      ? "bg-[var(--accent-subtle)] border-[var(--accent-border)] scale-[1.02]"
+                      : "bg-[var(--surface-elevated)] border-[var(--border-subtle)] hover:border-[var(--accent-border)]"
                   }`}
                 >
                   <div className="flex items-center gap-1.5 min-w-0">
@@ -489,9 +486,11 @@ export default function FinancialStudio({
                       className="w-2.5 h-2.5 rounded-full shrink-0"
                       style={{ backgroundColor: slice.color }}
                     />
-                    <span className="text-xs text-zinc-800 truncate font-medium">{slice.name}</span>
+                    <span className="text-xs text-[var(--fg-primary)] truncate font-medium">
+                      {slice.name}
+                    </span>
                   </div>
-                  <span className="text-xs font-mono text-stone-500 ml-1">
+                  <span className="text-xs font-mono text-[var(--fg-muted)] ml-1 tabular-nums">
                     {slice.percentage}%
                   </span>
                 </div>
@@ -501,25 +500,21 @@ export default function FinancialStudio({
         </div>
 
         {/* Insight 3: Split Balances & Counterparty Receivables (Full 12 Columns) */}
-        <div className="lg:col-span-12 bg-white border border-stone-200/90 rounded-2xl p-4 shadow-2xs">
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <div className="lg:col-span-12 bg-[var(--surface-card)] border border-[var(--border-strong)] rounded-2xl p-4 shadow-2xs">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3.5">
             <div className="flex items-center gap-2">
-              <Users className="w-4 h-4 text-amber-700" />
-              <h3 className="text-xs font-bold text-zinc-900 uppercase tracking-wider">
-                Split Balances & Receivables
+              <Users className="w-4 h-4 text-[var(--accent-text)]" />
+              <h3 className="text-xs font-bold text-[var(--fg-primary)] uppercase tracking-wider">
+                Split Receivables
               </h3>
             </div>
             <div className="flex items-center gap-2 text-xs">
-              <span className="text-stone-500">Total Unsettled Owed:</span>
-              <span className="font-bold text-amber-900 font-mono text-sm">
+              <span className="text-[var(--fg-muted)]">Unsettled:</span>
+              <span className="font-bold text-[var(--accent-text)] font-mono text-sm tabular-nums">
                 ${debtorAnalytics.totalReceivables.toFixed(2)}
               </span>
             </div>
           </div>
-
-          <p className="text-xs text-stone-500 mb-3.5">
-            Active group splits and individual debts linked to your PayPal ledger charges.
-          </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {debtorAnalytics.list.map((debtor) => {
@@ -529,37 +524,38 @@ export default function FinancialStudio({
               return (
                 <div
                   key={debtor.name}
-                  className="p-3 rounded-xl bg-stone-50/80 border border-stone-200 hover:border-amber-300 transition-colors flex flex-col justify-between gap-2 shadow-2xs"
+                  className="p-3 rounded-xl bg-[var(--surface-elevated)] border border-[var(--border-subtle)] hover:border-[var(--accent-border)] transition-colors flex flex-col justify-between gap-2 shadow-2xs"
                 >
                   <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-bold text-zinc-900 truncate max-w-[130px]">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span className="text-xs font-bold text-[var(--fg-primary)] truncate">
                         {debtor.name}
                       </span>
                       <span
-                        className={`text-[10px] px-1.5 py-0.5 rounded font-semibold border ${
+                        className={`text-[10px] px-1.5 py-0.5 rounded font-semibold border shrink-0 ${
                           isSettled
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                            ? "bg-[var(--status-success-bg)] text-[var(--status-success-text)] border-[var(--status-success-border)]"
                             : isDisputed
-                            ? "bg-rose-50 text-rose-700 border-rose-300"
-                            : "bg-amber-50 text-amber-900 border-amber-300"
+                            ? "bg-[var(--status-danger-bg)] text-[var(--status-danger-text)] border-[var(--status-danger-border)]"
+                            : "bg-[var(--status-info-bg)] text-[var(--status-info-text)] border-[var(--status-info-border)]"
                         }`}
                       >
-                        {isSettled ? "Settled" : isDisputed ? "Discrepancy" : "Pending"}
+                        {isSettled ? "Settled" : isDisputed ? "Disputed" : "Pending"}
                       </span>
                     </div>
 
-                    <p className="text-base font-bold text-zinc-900 font-mono">
+                    <p className="text-base font-bold text-[var(--fg-primary)] font-mono tabular-nums">
                       ${debtor.amount.toFixed(2)}
                     </p>
 
-                    <p className="text-[11px] text-stone-500 truncate mt-0.5">
+                    <p className="text-[11px] text-[var(--fg-muted)] truncate mt-0.5">
                       {debtor.txs.join(", ")}
                     </p>
                   </div>
 
                   {!isSettled && (
                     <button
+                      type="button"
                       onClick={() =>
                         onActionClick?.(
                           `Draft a PayPal payment reminder for ${debtor.name} for $${debtor.amount.toFixed(
@@ -567,10 +563,10 @@ export default function FinancialStudio({
                           )}`
                         )
                       }
-                      className="mt-1 flex items-center justify-center gap-1 w-full py-1.5 rounded-lg bg-white hover:bg-amber-50 text-amber-900 text-[11px] font-semibold border border-amber-300 transition-colors cursor-pointer shadow-2xs"
+                      className="mt-1 flex items-center justify-center gap-1 w-full py-1.5 rounded-lg bg-[var(--surface-card)] hover:bg-[var(--accent-subtle)] active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)] text-[var(--accent-text)] text-[11px] font-semibold border border-[var(--accent-border)] transition-all cursor-pointer shadow-2xs"
                     >
                       <span>Draft Reminder</span>
-                      <ArrowUpRight className="w-3 h-3 text-amber-700" />
+                      <ArrowUpRight className="w-3 h-3" />
                     </button>
                   )}
                 </div>
