@@ -16,7 +16,7 @@ import { SandboxStore } from "@/lib/sandbox/sandboxStore";
 import { UserAccount, InvoiceRecord } from "@/types/sandboxUser";
 import { ScheduledEvent } from "@/components/scheduler/BudgetScheduler";
 import { PulseBackground } from "@/components/ui/PulseBackground";
-import { LiquidGlassWordmarkFooter } from "@/components/ui/liquid-glass-wordmark-footer";
+import { ensureUniqueCategoryColors } from "@/lib/utils/categoryColors";
 import {
   Wallet,
   CreditCard,
@@ -199,14 +199,13 @@ export default function Home() {
       const catRes = await fetch("/api/categories");
       const catData = await catRes.json();
       if (catData.categories) {
-        setCategories(
-          catData.categories.map((c: { id: string; name: string; monthlyCap: number; color?: string }) => ({
-            id: c.id,
-            name: c.name,
-            monthlyCap: c.monthlyCap,
-            color: c.color || "#3b82f6",
-          }))
-        );
+        const rawCats = catData.categories.map((c: { id: string; name: string; monthlyCap: number; color?: string }) => ({
+          id: c.id,
+          name: c.name,
+          monthlyCap: c.monthlyCap,
+          color: c.color,
+        }));
+        setCategories(ensureUniqueCategoryColors(rawCats));
       }
     } catch {
       // ignore
@@ -1548,58 +1547,6 @@ export default function Home() {
         categories={categories}
         onAssignCategory={handleReclassifyTransaction}
       />
-
-      {/* Living Liquid Glass Wordmark Footer */}
-      <div className="relative z-10 mt-14 w-full">
-        <LiquidGlassWordmarkFooter
-          wordmark="PocketMate"
-          brand="PocketMate AI"
-          brandHref="/"
-          title="Intelligent Financial Workspace"
-          description="Autonomous multi-account auditing, split reconciliation, and budget governance."
-          groups={[
-            {
-              title: "Ledger",
-              links: [
-                { label: "Transactions", href: "#" },
-                { label: "Category Caps", href: "#" },
-                { label: "Split Reconciliation", href: "#" },
-              ],
-            },
-            {
-              title: "Agent Capabilities",
-              links: [
-                { label: "Receipt Vision Audit", href: "#" },
-                { label: "PayPal Disputes", href: "#" },
-                { label: "Autonomous Sweeps", href: "#" },
-              ],
-            },
-            {
-              title: "Sandbox & Tools",
-              links: [
-                { label: "PayPal Sandbox", href: "https://developer.paypal.com" },
-                { label: "Gemini 3.5 Flash", href: "https://ai.google.dev" },
-                { label: "Documentation", href: "#" },
-              ],
-            },
-          ]}
-          copyright="© 2026 PocketMate"
-          glass={{
-            blur: 20,
-            opacity: 0.85,
-            saturation: 1.8,
-            tint: "#fdfbf7",
-            edge: 0.85,
-            distortion: 28,
-          }}
-          accent="#f59e0b"
-          depth={0.3}
-          motionIntensity={0.8}
-          rippleStrength={1}
-          cursorSize={32}
-          showCursor={true}
-        />
-      </div>
       </main>
     </>
   );
