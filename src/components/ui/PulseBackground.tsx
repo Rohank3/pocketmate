@@ -10,10 +10,10 @@ export type PulseBackgroundPalette = {
 };
 
 export const PULSE_PALETTES: Record<string, PulseBackgroundPalette> = {
-  // Executive Pure White & Champagne Gold (Signature Single Modern Luxury Theme)
+  // Executive Warm Ivory & Champagne Gold (Signature Single Modern Luxury Theme)
   gold: {
-    from: "#ffffff",
-    to: "#f7f6f2",
+    from: "#fbf9f4",
+    to: "#f1ebe0",
     glow: "#f59e0b",
     ink: "#18181b",
   },
@@ -67,16 +67,16 @@ export const PulseBackground: React.FC<PulseBackgroundProps> = ({
       aria-hidden="true"
     >
       {/* Vertical Travelling Pulse Stripes */}
-      <div className="absolute inset-0 flex opacity-80">
+      <div className="absolute inset-0 flex opacity-90">
         {Array.from({ length: n }, (_, i) => (
           <div
             key={i}
-            className="relative flex-1 h-full overflow-hidden border-r border-amber-900/[0.04]"
+            className="relative flex-1 h-full overflow-hidden border-r border-amber-900/[0.05]"
           >
             <div
-              className="absolute left-0 right-0 h-1/2 -top-[60%] blur-[6px] opacity-60 will-change-transform"
+              className="absolute left-0 right-0 h-3/5 -top-[60%] blur-[8px] opacity-75 will-change-transform"
               style={{
-                background: `linear-gradient(180deg, transparent, color-mix(in oklab, var(--psh-glow) 12%, transparent) 45%, color-mix(in oklab, var(--psh-glow) 28%, transparent) 80%, color-mix(in oklab, var(--psh-glow) 50%, transparent) 95%, transparent 100%)`,
+                background: `linear-gradient(180deg, transparent, rgba(245, 158, 11, 0.05) 25%, rgba(251, 191, 36, 0.18) 60%, rgba(217, 119, 6, 0.28) 90%, transparent 100%)`,
                 animation: `psh-pulse 5.4s cubic-bezier(.45, 0, .25, 1) infinite`,
                 animationDelay: `${stripeDelay(i, n, 5.4)}s`,
               }}
@@ -87,18 +87,26 @@ export const PulseBackground: React.FC<PulseBackgroundProps> = ({
 
       {/* Breathing Lamp Glow at Bottom */}
       <div
-        className="absolute -left-[15%] -right-[15%] -bottom-[35%] h-[75%] rounded-[50%] blur-3xl pointer-events-none opacity-40"
+        className="absolute -left-[10%] -right-[10%] -bottom-[30%] h-[70%] rounded-[50%] blur-3xl pointer-events-none opacity-50"
         style={{
-          background: `radial-gradient(closest-side, color-mix(in oklab, var(--psh-glow) 25%, transparent), transparent)`,
+          background: `radial-gradient(closest-side, rgba(245, 158, 11, 0.2), rgba(251, 191, 36, 0.1), transparent)`,
           animation: `psh-breathe 8s ease-in-out infinite`,
         }}
       />
 
       {/* Top Ambient Vignette Lamp */}
       <div
-        className="absolute -left-[20%] -right-[20%] -top-[30%] h-[60%] rounded-[50%] blur-3xl pointer-events-none opacity-30"
+        className="absolute -left-[15%] -right-[15%] -top-[25%] h-[55%] rounded-[50%] blur-3xl pointer-events-none opacity-45"
         style={{
-          background: `radial-gradient(closest-side, color-mix(in oklab, var(--psh-glow) 18%, transparent), transparent)`,
+          background: `radial-gradient(closest-side, rgba(251, 191, 36, 0.18), rgba(245, 158, 11, 0.08), transparent)`,
+        }}
+      />
+
+      {/* Center Subtle Champagne Ambient Light Bloom */}
+      <div
+        className="absolute left-[20%] right-[20%] top-[20%] h-[50%] rounded-[50%] blur-3xl pointer-events-none opacity-30"
+        style={{
+          background: `radial-gradient(closest-side, rgba(245, 158, 11, 0.15), transparent)`,
         }}
       />
 
@@ -106,7 +114,7 @@ export const PulseBackground: React.FC<PulseBackgroundProps> = ({
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
-          background: `radial-gradient(75% 60% at 50% 35%, transparent 50%, color-mix(in oklab, var(--psh-to) 40%, transparent) 90%)`,
+          background: `radial-gradient(75% 60% at 50% 35%, transparent 50%, rgba(230, 222, 210, 0.35) 90%)`,
         }}
       />
 
