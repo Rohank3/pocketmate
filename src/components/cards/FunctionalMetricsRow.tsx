@@ -720,15 +720,24 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
         <div
           onMouseEnter={() => handleMouseEnter(1)}
           onMouseLeave={handleMouseLeave}
-          onClick={() => handleCardClick(1)}
-          className={`relative p-4 rounded-2xl cursor-pointer select-none glass-panel-interactive kpi-reveal ${
-            isFlyoutOpen(1) ? "z-25 glass-card-active" : ""
-          }`}
-          role="button"
-          tabIndex={0}
-          aria-expanded={isFlyoutOpen(1)}
+          className={`relative kpi-reveal ${isFlyoutOpen(1) ? "z-25" : ""}`}
         >
-          <div className="flex items-center justify-between">
+          <div
+            onClick={() => handleCardClick(1)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                handleCardClick(1);
+              }
+            }}
+            className={`relative h-full p-4 rounded-2xl cursor-pointer select-none glass-panel-interactive ${
+              isFlyoutOpen(1) ? "glass-card-active" : ""
+            }`}
+            role="button"
+            tabIndex={0}
+            aria-expanded={isFlyoutOpen(1)}
+          >
+            <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1 pr-2">
               <div className="flex items-center gap-1.5">
                 <span className="text-[11px] font-bold text-[var(--fg-muted)] tracking-wider uppercase">
@@ -770,6 +779,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
             >
               <Wallet className="w-5 h-5" />
             </div>
+          </div>
           </div>
 
           {/* Glass Dropdown Flyout for Card 1 */}
@@ -903,15 +913,24 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
         <div
           onMouseEnter={() => handleMouseEnter(2)}
           onMouseLeave={handleMouseLeave}
-          onClick={() => handleCardClick(2)}
-          className={`relative p-4 rounded-2xl cursor-pointer select-none glass-panel-interactive kpi-reveal ${
-            isFlyoutOpen(2) ? "z-25 glass-card-active" : ""
-          }`}
-          role="button"
-          tabIndex={0}
-          aria-expanded={isFlyoutOpen(2)}
+          className={`relative kpi-reveal ${isFlyoutOpen(2) ? "z-25" : ""}`}
         >
-          <div className="flex items-center justify-between">
+          <div
+            onClick={() => handleCardClick(2)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                handleCardClick(2);
+              }
+            }}
+            className={`relative h-full p-4 rounded-2xl cursor-pointer select-none glass-panel-interactive ${
+              isFlyoutOpen(2) ? "glass-card-active" : ""
+            }`}
+            role="button"
+            tabIndex={0}
+            aria-expanded={isFlyoutOpen(2)}
+          >
+            <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1 pr-2">
               <p className="text-[11px] font-bold text-[var(--fg-muted)] tracking-wider uppercase">
                 Pending Settlements
@@ -934,6 +953,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
             <div className="w-11 h-11 rounded-xl bg-[var(--status-info-bg)] border border-[var(--status-info-border)] flex items-center justify-center text-[var(--status-info-text)] shrink-0">
               <Users className="w-5 h-5" />
             </div>
+          </div>
           </div>
 
           {/* Glass Dropdown Flyout for Card 2 */}
@@ -1150,15 +1170,24 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
         <div
           onMouseEnter={() => handleMouseEnter(3)}
           onMouseLeave={handleMouseLeave}
-          onClick={() => handleCardClick(3)}
-          className={`relative p-4 rounded-2xl cursor-pointer select-none glass-panel-interactive kpi-reveal ${
-            isFlyoutOpen(3) ? "z-25 glass-card-active" : ""
-          }`}
-          role="button"
-          tabIndex={0}
-          aria-expanded={isFlyoutOpen(3)}
+          className={`relative kpi-reveal ${isFlyoutOpen(3) ? "z-25" : ""}`}
         >
-          <div className="flex items-center justify-between">
+          <div
+            onClick={() => handleCardClick(3)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                handleCardClick(3);
+              }
+            }}
+            className={`relative h-full p-4 rounded-2xl cursor-pointer select-none glass-panel-interactive ${
+              isFlyoutOpen(3) ? "glass-card-active" : ""
+            }`}
+            role="button"
+            tabIndex={0}
+            aria-expanded={isFlyoutOpen(3)}
+          >
+            <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1 pr-2">
               <p className="text-[11px] font-bold text-[var(--fg-muted)] tracking-wider uppercase">
                 Upcoming Bills
@@ -1180,6 +1209,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
             <div className="w-11 h-11 rounded-xl bg-[var(--status-info-bg)] border border-[var(--status-info-border)] flex items-center justify-center text-[var(--status-info-text)] shrink-0">
               <Clock className="w-5 h-5" />
             </div>
+          </div>
           </div>
 
           {/* Glass Dropdown Flyout for Card 3 */}
@@ -1312,19 +1342,28 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
         <div
           onMouseEnter={() => handleMouseEnter(4)}
           onMouseLeave={handleMouseLeave}
-          onClick={() => handleCardClick(4)}
-          className={`relative p-4 rounded-2xl cursor-pointer select-none glass-panel-interactive kpi-reveal ${
-            isFlyoutOpen(4)
-              ? actionItems.length > 0
-                ? "z-25 glass-card-active glass-card-danger"
-                : "z-25 glass-card-active"
-              : ""
-          }`}
-          role="button"
-          tabIndex={0}
-          aria-expanded={isFlyoutOpen(4)}
+          className={`relative kpi-reveal ${isFlyoutOpen(4) ? "z-25" : ""}`}
         >
-          <div className="flex items-center justify-between">
+          <div
+            onClick={() => handleCardClick(4)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                handleCardClick(4);
+              }
+            }}
+            className={`relative h-full p-4 rounded-2xl cursor-pointer select-none glass-panel-interactive ${
+              isFlyoutOpen(4)
+                ? actionItems.length > 0
+                  ? "glass-card-active glass-card-danger"
+                  : "glass-card-active"
+                : ""
+            }`}
+            role="button"
+            tabIndex={0}
+            aria-expanded={isFlyoutOpen(4)}
+          >
+            <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1 pr-2">
               <p className="text-[11px] font-bold text-[var(--fg-muted)] tracking-wider uppercase">
                 Action Required
@@ -1360,6 +1399,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
             >
               <ShieldAlert className="w-5 h-5" />
             </div>
+          </div>
           </div>
 
           {/* Glass Dropdown Flyout for Card 4 */}
