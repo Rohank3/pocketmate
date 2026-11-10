@@ -76,7 +76,7 @@ body {
 }
 
 .animate-jelly-pop {
-  animation: jelly-pop 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: jelly-pop 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
 }
 
 /* Liquid Buoyancy Float when caustic waves pass */
@@ -96,7 +96,7 @@ body {
 }
 
 .liquid-buoyant {
-  animation: liquid-buoyancy-wave 0.85s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: liquid-buoyancy-wave 0.85s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @media (prefers-reduced-motion: reduce) {

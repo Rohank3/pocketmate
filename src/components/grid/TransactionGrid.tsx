@@ -28,7 +28,6 @@ import {
 } from "lucide-react";
 import { GridMutationState } from "@/types/agent";
 import type { CategoryItem } from "@/components/categories/CategoryControlBar";
-import { LiquidGlassContainer } from "@/components/ui/LiquidGlassContainer";
 
 // Register all community features (RowSelection, Pagination, ColumnFilter, NumberFilter, Validation)
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -369,23 +368,9 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
   }, [filteredData]);
 
   return (
-    <LiquidGlassContainer
-      className="h-full w-full rounded-2xl"
-      contentClassName="relative flex flex-col h-full overflow-hidden rounded-2xl"
-      glass={{
-        blur: 24,
-        opacity: 0.85,
-        saturation: 1.8,
-        tint: "#fdfbf7",
-        edge: 0.9,
-        distortion: 26,
-      }}
-      accent="#f59e0b"
-      intensity={0.85}
-      rippleStrength={1}
-    >
+    <div className="h-full w-full flex flex-col rounded-2xl overflow-hidden bg-transparent relative">
       {/* Top Banner / Reactive Agent Feedback Header */}
-      <div className="px-4 py-3 bg-white/60 border-b border-stone-200/70 flex items-center justify-between backdrop-blur-md relative overflow-hidden">
+      <div className="px-4 py-3 bg-white/55 border-b border-stone-200/70 flex items-center justify-between backdrop-blur-md relative overflow-hidden rounded-t-2xl">
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 rounded-lg bg-amber-50 border border-amber-300/80 flex items-center justify-center text-amber-700">
             <DollarSign className="w-3.5 h-3.5" />
@@ -394,13 +379,6 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
           <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-stone-100 text-stone-700 border border-stone-200">
             {filteredData.length} of {rowData.length} records
           </span>
-          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-300 text-amber-900 text-[10px] font-bold shadow-2xs">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-            </span>
-            <span>Liquid Flow Active</span>
-          </div>
           {selectedCategory && selectedCategory.toLowerCase() !== "all" && (
             <span className="text-[11px] px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-900 border border-amber-400/50 font-medium">
               Category: {selectedCategory}
@@ -642,6 +620,6 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
         </div>,
         document.body
       )}
-    </LiquidGlassContainer>
+    </div>
   );
 };

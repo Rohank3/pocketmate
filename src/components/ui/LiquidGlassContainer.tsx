@@ -745,10 +745,11 @@ export const LiquidGlassContainer: React.FC<LiquidGlassContainerProps> = ({
         className="g-liquid-material pointer-events-none absolute -inset-8 transition-shadow duration-300 z-5"
         style={{
           background: `linear-gradient(135deg, rgba(255, 255, 255, 0.58) 0%, rgba(253, 251, 247, 0.38) 100%), color-mix(in srgb, ${tint} calc(${opacity} * 100%), transparent)`,
-          backdropFilter: `blur(var(--glass-blur)) saturate(var(--glass-saturation)) var(--glass-refraction, blur(0px))`,
+          backdropFilter: `blur(var(--glass-blur)) saturate(var(--glass-saturation))`,
           WebkitBackdropFilter: `blur(var(--glass-blur)) saturate(var(--glass-saturation))`,
           boxShadow: `0 20px 48px -12px rgba(24, 24, 27, 0.09), 0 0 32px rgba(245, 158, 11, 0.08)`,
           clipPath: `url(#${clipId})`,
+          WebkitClipPath: `url(#${clipId})`,
         }}
         aria-hidden="true"
       >
