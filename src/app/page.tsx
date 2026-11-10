@@ -36,10 +36,9 @@ const FinancialStudio = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="h-full w-full min-h-[550px] bg-zinc-950 rounded-xl border border-zinc-800 flex flex-col items-center justify-center p-8 text-center animate-pulse">
-        <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mb-3" />
-        <p className="text-sm font-semibold text-zinc-300">Loading Spending Insights...</p>
-        <p className="text-xs text-zinc-500 mt-1">Calculating budget caps and spending distribution</p>
+      <div className="h-full w-full min-h-[550px] rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] flex flex-col items-center justify-center p-8 text-center animate-pulse">
+        <div className="w-8 h-8 border-2 border-[#0070ba] border-t-transparent rounded-full animate-spin mb-3" />
+        <p className="text-sm font-semibold text-[var(--fg-primary)]">Loading Insights...</p>
       </div>
     ),
   }
@@ -51,10 +50,9 @@ const BudgetScheduler = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="h-full w-full min-h-[550px] bg-zinc-950 rounded-xl border border-zinc-800 flex flex-col items-center justify-center p-8 text-center animate-pulse">
-        <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mb-3" />
-        <p className="text-sm font-semibold text-zinc-300">Loading Payment Calendar...</p>
-        <p className="text-xs text-zinc-500 mt-1">Retrieving scheduled bills, receivables & milestones</p>
+      <div className="h-full w-full min-h-[550px] rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] flex flex-col items-center justify-center p-8 text-center animate-pulse">
+        <div className="w-8 h-8 border-2 border-[#0070ba] border-t-transparent rounded-full animate-spin mb-3" />
+        <p className="text-sm font-semibold text-[var(--fg-primary)]">Loading Calendar...</p>
       </div>
     ),
   }
@@ -70,7 +68,7 @@ const getStorageScope = (user?: UserAccount | null) =>
   user?.email ? user.email.toLowerCase().trim() : "guest";
 
 export default function Home() {
-  const { theme, accentColor, tintColor } = useTheme();
+  const { theme, accentColor, tintColor, isDark } = useTheme();
   const [activePersona, setActivePersona] = useState<"GENERAL" | "FREELANCER" | "BUSINESS">("GENERAL");
   const [activeRightTab, setActiveRightTab] = useState<"transactions" | "insights" | "upcoming">("transactions");
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
@@ -1069,36 +1067,37 @@ export default function Home() {
       {/* Living Ambient Pulse Stripe Background in Selected Color Theme */}
       <PulseBackground palette={theme} />
 
-      <main className="relative z-10 min-h-screen text-zinc-900 flex flex-col p-3 md:p-6 lg:p-8">
+      <main className="relative z-10 min-h-screen text-[var(--fg-primary)] flex flex-col p-3 md:p-6 lg:p-8">
         {/* Top Navigation & Brand Header */}
-        <header className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-stone-200/80">
+        <header className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-[var(--border-subtle)]">
           <div>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500/20 via-yellow-500/15 to-amber-600/15 border border-amber-400/40 flex items-center justify-center text-amber-700 shadow-sm backdrop-blur-md">
+              <div className="w-10 h-10 rounded-2xl bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center justify-center text-[var(--accent-text)] shadow-xs backdrop-blur-md">
                 <Wallet className="w-5 h-5" />
               </div>
               <div>
-                <h1 className="text-xl font-bold tracking-tight text-zinc-900 flex items-center gap-2">
+                <h1 className="text-xl font-bold tracking-tight text-[var(--fg-primary)] flex items-center gap-2">
                   PocketMate
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-800 border border-amber-500/30 font-semibold">
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[var(--status-info-bg)] text-[var(--status-info-text)] border border-[var(--status-info-border)] font-semibold">
                     Live
                   </span>
                 </h1>
-                <p className="text-xs text-zinc-500">
-                  Intelligent Financial Workspace
-                </p>
               </div>
             </div>
           </div>
 
           {/* Connection & Auth Controls */}
           <div className="flex flex-wrap items-center gap-3">
-            {/* Color Theme Selector */}
+            {/* Light / Dark Theme Toggle */}
             <ThemeToggle />
 
             {/* Sandbox Status Badge */}
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/90 border border-stone-200 backdrop-blur-md text-xs text-zinc-700 shadow-xs">
-              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shadow-sm shadow-amber-500/50" />
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[var(--surface-card)] border border-[var(--border-strong)] backdrop-blur-md text-xs text-[var(--fg-secondary)] shadow-2xs">
+              <span
+                className={`w-2 h-2 rounded-full animate-pulse ${
+                  isDark ? "bg-sky-400" : "bg-[#0070ba]"
+                }`}
+              />
               <span className="font-mono text-[11px] font-medium">
                 {currentUser ? "Sandbox Connected" : "Sandbox Mode"}
               </span>
@@ -1106,20 +1105,24 @@ export default function Home() {
 
             {/* User Account / PayPal Login Button */}
             {currentUser ? (
-              <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-white/95 border border-amber-400/40 backdrop-blur-md text-xs shadow-xs">
-                <div className="w-6 h-6 rounded-full bg-amber-500/20 border border-amber-400/40 flex items-center justify-center font-bold text-[10px] text-amber-800 shadow-inner">
+              <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-[var(--surface-card)] border border-[var(--accent-border)] backdrop-blur-md text-xs shadow-2xs">
+                <div className="w-6 h-6 rounded-full bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center justify-center font-bold text-[10px] text-[var(--accent-text)]">
                   {currentUser.avatar}
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-zinc-900 font-semibold leading-tight">{currentUser.name}</span>
-                  <span className="text-[10px] text-zinc-500 font-mono leading-tight truncate max-w-[140px]">
+                  <span className="text-[var(--fg-primary)] font-semibold leading-tight">{currentUser.name}</span>
+                  <span className="text-[10px] text-[var(--fg-muted)] font-mono leading-tight truncate max-w-[140px]">
                     {currentUser.email}
                   </span>
                 </div>
-                <div className="flex items-center ml-2 border-l border-stone-200 pl-2">
+                <div className="flex items-center ml-2 border-l border-[var(--border-subtle)] pl-2">
                   <button
                     onClick={handleUserLogout}
-                    className="text-xs text-zinc-500 hover:text-rose-600 font-medium cursor-pointer transition-colors"
+                    className={`text-xs font-medium cursor-pointer transition-colors ${
+                      isDark
+                        ? "text-slate-400 hover:text-rose-400"
+                        : "text-slate-600 hover:text-rose-600"
+                    }`}
                   >
                     Log Out
                   </button>
@@ -1128,7 +1131,7 @@ export default function Home() {
             ) : (
               <button
                 onClick={() => setIsLoginModalOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-400 hover:to-yellow-400 active:scale-[0.98] text-zinc-950 text-xs font-bold shadow-md shadow-amber-500/25 border border-amber-400/40 backdrop-blur-md transition-all cursor-pointer"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl theme-btn-primary active:scale-[0.98] text-xs font-bold backdrop-blur-md transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0070ba]"
               >
                 <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
                   <path d="M20.067 8.478c.492.315.844.818.996 1.424.238.948.067 2.05-.48 3.108-1.042 2.015-2.918 3.32-5.148 3.585-.453.053-.91.08-1.367.08h-.468c-.468 0-.87.332-.942.793l-.845 5.353-.028.175c-.033.206-.21.354-.42.354H8.05c-.26 0-.45-.24-.41-.497l2.128-13.49c.04-.257.26-.45.52-.45h4.636c1.69 0 3.19.467 4.143 1.565z" />
@@ -1206,49 +1209,53 @@ export default function Home() {
               accent={accentColor}
               intensity={1}
             >
-              {/* View Tab Switcher Styled with Frosted White Glass Segmented Control */}
+              {/* View Tab Switcher */}
             <div className="flex items-center justify-between p-1.5 rounded-2xl glass-panel shadow-sm">
               <div className="flex flex-wrap items-center gap-1.5">
                 <button
                   onClick={() => setActiveRightTab("transactions")}
-                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0070ba] ${
                     activeRightTab === "transactions"
-                      ? "bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-500/20 text-amber-900 border border-amber-400/40 shadow-xs"
-                      : "text-zinc-600 hover:text-zinc-900 hover:bg-stone-100/60"
+                      ? "bg-[var(--accent-subtle)] text-[var(--accent-text)] border border-[var(--accent-border)] shadow-2xs"
+                      : "text-[var(--fg-secondary)] hover:text-[var(--fg-primary)] hover:bg-[var(--surface-subtle)] border border-transparent"
                   }`}
                 >
-                  <Table2 className={`w-3.5 h-3.5 ${activeRightTab === "transactions" ? "text-amber-600" : "text-zinc-400"}`} />
+                  <Table2 className={`w-3.5 h-3.5 ${activeRightTab === "transactions" ? "text-[var(--accent-text)]" : "text-[var(--fg-muted)]"}`} />
                   <span>Transactions</span>
                 </button>
 
                 <button
                   onClick={() => setActiveRightTab("insights")}
-                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0070ba] ${
                     activeRightTab === "insights"
-                      ? "bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-500/20 text-amber-900 border border-amber-400/40 shadow-xs"
-                      : "text-zinc-600 hover:text-zinc-900 hover:bg-stone-100/60"
+                      ? "bg-[var(--accent-subtle)] text-[var(--accent-text)] border border-[var(--accent-border)] shadow-2xs"
+                      : "text-[var(--fg-secondary)] hover:text-[var(--fg-primary)] hover:bg-[var(--surface-subtle)] border border-transparent"
                   }`}
                 >
-                  <BarChart3 className={`w-3.5 h-3.5 ${activeRightTab === "insights" ? "text-amber-600" : "text-zinc-400"}`} />
+                  <BarChart3 className={`w-3.5 h-3.5 ${activeRightTab === "insights" ? "text-[var(--accent-text)]" : "text-[var(--fg-muted)]"}`} />
                   <span>Insights</span>
                 </button>
 
                 <button
                   onClick={() => setActiveRightTab("upcoming")}
-                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0070ba] ${
                     activeRightTab === "upcoming"
-                      ? "bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-500/20 text-amber-900 border border-amber-400/40 shadow-xs"
-                      : "text-zinc-600 hover:text-zinc-900 hover:bg-stone-100/60"
+                      ? "bg-[var(--accent-subtle)] text-[var(--accent-text)] border border-[var(--accent-border)] shadow-2xs"
+                      : "text-[var(--fg-secondary)] hover:text-[var(--fg-primary)] hover:bg-[var(--surface-subtle)] border border-transparent"
                   }`}
                 >
-                  <CalendarDays className={`w-3.5 h-3.5 ${activeRightTab === "upcoming" ? "text-amber-600" : "text-zinc-400"}`} />
+                  <CalendarDays className={`w-3.5 h-3.5 ${activeRightTab === "upcoming" ? "text-[var(--accent-text)]" : "text-[var(--fg-muted)]"}`} />
                   <span>Upcoming & Due</span>
                 </button>
               </div>
 
-              <div className="hidden sm:flex items-center gap-2 pr-3 text-[11px] text-zinc-600">
-                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shadow-sm shadow-amber-500/50" />
-                <span className="font-semibold text-amber-800">Live</span>
+              <div className="hidden sm:flex items-center gap-2 pr-3 text-[11px] text-[var(--fg-secondary)]">
+                <span
+                  className={`w-2 h-2 rounded-full animate-pulse ${
+                    isDark ? "bg-sky-400" : "bg-[#0070ba]"
+                  }`}
+                />
+                <span className="font-semibold text-[var(--accent-text)]">Live</span>
               </div>
             </div>
 
@@ -1256,23 +1263,23 @@ export default function Home() {
             <div className="flex-1 min-h-[560px] flex flex-col">
               {activeRightTab === "transactions" && (
                 <div className="flex flex-col gap-3 h-full">
-                  {/* Actions Bar for Live PayPal Sandbox with Liquid Stream Indicator */}
+                  {/* Actions Bar for Live PayPal Sandbox */}
                   <div className="flex flex-wrap items-center justify-between gap-2 px-1">
                     <div className="flex items-center gap-3">
-                      <span className="text-xs font-bold text-zinc-900">Ledger</span>
+                      <span className="text-xs font-bold text-[var(--fg-primary)]">Ledger</span>
                       <span
-                        className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-stone-100 text-zinc-700 border border-stone-200 font-medium"
+                        className="text-[11px] font-mono tabular-nums px-2.5 py-0.5 rounded-full bg-[var(--surface-subtle)] text-[var(--fg-secondary)] border border-[var(--border-subtle)] font-medium"
                         title={currentUser ? `Showing scoped records for ${currentUser.name}` : "Sandbox records"}
                       >
                         {transactions.length} records
                       </span>
                       {/* Real-time Ledger Synchronization Status */}
-                      <div className="hidden sm:flex items-center gap-2 pl-1" title="Live financial synchronization stream active">
+                      <div className="hidden sm:flex items-center gap-2 pl-1" title="Live synchronization active">
                         <span className="relative flex h-2 w-2">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                          <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isDark ? "bg-sky-400" : "bg-[#0070ba]"}`}></span>
+                          <span className={`relative inline-flex rounded-full h-2 w-2 ${isDark ? "bg-sky-400" : "bg-[#0070ba]"}`}></span>
                         </span>
-                        <span className="text-[10px] font-mono font-bold text-amber-800">LIVE SYNC</span>
+                        <span className="text-[10px] font-mono font-bold text-[var(--accent-text)]">LIVE SYNC</span>
                       </div>
                     </div>
 
@@ -1280,17 +1287,17 @@ export default function Home() {
                       <button
                         onClick={() => void loadTransactions(activeScope)}
                         disabled={isLoadingTransactions}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-stone-50 text-zinc-700 text-xs font-medium border border-stone-200 shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl theme-btn-secondary border text-xs font-medium shadow-2xs transition-all cursor-pointer disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0070ba]"
                         title="Refresh transactions from PayPal Sandbox REST API"
                       >
-                        <RefreshCw className={`w-3.5 h-3.5 ${isLoadingTransactions ? "animate-spin text-amber-600" : ""}`} />
+                        <RefreshCw className={`w-3.5 h-3.5 ${isLoadingTransactions ? "animate-spin text-[var(--accent-text)]" : ""}`} />
                         <span>Refresh</span>
                       </button>
 
                       <button
                         onClick={handleSeedSandboxTransactions}
                         disabled={isSeedingTransactions}
-                        className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-400 hover:to-yellow-400 text-zinc-950 text-xs font-bold shadow-xs border border-amber-400/40 transition-all cursor-pointer disabled:opacity-50"
+                        className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl theme-btn-primary text-xs font-bold transition-all cursor-pointer disabled:opacity-50 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0070ba]"
                         title="Sync live transactions & invoices directly from PayPal Developer APIs"
                       >
                         <Sparkles className="w-3.5 h-3.5" />
@@ -1312,24 +1319,24 @@ export default function Home() {
 
                 <div className="flex-1 min-h-[480px]">
                   {transactions.length === 0 && !isLoadingTransactions ? (
-                    <div className="h-full min-h-[440px] rounded-2xl border border-dashed border-stone-300 bg-white/90 backdrop-blur-md flex flex-col items-center justify-center p-8 text-center shadow-xs">
-                      <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-300/80 flex items-center justify-center text-amber-700 mb-3 shadow-2xs">
+                    <div className="h-full min-h-[440px] rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-card)] backdrop-blur-md flex flex-col items-center justify-center p-8 text-center shadow-xs">
+                      <div className="w-12 h-12 rounded-2xl bg-[var(--accent-subtle)] border border-[var(--accent-border)] flex items-center justify-center text-[var(--accent-text)] mb-3 shadow-2xs">
                         <CreditCard className="w-6 h-6" />
                       </div>
-                      <h3 className="text-sm font-bold text-zinc-900">
+                      <h3 className="text-sm font-bold text-[var(--fg-primary)]">
                         {currentUser
-                          ? `No Scoped Activity for ${currentUser.name}`
-                          : "No Sandbox Transactions Found"}
+                          ? `No activity for ${currentUser.name}`
+                          : "No transactions found"}
                       </h3>
-                      <p className="text-xs text-stone-500 max-w-sm mt-1 mb-4">
+                      <p className="text-xs text-[var(--fg-muted)] max-w-sm mt-1 mb-4">
                         {currentUser
-                          ? `You currently have 0 pending invoices or personal charges. Ask PocketMate in chat: "Split $80 dinner with friends" to get started.`
-                          : "Your PayPal Sandbox account currently has 0 recorded transactions. Click below to generate realistic invoices and transactions directly in PayPal Sandbox."}
+                          ? "Try splitting an expense in chat or syncing PayPal."
+                          : "Sync PayPal Sandbox to populate ledger records."}
                       </p>
                       <button
                         onClick={handleSeedSandboxTransactions}
                         disabled={isSeedingTransactions}
-                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-400 hover:to-yellow-400 active:scale-95 text-zinc-950 text-xs font-bold shadow-md shadow-amber-500/20 border border-amber-400/40 transition-all cursor-pointer disabled:opacity-50"
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl theme-btn-primary active:scale-95 text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
                       >
                         <Sparkles className="w-4 h-4" />
                         <span>{isSeedingTransactions ? "Syncing PayPal..." : "Sync Live PayPal Transactions"}</span>
