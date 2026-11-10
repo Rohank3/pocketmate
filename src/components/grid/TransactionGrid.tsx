@@ -181,7 +181,8 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
     {
       field: "date",
       headerName: "Date & Time",
-      width: 130,
+      width: 152,
+      minWidth: 125,
       filter: true,
       sortable: true,
     },
@@ -189,6 +190,7 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
       field: "merchant",
       headerName: "Merchant / Memo",
       flex: 1.6,
+      minWidth: 175,
       filter: true,
       cellRenderer: (params: ICellRendererParams<TransactionRow, string>) => {
         const isDisputed = params.data?.status === "disputed";
@@ -221,6 +223,7 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
       field: "category",
       headerName: "Category",
       width: 140,
+      minWidth: 125,
       filter: true,
       cellRenderer: (params: ICellRendererParams<TransactionRow, string>) => {
         const colorsLight: Record<string, string> = {
@@ -269,7 +272,8 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
     {
       field: "amount",
       headerName: "Amount",
-      width: 120,
+      width: 115,
+      minWidth: 100,
       filter: "agNumberColumnFilter",
       sortable: true,
       cellRenderer: (params: ICellRendererParams<TransactionRow, number>) => {
@@ -290,7 +294,8 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
     {
       field: "status",
       headerName: "Settlement Status",
-      width: 145,
+      width: 160,
+      minWidth: 145,
       filter: true,
       cellRenderer: (params: ICellRendererParams<TransactionRow, string>) => {
         const val = params.value;
@@ -463,7 +468,7 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
       </div>
 
       {/* Grid container with modern AG Grid Theming API */}
-      <div className="flex-1 w-full min-h-[380px]">
+      <div className="flex-1 w-full min-h-0">
         <AgGridReact
           ref={gridRef}
           theme={currentGridTheme}
@@ -524,10 +529,15 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
             <div className="p-5 space-y-4">
               {/* Category Selector */}
               <div>
-                <label className="text-xs font-semibold text-[var(--fg-secondary)] block mb-1.5">
+                <label
+                  htmlFor="reclassify-category-select"
+                  className="text-xs font-semibold text-[var(--fg-secondary)] block mb-1.5"
+                >
                   Category
                 </label>
                 <select
+                  id="reclassify-category-select"
+                  name="reclassifyCategory"
                   value={selectedNewCategory}
                   onChange={(e) => setSelectedNewCategory(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-[var(--surface-card)] border border-[var(--border-strong)] text-xs text-[var(--fg-primary)] font-medium focus:outline-none focus:border-[#0070ba] focus:ring-1 focus:ring-[#0070ba] transition-colors cursor-pointer"
