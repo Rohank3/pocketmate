@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import {
   ChevronLeft,
   ChevronRight,
@@ -89,6 +90,11 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
 
   // Delete confirmation modal state
   const [categoryPendingDelete, setCategoryPendingDelete] = useState<CategoryItem | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -233,7 +239,7 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
   };
 
   return (
-    <div className="bg-white/95 backdrop-blur-xl border border-stone-200/90 rounded-2xl p-3 shadow-xs flex flex-col gap-2.5 text-zinc-900">
+    <div className="glass-panel rounded-2xl p-3 flex flex-col gap-2.5 text-zinc-900 shadow-md">
       {/* Top Bar: Roundabout Carousel + Budget Cap Meter + Action Buttons */}
       <div className="flex flex-wrap items-center justify-between gap-2.5">
         {/* Roundabout Category Navigator */}
@@ -437,10 +443,10 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
         />
       </div>
 
-      {/* Comprehensive Manage Categories & Add Category Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-stone-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+      {/* Comprehensive Manage Categories & Add Category Modal (Portalled to document.body at z-[200]) */}
+      {isModalOpen && mounted && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[200] bg-stone-900/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white/98 border border-amber-300/80 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
             {/* Modal Header */}
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-stone-200 bg-amber-50/50">
               <div className="flex items-center gap-2">
@@ -714,14 +720,15 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Quick Edit Single Category Modal (triggered from pill context menu) */}
-      {quickEditCategory && (
-        <div className="fixed inset-0 z-50 bg-stone-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-stone-200 bg-amber-50/50">
+      {/* Quick Edit Single Category Modal (triggered from pill context menu, portalled to document.body at z-[200]) */}
+      {quickEditCategory && mounted && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[200] bg-stone-900/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white/98 border border-amber-300/80 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-stone-200 bg-amber-50/70">
               <div className="flex items-center gap-2">
                 <Edit2 className="w-4 h-4 text-amber-700" />
                 <h3 className="text-sm font-bold text-zinc-900">Edit {quickEditCategory.name}</h3>
@@ -818,13 +825,14 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Delete Confirmation Safeguard Modal */}
-      {categoryPendingDelete && (
-        <div className="fixed inset-0 z-50 bg-stone-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-5 animate-in fade-in zoom-in-95 duration-150">
+      {/* Delete Confirmation Safeguard Modal (portalled to document.body at z-[200]) */}
+      {categoryPendingDelete && mounted && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[200] bg-stone-900/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white/98 border border-stone-200 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-5 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 shrink-0">
                 <Trash2 className="w-5 h-5" />
@@ -860,7 +868,8 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

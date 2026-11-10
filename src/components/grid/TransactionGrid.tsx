@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { AgGridReact } from "ag-grid-react";
 import {
   ColDef,
@@ -27,6 +28,7 @@ import {
 } from "lucide-react";
 import { GridMutationState } from "@/types/agent";
 import type { CategoryItem } from "@/components/categories/CategoryControlBar";
+import { LiquidWave } from "@/components/ui/LiquidWave";
 
 // Register all community features (RowSelection, Pagination, ColumnFilter, NumberFilter, Validation)
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -102,6 +104,11 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
   const [selectedScope, setSelectedScope] = useState<ReclassifyScope | null>(null); // No default!
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
+  const [mounted, setMounted] = useState<boolean>(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleOpenReclassify = (tx: TransactionRow) => {
     setActiveTxForEdit(tx);
@@ -366,11 +373,13 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
   }, [filteredData]);
 
   return (
-    <div className="flex flex-col h-full bg-white/95 border border-stone-200/90 rounded-2xl overflow-hidden relative shadow-sm">
-      {/* Top Banner / Reactive Agent Feedback */}
-      <div className="px-4 py-3 bg-stone-50/90 border-b border-stone-200/80 flex items-center justify-between backdrop-blur-md relative overflow-hidden">
-        {/* Tangible Liquid Stream Animation */}
-        <div className="absolute top-0 left-0 right-0 z-10 liquid-bar" />
+    <div className="flex flex-col h-full glass-panel rounded-2xl overflow-hidden relative shadow-md">
+      {/* Top Banner / Reactive Agent Feedback with Living Liquid Wave Header */}
+      <div className="px-4 py-3 bg-white/60 border-b border-stone-200/70 flex items-center justify-between backdrop-blur-md relative overflow-hidden">
+        {/* Living Liquid Wave Stream Animation */}
+        <div className="absolute top-0 left-0 right-0 z-10 opacity-90">
+          <LiquidWave height={18} />
+        </div>
 
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 rounded-lg bg-amber-50 border border-amber-300/80 flex items-center justify-center text-amber-700">
@@ -467,13 +476,13 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* Reclassify Transaction Modal (3-Way Scope Choice with No Default)        */}
+      {/* Reclassify Transaction Modal (Portalled to document.body at z-[200])     */}
       {/* ========================================================================= */}
-      {activeTxForEdit && (
-        <div className="fixed inset-0 z-50 bg-stone-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-amber-200/90 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+      {activeTxForEdit && mounted && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[200] bg-stone-900/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white/98 border border-amber-300/80 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200/80 bg-amber-50/60">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200/80 bg-amber-50/70">
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-300 flex items-center justify-center text-amber-700">
                   <Tag className="w-3.5 h-3.5" />
@@ -625,7 +634,8 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

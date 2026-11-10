@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
+import { createPortal } from "react-dom";
 import {
   Calendar as CalendarIcon,
   Plus,
@@ -71,6 +72,11 @@ export default function BudgetScheduler({
   const [viewDate, setViewDate] = useState<Date>(() => new Date());
   const viewYear = viewDate.getFullYear();
   const viewMonth = viewDate.getMonth(); // 0-indexed
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const MONTH_NAMES = useMemo(
     () => [
@@ -382,7 +388,7 @@ export default function BudgetScheduler({
   }, [selectedDayEvents]);
 
   return (
-    <div className="h-full w-full flex flex-col bg-white/95 border border-stone-200/90 rounded-2xl overflow-hidden shadow-sm relative">
+    <div className="h-full w-full flex flex-col glass-panel rounded-2xl overflow-hidden shadow-md relative">
       {/* Prominent Liquid Flow Animation */}
       <div className="absolute top-0 left-0 right-0 z-10 liquid-bar" />
 
@@ -873,10 +879,10 @@ export default function BudgetScheduler({
         </span>
       </div>
 
-      {/* Dual-Pane Day Details & Scheduling Popup Modal */}
-      {selectedDayModal && (
-        <div className="fixed inset-0 z-50 bg-stone-900/40 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
-          <div className="bg-white border border-amber-300/80 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh] relative">
+      {/* Dual-Pane Day Details & Scheduling Popup Modal (Portalled to document.body at z-[200]) */}
+      {selectedDayModal && mounted && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[200] bg-stone-900/50 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-150">
+          <div className="bg-white/98 border border-amber-300/80 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh] relative">
             {/* Prominent Liquid Flow Animation */}
             <div className="absolute top-0 left-0 right-0 z-10 liquid-bar" />
 
@@ -1293,7 +1299,8 @@ export default function BudgetScheduler({
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

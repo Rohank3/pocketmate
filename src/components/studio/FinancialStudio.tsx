@@ -217,7 +217,7 @@ export default function FinancialStudio({
   }, [categoryAnalytics]);
 
   return (
-    <div className="h-full w-full flex flex-col bg-white/95 border border-stone-200/90 rounded-2xl overflow-y-auto p-4 md:p-5 gap-4 shadow-sm relative">
+    <div className="h-full w-full flex flex-col glass-panel rounded-2xl overflow-y-auto p-4 md:p-5 gap-4 shadow-md relative">
       {/* Prominent Liquid Flow Animation */}
       <div className="absolute top-0 left-0 right-0 z-10 liquid-bar" />
 
