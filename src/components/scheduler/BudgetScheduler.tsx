@@ -423,6 +423,8 @@ export default function BudgetScheduler({
 
                 {/* Direct Month Selector Dropdown */}
                 <select
+                  id="calendar-month-select"
+                  name="calendarMonth"
                   aria-label="Select Calendar Month"
                   value={viewMonth}
                   onChange={(e) => handleSelectMonth(Number(e.target.value))}
@@ -441,6 +443,8 @@ export default function BudgetScheduler({
 
                 {/* Direct Year Selector Dropdown */}
                 <select
+                  id="calendar-year-select"
+                  name="calendarYear"
                   aria-label="Select Calendar Year"
                   value={viewYear}
                   onChange={(e) => handleSelectYear(Number(e.target.value))}
@@ -583,6 +587,8 @@ export default function BudgetScheduler({
 
           {/* In-Calendar Category Dropdown */}
           <select
+            id="calendar-category-filter"
+            name="calendarCategory"
             value={calendarCategory}
             onChange={(e) => setCalendarCategory(e.target.value)}
             className="bg-[var(--surface-card)] border border-[var(--border-strong)] text-[11px] text-[var(--fg-primary)] rounded-lg px-2.5 py-1 font-medium focus:outline-hidden focus:border-[var(--accent)] cursor-pointer ml-1 shadow-2xs"
@@ -1157,10 +1163,12 @@ export default function BudgetScheduler({
 
                   <form onSubmit={handleCreateEventForDay} className="flex flex-col gap-3">
                     <div>
-                      <label className="text-[11px] font-semibold text-[var(--fg-secondary)] block mb-1">
+                      <label htmlFor="scheduler-item-title" className="text-[11px] font-semibold text-[var(--fg-secondary)] block mb-1">
                         Title
                       </label>
                       <input
+                        id="scheduler-item-title"
+                        name="title"
                         type="text"
                         placeholder="WiFi, Retainer, Split"
                         value={modalTitle}
@@ -1172,12 +1180,14 @@ export default function BudgetScheduler({
 
                     <div className="grid grid-cols-2 gap-2.5">
                       <div>
-                        <label className="text-[11px] font-semibold text-[var(--fg-secondary)] block mb-1">
+                        <label htmlFor="scheduler-item-amount" className="text-[11px] font-semibold text-[var(--fg-secondary)] block mb-1">
                           Amount ($)
                         </label>
                         <div className="relative">
                           <DollarSign className="w-3.5 h-3.5 absolute left-2 top-2 text-[var(--fg-muted)]" />
                           <input
+                            id="scheduler-item-amount"
+                            name="amount"
                             type="number"
                             step="0.01"
                             min="0"
@@ -1190,10 +1200,12 @@ export default function BudgetScheduler({
                       </div>
 
                       <div>
-                        <label className="text-[11px] font-semibold text-[var(--fg-secondary)] block mb-1">
+                        <label htmlFor="scheduler-item-type" className="text-[11px] font-semibold text-[var(--fg-secondary)] block mb-1">
                           Type
                         </label>
                         <select
+                          id="scheduler-item-type"
+                          name="type"
                           value={modalType}
                           onChange={(e) => setModalType(e.target.value as "incoming" | "outgoing" | "milestone")}
                           className="w-full px-2 py-1.5 rounded-lg bg-[var(--surface-card)] border border-[var(--border-strong)] text-[11px] text-[var(--fg-primary)] focus:outline-hidden focus:border-[var(--accent)] cursor-pointer shadow-2xs"
@@ -1206,10 +1218,12 @@ export default function BudgetScheduler({
                     </div>
 
                     <div>
-                      <label className="text-[11px] font-semibold text-[var(--fg-secondary)] block mb-1">
+                      <label htmlFor="scheduler-item-category" className="text-[11px] font-semibold text-[var(--fg-secondary)] block mb-1">
                         Category
                       </label>
                       <select
+                        id="scheduler-item-category"
+                        name="category"
                         value={modalCategory}
                         onChange={(e) => setModalCategory(e.target.value)}
                         className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--surface-card)] border border-[var(--border-strong)] text-[11px] text-[var(--fg-primary)] focus:outline-hidden focus:border-[var(--accent)] cursor-pointer shadow-2xs"
@@ -1225,10 +1239,12 @@ export default function BudgetScheduler({
                     </div>
 
                     <div>
-                      <label className="text-[11px] font-semibold text-[var(--fg-secondary)] block mb-1">
+                      <label htmlFor="scheduler-item-counterparty" className="text-[11px] font-semibold text-[var(--fg-secondary)] block mb-1">
                         Counterparty
                       </label>
                       <input
+                        id="scheduler-item-counterparty"
+                        name="counterparty"
                         type="text"
                         placeholder="Netflix, Alex, Landlord"
                         value={modalCounterparty}
@@ -1240,10 +1256,12 @@ export default function BudgetScheduler({
                     {/* Subscription & Contract Lifecycle Fields */}
                     <div className="grid grid-cols-2 gap-2.5">
                       <div>
-                        <label className="text-[11px] font-semibold text-[var(--fg-secondary)] block mb-1">
+                        <label htmlFor="scheduler-item-start-date" className="text-[11px] font-semibold text-[var(--fg-secondary)] block mb-1">
                           Start Date
                         </label>
                         <input
+                          id="scheduler-item-start-date"
+                          name="startDate"
                           type="date"
                           value={modalStartDate}
                           onChange={(e) => setModalStartDate(e.target.value)}
@@ -1252,10 +1270,12 @@ export default function BudgetScheduler({
                       </div>
 
                       <div>
-                        <label className="text-[11px] font-semibold text-[var(--fg-secondary)] block mb-1">
+                        <label htmlFor="scheduler-item-end-date" className="text-[11px] font-semibold text-[var(--fg-secondary)] block mb-1">
                           End Date
                         </label>
                         <input
+                          id="scheduler-item-end-date"
+                          name="endDate"
                           type="date"
                           value={modalEndDate}
                           onChange={(e) => setModalEndDate(e.target.value)}
