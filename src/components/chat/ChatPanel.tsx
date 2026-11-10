@@ -349,15 +349,6 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               <span className="hidden sm:inline">New Chat</span>
             </button>
           )}
-
-          {/* Active Status Badge with Liquid Pulse */}
-          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-300/80 text-[11px] font-bold text-amber-900 shadow-2xs backdrop-blur-xs">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-            </span>
-            <span>Liquid Flow Active</span>
-          </div>
         </div>
       </div>
 
