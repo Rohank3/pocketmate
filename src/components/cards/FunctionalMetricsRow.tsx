@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useMemo, useSyncExternalStore } from "react";
+import { gsap } from "gsap";
+import { useGSAP } from "@gsap/react";
 import {
   Wallet,
   Users,
@@ -25,6 +27,8 @@ import type { UserAccount } from "@/types/sandboxUser";
 import { ensureUniqueCategoryColors } from "@/lib/utils/categoryColors";
 import { InvoiceReminderModal, PendingInvoiceItem } from "@/components/modals/InvoiceReminderModal";
 import { useTheme } from "@/components/theme/ThemeContext";
+
+gsap.registerPlugin(useGSAP);
 
 export interface FunctionalMetricsRowProps {
   categories: CategoryItem[];
@@ -109,6 +113,54 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
     () => () => {},
     () => true,
     () => false
+  );
+
+  useGSAP(
+    () => {
+      const mm = gsap.matchMedia();
+      mm.add("(prefers-reduced-motion: no-preference)", () => {
+        const cards = containerRef.current?.querySelectorAll(".kpi-reveal");
+        if (!cards?.length) return;
+        gsap.fromTo(
+          cards,
+          { y: 12, opacity: 0.45 },
+          {
+            y: 0,
+            opacity: 1,
+            duration: 0.46,
+            stagger: 0.055,
+            ease: "power3.out",
+            clearProps: "transform,opacity",
+          }
+        );
+      });
+      return () => mm.revert();
+    },
+    { scope: containerRef }
+  );
+
+  useGSAP(
+    () => {
+      const mm = gsap.matchMedia();
+      mm.add("(prefers-reduced-motion: no-preference)", () => {
+        const flyouts = containerRef.current?.querySelectorAll(".kpi-flyout-reveal");
+        if (!flyouts?.length) return;
+        gsap.fromTo(
+          flyouts,
+          { y: -8, scale: 0.98, opacity: 0 },
+          {
+            y: 0,
+            scale: 1,
+            opacity: 1,
+            duration: 0.24,
+            ease: "power3.out",
+            clearProps: "transform,opacity",
+          }
+        );
+      });
+      return () => mm.revert();
+    },
+    { scope: containerRef, dependencies: [activeFlyout, pinnedFlyout], revertOnUpdate: true }
   );
 
   // Close flyouts on Escape key or outside click
@@ -669,10 +721,8 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
           onMouseEnter={() => handleMouseEnter(1)}
           onMouseLeave={handleMouseLeave}
           onClick={() => handleCardClick(1)}
-          className={`relative p-4 rounded-2xl transition-all duration-200 cursor-pointer select-none backdrop-blur-xl ${
-            isFlyoutOpen(1)
-              ? "z-25 border bg-[var(--surface-glass-hover)] border-[var(--border-kpi-hover)] shadow-lg ring-1 ring-[#38bdf8]/45 -translate-y-0.5"
-              : "glass-panel-interactive"
+          className={`relative p-4 rounded-2xl cursor-pointer select-none glass-panel-interactive kpi-reveal ${
+            isFlyoutOpen(1) ? "z-25 glass-card-active" : ""
           }`}
           role="button"
           tabIndex={0}
@@ -727,7 +777,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
             <div
               onMouseEnter={() => handleMouseEnter(1)}
               onMouseLeave={handleMouseLeave}
-              className="absolute left-0 top-[calc(100%+10px)] w-[calc(100vw-28px)] sm:w-[400px] p-5 rounded-2xl glass-dropdown z-40 animate-in fade-in zoom-in-95 duration-150 text-[var(--fg-primary)]"
+              className="absolute left-0 top-[calc(100%+10px)] w-[calc(100vw-28px)] sm:w-[400px] p-5 rounded-2xl glass-dropdown kpi-flyout-reveal z-40 text-[var(--fg-primary)]"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Flyout Header */}
@@ -797,7 +847,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                 {categoryBars.map((cat) => (
                   <div
                     key={cat.id}
-                    className="p-2 rounded-xl bg-[var(--surface-elevated)] border border-[var(--border-subtle)] hover:bg-[var(--surface-subtle)] transition-colors flex flex-col gap-1.5 text-xs"
+                    className="p-2.5 rounded-xl glass-subitem flex flex-col gap-1.5 text-xs"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 truncate">
@@ -854,10 +904,8 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
           onMouseEnter={() => handleMouseEnter(2)}
           onMouseLeave={handleMouseLeave}
           onClick={() => handleCardClick(2)}
-          className={`relative p-4 rounded-2xl transition-all duration-200 cursor-pointer select-none backdrop-blur-xl ${
-            isFlyoutOpen(2)
-              ? "z-25 border bg-[var(--surface-glass-hover)] border-[var(--border-kpi-hover)] shadow-lg ring-1 ring-[#38bdf8]/45 -translate-y-0.5"
-              : "glass-panel-interactive"
+          className={`relative p-4 rounded-2xl cursor-pointer select-none glass-panel-interactive kpi-reveal ${
+            isFlyoutOpen(2) ? "z-25 glass-card-active" : ""
           }`}
           role="button"
           tabIndex={0}
@@ -893,7 +941,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
             <div
               onMouseEnter={() => handleMouseEnter(2)}
               onMouseLeave={handleMouseLeave}
-              className="absolute left-0 sm:left-auto lg:left-0 top-[calc(100%+10px)] w-[calc(100vw-28px)] sm:w-[400px] p-5 rounded-2xl glass-dropdown z-40 animate-in fade-in zoom-in-95 duration-150 text-[var(--fg-primary)]"
+              className="absolute left-0 sm:left-auto sm:right-0 lg:right-auto lg:left-0 top-[calc(100%+10px)] w-[calc(100vw-28px)] sm:w-[400px] p-5 rounded-2xl glass-dropdown kpi-flyout-reveal z-40 text-[var(--fg-primary)]"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
@@ -926,7 +974,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                     {debtorList.map((debtor) => (
                       <div
                         key={debtor.name}
-                        className="p-3 rounded-xl bg-[var(--surface-elevated)] border border-[var(--border-subtle)] hover:bg-[var(--surface-subtle)] transition-all flex items-center justify-between gap-3"
+                        className="p-3 rounded-xl glass-subitem flex items-center justify-between gap-3"
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           <div className="w-8 h-8 rounded-full bg-[var(--accent-subtle)] text-[var(--accent-text)] border border-[var(--accent-border)] flex items-center justify-center font-bold text-xs shrink-0">
@@ -991,7 +1039,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                           {settledList.map((item) => (
                             <div
                               key={item.id}
-                              className="p-2.5 rounded-xl bg-[var(--surface-elevated)] border border-[var(--border-subtle)] flex flex-col gap-2"
+                              className="p-2.5 rounded-xl glass-subitem flex flex-col gap-2"
                             >
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2 min-w-0">
@@ -1103,10 +1151,8 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
           onMouseEnter={() => handleMouseEnter(3)}
           onMouseLeave={handleMouseLeave}
           onClick={() => handleCardClick(3)}
-          className={`relative p-4 rounded-2xl transition-all duration-200 cursor-pointer select-none backdrop-blur-xl ${
-            isFlyoutOpen(3)
-              ? "z-25 border bg-[var(--surface-glass-hover)] border-[var(--border-kpi-hover)] shadow-lg ring-1 ring-[#38bdf8]/45 -translate-y-0.5"
-              : "glass-panel-interactive"
+          className={`relative p-4 rounded-2xl cursor-pointer select-none glass-panel-interactive kpi-reveal ${
+            isFlyoutOpen(3) ? "z-25 glass-card-active" : ""
           }`}
           role="button"
           tabIndex={0}
@@ -1141,7 +1187,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
             <div
               onMouseEnter={() => handleMouseEnter(3)}
               onMouseLeave={handleMouseLeave}
-              className="absolute right-0 sm:right-auto lg:right-auto top-[calc(100%+10px)] w-[calc(100vw-28px)] sm:w-[400px] p-5 rounded-2xl glass-dropdown z-40 animate-in fade-in zoom-in-95 duration-150 text-[var(--fg-primary)]"
+              className="absolute right-0 sm:right-auto lg:right-auto top-[calc(100%+10px)] w-[calc(100vw-28px)] sm:w-[400px] p-5 rounded-2xl glass-dropdown kpi-flyout-reveal z-40 text-[var(--fg-primary)]"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
@@ -1180,7 +1226,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                     </span>
                   </div>
                   {subscriptionBills.length === 0 ? (
-                    <p className="text-[11px] text-[var(--fg-muted)] p-2.5 bg-[var(--surface-elevated)] border border-[var(--border-subtle)] rounded-xl">
+                    <p className="text-[11px] text-[var(--fg-muted)] p-2.5 glass-subitem rounded-xl">
                       None due this month.
                     </p>
                   ) : (
@@ -1188,7 +1234,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                       {subscriptionBills.map((sub) => (
                         <div
                           key={sub.id}
-                          className="p-2.5 rounded-xl bg-[var(--surface-elevated)] border border-[var(--border-subtle)] hover:bg-[var(--surface-subtle)] transition-colors flex items-center justify-between text-xs"
+                          className="p-2.5 rounded-xl glass-subitem flex items-center justify-between text-xs"
                         >
                           <div className="min-w-0">
                             <p className="font-bold text-[var(--fg-primary)] truncate">{sub.title}</p>
@@ -1217,7 +1263,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                     </span>
                   </div>
                   {personalDebtBills.length === 0 ? (
-                    <p className="text-[11px] text-[var(--fg-muted)] p-2.5 bg-[var(--surface-elevated)] border border-[var(--border-subtle)] rounded-xl">
+                    <p className="text-[11px] text-[var(--fg-muted)] p-2.5 glass-subitem rounded-xl">
                       None owed.
                     </p>
                   ) : (
@@ -1225,7 +1271,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                       {personalDebtBills.map((debt) => (
                         <div
                           key={debt.id}
-                          className="p-2.5 rounded-xl bg-[var(--surface-elevated)] border border-[var(--border-subtle)] flex items-center justify-between text-xs"
+                          className="p-2.5 rounded-xl glass-subitem flex items-center justify-between text-xs"
                         >
                           <div className="min-w-0">
                             <p className="font-bold text-[var(--fg-primary)] truncate">{debt.title}</p>
@@ -1267,12 +1313,12 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
           onMouseEnter={() => handleMouseEnter(4)}
           onMouseLeave={handleMouseLeave}
           onClick={() => handleCardClick(4)}
-          className={`relative p-4 rounded-2xl transition-all duration-200 cursor-pointer select-none backdrop-blur-xl ${
+          className={`relative p-4 rounded-2xl cursor-pointer select-none glass-panel-interactive kpi-reveal ${
             isFlyoutOpen(4)
               ? actionItems.length > 0
-                ? "z-25 border bg-[var(--surface-glass-hover)] border-[var(--status-danger-border)] shadow-lg ring-1 ring-rose-500/40 -translate-y-0.5"
-                : "z-25 border bg-[var(--surface-glass-hover)] border-[var(--border-kpi-hover)] shadow-lg ring-1 ring-[#38bdf8]/45 -translate-y-0.5"
-              : "glass-panel-interactive"
+                ? "z-25 glass-card-active glass-card-danger"
+                : "z-25 glass-card-active"
+              : ""
           }`}
           role="button"
           tabIndex={0}
@@ -1321,7 +1367,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
             <div
               onMouseEnter={() => handleMouseEnter(4)}
               onMouseLeave={handleMouseLeave}
-              className="absolute right-0 top-[calc(100%+10px)] w-[calc(100vw-28px)] sm:w-[400px] p-5 rounded-2xl glass-dropdown z-40 animate-in fade-in zoom-in-95 duration-150 text-[var(--fg-primary)]"
+              className="absolute right-0 top-[calc(100%+10px)] w-[calc(100vw-28px)] sm:w-[400px] p-5 rounded-2xl glass-dropdown kpi-flyout-reveal z-40 text-[var(--fg-primary)]"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
@@ -1365,7 +1411,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                   actionItems.map((item) => (
                     <div
                       key={item.id}
-                      className="p-3 rounded-xl bg-[var(--surface-elevated)] border border-[var(--border-subtle)] hover:bg-[var(--surface-subtle)] transition-colors flex flex-col gap-2"
+                      className="p-3 rounded-xl glass-subitem flex flex-col gap-2"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
