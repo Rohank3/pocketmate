@@ -706,7 +706,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                     className={`w-1.5 h-1.5 rounded-full ${isBudgetOver ? "bg-rose-500" : "bg-emerald-500"}`}
                   />
                   {isBudgetOver
-                    ? `$${Math.abs(remainingBudget).toFixed(2)} over (${budgetPercentUsed}%)`
+                    ? `$${Math.max(0, totalSpent - totalBudgetCap).toFixed(2)} over (${budgetPercentUsed}%)`
                     : `$${remainingBudget.toFixed(2)} left (${budgetPercentUsed}%)`}
                 </span>
               </div>
