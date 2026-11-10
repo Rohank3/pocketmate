@@ -218,13 +218,14 @@ interface Ripple extends Point {
 
 /**
  * Living Elastic Meniscus & Dynamic Rim Physics.
- * Seamlessly flexes the container perimeter when the mouse approaches, without any floating orbs.
+ * The SVG paths form the TRUE visible border of the liquid container,
+ * flexing outward (15-25px) toward the pointer when hovering near the perimeter.
  */
 function LiquidGlassMotion({
   containerRef,
   clipId,
   elasticEdges = true,
-  intensity = 0.9,
+  intensity = 1,
   rippleStrength = 1,
 }: {
   containerRef: RefObject<HTMLElement | null>;
@@ -248,7 +249,7 @@ function LiquidGlassMotion({
 
     if (!container || !surface || !outline || !outlineGlow || !clipping) return;
 
-    const amount = elasticEdges ? clamp(intensity, 0, 1.5, 0.9) : 0;
+    const amount = elasticEdges ? clamp(intensity, 0, 1.5, 1) : 0;
     const strength = clamp(rippleStrength, 0, 1.5, 1);
 
     const rippleNodes = Array.from(
@@ -266,10 +267,10 @@ function LiquidGlassMotion({
     }));
 
     const pointer = {
-      x: -9999,
-      y: -9999,
-      targetX: -9999,
-      targetY: -9999,
+      x: 0,
+      y: 0,
+      targetX: 0,
+      targetY: 0,
       initialized: false,
     };
 
@@ -289,7 +290,7 @@ function LiquidGlassMotion({
     function bend(at: number, length: number, edge: Edge) {
       if (amount <= 0) return 0;
       const taper = smoothstep((at - radius) / 26) * smoothstep((length - radius - at) / 26);
-      return edge.value * Math.exp(-((at - edge.center) ** 2) / (2 * 55 * 55)) * taper;
+      return edge.value * Math.exp(-((at - edge.center) ** 2) / (2 * 65 * 65)) * taper;
     }
 
     function draw() {
@@ -316,7 +317,7 @@ function LiquidGlassMotion({
         }
       }
 
-      // Top edge
+      // Top edge (moves outward into negative y)
       curve(
         (t) => {
           const x = radius + t * (width - 2 * radius);
@@ -326,7 +327,7 @@ function LiquidGlassMotion({
       );
       d += " Q" + p({ x: width, y: 0 }) + " " + p({ x: width, y: radius });
 
-      // Right edge
+      // Right edge (moves outward into positive x)
       curve(
         (t) => {
           const y = radius + t * (height - 2 * radius);
@@ -336,7 +337,7 @@ function LiquidGlassMotion({
       );
       d += " Q" + p({ x: width, y: height }) + " " + p({ x: width - radius, y: height });
 
-      // Bottom edge
+      // Bottom edge (moves outward into positive y)
       curve(
         (t) => {
           const x = width - radius - t * (width - 2 * radius);
@@ -346,7 +347,7 @@ function LiquidGlassMotion({
       );
       d += " Q" + p({ x: 0, y: height }) + " " + p({ x: 0, y: height - radius });
 
-      // Left edge
+      // Left edge (moves outward into negative x)
       curve(
         (t) => {
           const y = height - radius - t * (height - 2 * radius);
@@ -362,7 +363,12 @@ function LiquidGlassMotion({
     }
 
     function targets() {
-      if (amount <= 0) return;
+      if (amount <= 0 || !hasPointer) {
+        edges.forEach((e) => {
+          e.target = 0;
+        });
+        return;
+      }
       const locations = [
         { at: pointer.x, out: -pointer.y, length: width },
         { at: pointer.y, out: pointer.x - width, length: height },
@@ -371,10 +377,12 @@ function LiquidGlassMotion({
       ];
       locations.forEach(({ at, out, length }, i) => {
         const edge = edges[i];
-        if (hasPointer && at > radius && at < length - radius && Math.abs(out) < 85) {
+        if (at > radius && at < length - radius && Math.abs(out) < 85) {
           edge.center = at;
           const proximity = smoothstep(1 - Math.abs(out) / 85);
-          edge.target = Math.max(-14, Math.min(24, 14 + out * 0.85)) * proximity * amount;
+          // Magnetic attraction: visibly bulges outward 18-28px toward the cursor as it nears any edge
+          const pull = 25 - Math.abs(out) * 0.16;
+          edge.target = Math.max(0, Math.min(28, pull)) * proximity * amount;
         } else {
           edge.target = 0;
         }
@@ -424,7 +432,7 @@ function LiquidGlassMotion({
       const dt = Math.min(0.05, Math.max(0.001, (now - (last || now - 16.67)) / 1000));
       last = now;
 
-      const follow = 1 - Math.exp(-20 * dt);
+      const follow = 1 - Math.exp(-22 * dt);
       pointer.x += (pointer.targetX - pointer.x) * follow;
       pointer.y += (pointer.targetY - pointer.y) * follow;
 
@@ -434,7 +442,7 @@ function LiquidGlassMotion({
       const h = dt / steps;
       for (let step = 0; step < steps; step++) {
         for (const edge of edges) {
-          edge.velocity += (-280 * (edge.value - edge.target) - 20 * edge.velocity) * h;
+          edge.velocity += (-260 * (edge.value - edge.target) - 18 * edge.velocity) * h;
           edge.value += edge.velocity * h;
           if (Math.abs(edge.value) > 30) {
             edge.value = Math.sign(edge.value) * 30;
@@ -472,8 +480,7 @@ function LiquidGlassMotion({
     function reset() {
       hasPointer = false;
       contact = null;
-      pointer.targetX = -9999;
-      pointer.targetY = -9999;
+      pointer.initialized = false;
       edges.forEach((e) => {
         e.target = 0;
       });
@@ -491,10 +498,16 @@ function LiquidGlassMotion({
     function update(event: PointerEvent) {
       if (!inView || document.hidden) return;
       const pt = locate(event);
-      const near = pt.x > -80 && pt.x < width + 80 && pt.y > -80 && pt.y < height + 80;
+      const near = pt.x > -90 && pt.x < width + 90 && pt.y > -90 && pt.y < height + 90;
       if (!near) {
         if (hasPointer) reset();
         return;
+      }
+
+      if (!pointer.initialized) {
+        pointer.x = pt.x;
+        pointer.y = pt.y;
+        pointer.initialized = true;
       }
 
       pointer.targetX = pt.x;
@@ -593,21 +606,21 @@ function LiquidGlassMotion({
         <g ref={rippleLayerRef} clipPath={`url(#${clipId})`}>
           {[0, 1, 2, 3].map((index) => (
             <g key={index} className="g-liquid-ripple" opacity="0">
-              <circle stroke="rgba(245, 158, 11, 0.4)" strokeWidth="2.2" fill="none" cy="1.2" r="0" />
-              <circle stroke="rgba(255, 255, 255, 0.95)" strokeWidth="1.4" fill="none" r="0" />
+              <circle stroke="rgba(245, 158, 11, 0.45)" strokeWidth="2.4" fill="none" cy="1.2" r="0" />
+              <circle stroke="rgba(255, 255, 255, 0.95)" strokeWidth="1.5" fill="none" r="0" />
             </g>
           ))}
         </g>
 
-        {/* Outer amber caustic edge glow */}
+        {/* Outer vibrant amber caustic edge glow - the living liquid border */}
         <path
           ref={rimGlowRef}
           fill="none"
-          stroke="rgba(245, 158, 11, 0.4)"
-          strokeWidth="2.2px"
+          stroke="rgba(245, 158, 11, 0.75)"
+          strokeWidth="3.5px"
           vectorEffect="non-scaling-stroke"
           style={{
-            filter: "drop-shadow(0 0 6px rgba(245, 158, 11, 0.3))",
+            filter: "drop-shadow(0 0 10px rgba(245, 158, 11, 0.6)) drop-shadow(0 2px 8px rgba(217, 119, 6, 0.4))",
           }}
         />
 
@@ -615,8 +628,8 @@ function LiquidGlassMotion({
         <path
           ref={rimRef}
           fill="none"
-          stroke="rgba(255, 255, 255, 0.95)"
-          strokeWidth="1.4px"
+          stroke="rgba(255, 255, 255, 0.98)"
+          strokeWidth="1.8px"
           vectorEffect="non-scaling-stroke"
         />
       </svg>
@@ -636,7 +649,7 @@ export const LiquidGlassContainer: React.FC<LiquidGlassContainerProps> = ({
   accent = "#f59e0b",
   motion = true,
   elasticEdges = true,
-  intensity = 0.9,
+  intensity = 1,
   rippleStrength = 1,
   borderRadius = 28,
   contentClassName = "",
@@ -671,22 +684,16 @@ export const LiquidGlassContainer: React.FC<LiquidGlassContainerProps> = ({
       style={{
         ...dynamicGlassStyle,
         borderRadius,
-        background:
-          "linear-gradient(135deg, rgba(255, 255, 255, 0.6) 0%, rgba(253, 251, 247, 0.45) 100%)",
-        border: "1.5px solid rgba(255, 255, 255, 0.85)",
-        boxShadow:
-          "0 20px 48px -12px rgba(24, 24, 27, 0.08), 0 0 32px rgba(245, 158, 11, 0.06), inset 0 1px 2px rgba(255, 255, 255, 0.95)",
-        backdropFilter: "blur(20px) saturate(1.8)",
-        WebkitBackdropFilter: "blur(20px) saturate(1.8)",
       }}
     >
-      {/* Liquid Refraction Backdrop Surface (Overscan 32px to capture outward meniscus stretching) */}
+      {/* Living Liquid Refraction Surface - Clipped directly to the elastic SVG path with 32px overscan */}
       <div
         className="g-liquid-material pointer-events-none absolute -inset-8 transition-shadow duration-300 z-5"
         style={{
-          background: `linear-gradient(145deg, rgba(255, 255, 255, 0.35), transparent 36%, rgba(255, 255, 255, 0.05) 67%, rgba(255, 255, 255, 0.18)), color-mix(in srgb, ${tint} calc(${opacity} * 100%), transparent)`,
+          background: `linear-gradient(135deg, rgba(255, 255, 255, 0.72) 0%, rgba(253, 251, 247, 0.55) 100%), color-mix(in srgb, ${tint} calc(${opacity} * 100%), transparent)`,
           backdropFilter: `blur(var(--glass-blur)) saturate(var(--glass-saturation)) var(--glass-refraction, blur(0px))`,
           WebkitBackdropFilter: `blur(var(--glass-blur)) saturate(var(--glass-saturation))`,
+          boxShadow: `0 20px 48px -12px rgba(24, 24, 27, 0.09), 0 0 32px rgba(245, 158, 11, 0.08)`,
           clipPath: `url(#${clipId})`,
         }}
         aria-hidden="true"

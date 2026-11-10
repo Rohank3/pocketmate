@@ -274,8 +274,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
   return (
     <LiquidGlassContainer
-      className="h-full w-full rounded-[28px]"
-      contentClassName="relative flex flex-col h-full overflow-hidden rounded-[28px]"
+      className="h-full w-full"
+      contentClassName="relative flex flex-col h-full p-2.5 sm:p-3 overflow-hidden"
       borderRadius={28}
       glass={{
         blur: 24,
@@ -286,7 +286,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         distortion: 26,
       }}
       accent="#f59e0b"
-      intensity={0.9}
+      intensity={1}
       rippleStrength={1}
     >
       {/* Hidden file picker for real receipt audits */}
@@ -298,8 +298,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         className="hidden"
       />
 
-      {/* Header with Agent Status & Controls */}
-      <div className="px-3.5 sm:px-4 py-2.5 sm:py-3 bg-white/45 backdrop-blur-md border-b border-white/60 flex items-center justify-between gap-2 shrink-0 rounded-t-[28px]">
+      {/* Floating Inset Header with Agent Status & Controls */}
+      <div className="px-3.5 sm:px-4 py-2.5 bg-white/55 backdrop-blur-md border border-white/80 flex items-center justify-between gap-2 shrink-0 rounded-2xl shadow-2xs">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-400/60 flex items-center justify-center text-amber-800 shrink-0 shadow-2xs backdrop-blur-xs">
             <Bot className="w-4 h-4" />
@@ -561,7 +561,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       <div
         ref={feedContainerRef}
         onScroll={handleFeedScroll}
-        className="flex-1 p-3 sm:p-4 overflow-y-auto space-y-4 relative bg-transparent"
+        className="flex-1 my-2 overflow-y-auto space-y-3 relative bg-transparent px-1"
       >
         {messages.map((m) => (
           <div
@@ -577,7 +577,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             )}
 
             <div
-              className={`max-w-[85%] rounded-2xl px-4 py-3 leading-relaxed transition-transform duration-300 ease-out hover:scale-[1.018] active:scale-[0.985] cursor-default select-text ${
+              className={`max-w-[85%] rounded-2xl px-4 py-3 leading-relaxed transition-all duration-300 ease-out animate-jelly-pop hover:scale-[1.02] active:scale-[0.98] cursor-default select-text ${
                 m.role === "user"
                   ? "bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 text-white rounded-tr-xs shadow-xs hover:shadow-md"
                   : "bg-white/80 backdrop-blur-md border border-white/90 text-zinc-900 rounded-tl-xs shadow-[0_4px_16px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_20px_rgba(245,158,11,0.08)] hover:border-amber-200/80"
@@ -684,11 +684,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       )}
 
       {/* Liquid Input Area */}
-      <div className="relative rounded-b-[28px] overflow-hidden">
-        <div className="h-[1px] w-full bg-gradient-to-r from-amber-400/10 via-amber-400/60 to-amber-400/10" />
-        <form onSubmit={handleSubmit} className="p-3 bg-white/35 backdrop-blur-md border-t border-white/50 relative">
+      <div className="relative shrink-0">
+        <form onSubmit={handleSubmit} className="p-0 relative">
           <div
-            className="relative flex items-center rounded-[30px] bg-white/75 border border-white/90 shadow-[inset_0_1px_3px_rgba(0,0,0,0.06),inset_0_-1px_1px_rgba(255,255,255,0.95),0_2px_8px_rgba(0,0,0,0.03)] p-1 transition-all duration-300 hover:scale-[1.01] hover:border-amber-300/80 hover:shadow-[0_4px_16px_rgba(245,158,11,0.1)] focus-within:border-amber-400/80 focus-within:ring-2 focus-within:ring-amber-400/25 focus-within:scale-[1.01] active:scale-[0.995]"
+            className="relative flex items-center rounded-[30px] bg-white/80 border border-white/90 shadow-[inset_0_1px_3px_rgba(0,0,0,0.06),inset_0_-1px_1px_rgba(255,255,255,0.95),0_2px_8px_rgba(0,0,0,0.03)] p-1 transition-all duration-300 hover:scale-[1.01] hover:border-amber-300/80 hover:shadow-[0_4px_16px_rgba(245,158,11,0.1)] focus-within:border-amber-400/80 focus-within:ring-2 focus-within:ring-amber-400/25 focus-within:scale-[1.01] active:scale-[0.995]"
             style={{
               transitionTimingFunction: "cubic-bezier(0.34, 1.56, 0.64, 1)",
             }}
