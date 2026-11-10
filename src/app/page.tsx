@@ -61,16 +61,11 @@ const BudgetScheduler = dynamic(
 const DEFAULT_WELCOME_MESSAGE: ChatMessageItem = {
   id: "msg_welcome",
   role: "assistant",
-  content:
-    "Welcome to PocketMate. I am here to help you audit transactions, reconcile split expenses, and monitor your category budget caps in real time.",
+  content: "Hi! How can I help you today?",
 };
 
 const getStorageScope = (user?: UserAccount | null) =>
   user?.email ? user.email.toLowerCase().trim() : "guest";
-
-const getThreadsKey = (scope: string) => `pocketmate_threads_${scope}`;
-const getActiveThreadKey = (scope: string) => `pocketmate_active_thread_${scope}`;
-const getMessagesKey = (threadId: string) => `pocketmate_messages_${threadId}`;
 
 export default function Home() {
   const [activePersona, setActivePersona] = useState<"GENERAL" | "FREELANCER" | "BUSINESS">("GENERAL");
@@ -181,9 +176,7 @@ export default function Home() {
           {
             id: `asst_sync_${Date.now()}`,
             role: "assistant",
-            content:
-              "⚡ **Live PayPal Transactions Synchronized!**\n\n• Queried live records directly from **PayPal Reporting API** (`/v1/reporting/transactions`).\n• Synced authentic invoices via **PayPal Invoicing API** (`/v2/invoicing/invoices`).\n• AG Grid ledger updated with live bilateral transaction history directly from PayPal Developer servers.\n• **Autopay & Recurring Bills Reconciled**: Matching scheduled payments were automatically verified and updated.",
-            toolBadges: ["rail: paypal_reporting_api", "rail: paypal_invoicing_v2", "status: LIVE_SANDBOX"],
+            content: "I've synchronized your recent PayPal transactions and updated your ledger and bills.",
           },
         ]);
       }
@@ -263,14 +256,14 @@ export default function Home() {
           const rawUserEmail = params.get("userEmail") || "Sandbox Account";
           const userName = rawUserName.replace(/[<>[\]()]/g, "").slice(0, 50);
           const userEmail = rawUserEmail.replace(/[<>[\]()]/g, "").slice(0, 80);
+          const firstName = userName.split(" ")[0] || userName;
           if (isSubscribed) {
             setMessages((prev) => [
               ...prev,
               {
                 id: `asst_connected_${Date.now()}`,
                 role: "assistant",
-                content: `🎉 **Successfully Connected to PayPal Sandbox!**\n\n• **Account:** ${userName} (\`${userEmail}\`)\n• **Environment:** Sandbox (Zero real currency risk)\n• **Ledger:** Synchronized with PayPal Developer REST API.`,
-                toolBadges: ["oauth: openid_connect", "status: AUTHENTICATED"],
+                content: `Hi ${firstName}! How can I help you today?`,
               },
             ]);
           }
@@ -333,145 +326,87 @@ export default function Home() {
     }
   }, [events]);
 
-  // Load messages for a specific thread (local cache first, then API if authenticated)
-  const loadThreadMessages = useCallback(async (threadId: string, user?: UserAccount | null) => {
-    // 1. Read from localStorage
-    try {
-      const cached = localStorage.getItem(getMessagesKey(threadId));
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setMessages(parsed.slice(-30));
-        } else {
-          setMessages([DEFAULT_WELCOME_MESSAGE]);
+  // Clean all legacy chat keys from localStorage on startup/mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (
+            key &&
+            (key.startsWith("pocketmate_messages_") ||
+              key.startsWith("pocketmate_threads_") ||
+              key.startsWith("pocketmate_active_thread_"))
+          ) {
+            keysToRemove.push(key);
+          }
         }
-      } else {
-        setMessages([DEFAULT_WELCOME_MESSAGE]);
+        keysToRemove.forEach((k) => localStorage.removeItem(k));
+      } catch {
+        // ignore
       }
-    } catch {
-      setMessages([DEFAULT_WELCOME_MESSAGE]);
     }
+  }, []);
 
-    // 2. Fetch from DB if authenticated
+  // Load messages for a specific thread strictly from database API
+  const loadThreadMessages = useCallback(async (threadId: string, user?: UserAccount | null) => {
     if (user?.email) {
       try {
         const res = await fetch(`/api/chat/messages?threadId=${threadId}`);
         const data = await res.json();
         if (data.success && Array.isArray(data.messages)) {
           if (data.messages.length > 0) {
-            const capped = data.messages.slice(-30);
-            setMessages(capped);
-            try {
-              localStorage.setItem(getMessagesKey(threadId), JSON.stringify(capped));
-            } catch {}
+            setMessages(data.messages.slice(-30));
           } else {
             setMessages([DEFAULT_WELCOME_MESSAGE]);
           }
+          return;
         }
       } catch (err) {
         console.warn("[Load Messages Warning]", err);
       }
     }
+    setMessages([DEFAULT_WELCOME_MESSAGE]);
   }, []);
 
-  // Multi-thread chat hydration & synchronization effect
+  // Multi-thread chat hydration & synchronization effect (PostgreSQL sole source of truth)
   useEffect(() => {
     let isSubscribed = true;
 
     const hydrateThreads = async () => {
-      const scope = getStorageScope(currentUser);
-      const threadsKey = getThreadsKey(scope);
-      const activeThreadKey = getActiveThreadKey(scope);
-
-      let initialThreadId: string | null = null;
-      let initialThreads: ChatThreadItem[] = [];
-
-      // 1. Instant hydration from localStorage
-      try {
-        const storedActive = localStorage.getItem(activeThreadKey);
-        const storedThreads = localStorage.getItem(threadsKey);
-        if (storedThreads) {
-          initialThreads = JSON.parse(storedThreads);
-          if (isSubscribed) {
-            setThreads(initialThreads);
-          }
-        }
-        if (storedActive && initialThreads.some((t) => t.id === storedActive)) {
-          initialThreadId = storedActive;
-        } else if (initialThreads.length > 0) {
-          initialThreadId = initialThreads[0].id;
-        }
-
-        if (initialThreadId) {
-          if (isSubscribed) {
-            setActiveThreadId(initialThreadId);
-            void loadThreadMessages(initialThreadId, currentUser);
-          }
-        } else {
-          // Create initial default thread if none exists
-          const defaultId = `th_${Date.now()}`;
-          const defaultThread: ChatThreadItem = {
-            id: defaultId,
-            title: "New Conversation",
-            messageCount: 1,
-            updatedAt: new Date().toISOString(),
-            createdAt: new Date().toISOString(),
-          };
-          if (isSubscribed) {
-            setActiveThreadId(defaultId);
-            setThreads([defaultThread]);
-            setMessages([DEFAULT_WELCOME_MESSAGE]);
-          }
-          try {
-            localStorage.setItem(activeThreadKey, defaultId);
-            localStorage.setItem(threadsKey, JSON.stringify([defaultThread]));
-            localStorage.setItem(getMessagesKey(defaultId), JSON.stringify([DEFAULT_WELCOME_MESSAGE]));
-          } catch {
-            // ignore
-          }
-        }
-      } catch {
-        if (isSubscribed) {
-          setMessages([DEFAULT_WELCOME_MESSAGE]);
-        }
-      }
-
-      // 2. Background sync from server if authenticated
       if (currentUser?.email) {
         try {
           const res = await fetch("/api/chat/threads");
           const data = await res.json();
-          if (!isSubscribed || !data.success || !Array.isArray(data.threads)) return;
+          if (!isSubscribed) return;
 
-          const serverThreads: ChatThreadItem[] = data.threads;
-          if (serverThreads.length > 0) {
-            if (isSubscribed) {
-              setThreads(serverThreads);
-            }
-            try {
-              localStorage.setItem(threadsKey, JSON.stringify(serverThreads));
-            } catch {
-              // ignore
-            }
-
-            let targetId = initialThreadId;
-            if (!targetId || !serverThreads.some((t) => t.id === targetId)) {
-              targetId = serverThreads[0].id;
-            }
-
-            if (isSubscribed) {
-              setActiveThreadId(targetId);
-              void loadThreadMessages(targetId, currentUser);
-            }
-            try {
-              localStorage.setItem(activeThreadKey, targetId);
-            } catch {
-              // ignore
-            }
+          if (data.success && Array.isArray(data.threads) && data.threads.length > 0) {
+            const serverThreads: ChatThreadItem[] = data.threads;
+            setThreads(serverThreads);
+            const targetId = serverThreads[0].id;
+            setActiveThreadId(targetId);
+            void loadThreadMessages(targetId, currentUser);
+            return;
           }
         } catch (err) {
-          console.warn("[Background Thread Sync Error]", err);
+          console.warn("[Thread Fetch Error]", err);
         }
+      }
+
+      // If no threads exist on server (or guest), create clean initial state
+      const defaultId = `th_${Date.now()}`;
+      const defaultThread: ChatThreadItem = {
+        id: defaultId,
+        title: "New Conversation",
+        messageCount: 1,
+        updatedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+      };
+      if (isSubscribed) {
+        setActiveThreadId(defaultId);
+        setThreads([defaultThread]);
+        setMessages([DEFAULT_WELCOME_MESSAGE]);
       }
     };
 
@@ -482,19 +417,7 @@ export default function Home() {
     };
   }, [currentUser, loadThreadMessages]);
 
-  // Keep messages for active thread cached in localStorage (FIFO capped at 30)
-  useEffect(() => {
-    if (!activeThreadId) return;
-    try {
-      const capped = messages.slice(-30);
-      localStorage.setItem(getMessagesKey(activeThreadId), JSON.stringify(capped));
-    } catch {
-      // ignore
-    }
-  }, [messages, activeThreadId]);
-
   const handleNewChat = useCallback(async () => {
-    const scope = getStorageScope(currentUser);
     const newThreadId = `th_${Date.now()}`;
     const newThread: ChatThreadItem = {
       id: newThreadId,
@@ -507,15 +430,6 @@ export default function Home() {
     setThreads((prev) => [newThread, ...prev]);
     setActiveThreadId(newThreadId);
     setMessages([DEFAULT_WELCOME_MESSAGE]);
-
-    try {
-      localStorage.setItem(getActiveThreadKey(scope), newThreadId);
-      localStorage.setItem(getMessagesKey(newThreadId), JSON.stringify([DEFAULT_WELCOME_MESSAGE]));
-      const currentThreads = JSON.parse(localStorage.getItem(getThreadsKey(scope)) || "[]");
-      localStorage.setItem(getThreadsKey(scope), JSON.stringify([newThread, ...currentThreads]));
-    } catch {
-      // ignore
-    }
 
     if (currentUser?.email) {
       try {
@@ -531,10 +445,6 @@ export default function Home() {
           setThreads((prev) =>
             prev.map((t) => (t.id === newThreadId ? { ...t, id: serverId } : t))
           );
-          try {
-            localStorage.setItem(getActiveThreadKey(scope), serverId);
-            localStorage.setItem(getMessagesKey(serverId), JSON.stringify([DEFAULT_WELCOME_MESSAGE]));
-          } catch {}
         }
       } catch (err) {
         console.warn("[Create Thread Server Warning]", err);
@@ -544,11 +454,7 @@ export default function Home() {
 
   const handleSelectThread = useCallback(
     (threadId: string) => {
-      const scope = getStorageScope(currentUser);
       setActiveThreadId(threadId);
-      try {
-        localStorage.setItem(getActiveThreadKey(scope), threadId);
-      } catch {}
       void loadThreadMessages(threadId, currentUser);
     },
     [currentUser, loadThreadMessages]
@@ -556,20 +462,9 @@ export default function Home() {
 
   const handleRenameThread = useCallback(
     async (threadId: string, newTitle: string) => {
-      const scope = getStorageScope(currentUser);
       setThreads((prev) =>
         prev.map((t) => (t.id === threadId ? { ...t, title: newTitle } : t))
       );
-
-      try {
-        const current = JSON.parse(localStorage.getItem(getThreadsKey(scope)) || "[]");
-        const updated = current.map((t: ChatThreadItem) =>
-          t.id === threadId ? { ...t, title: newTitle } : t
-        );
-        localStorage.setItem(getThreadsKey(scope), JSON.stringify(updated));
-      } catch {
-        // ignore
-      }
 
       if (currentUser?.email) {
         try {
@@ -588,16 +483,8 @@ export default function Home() {
 
   const handleDeleteThread = useCallback(
     async (threadId: string) => {
-      const scope = getStorageScope(currentUser);
       const remaining = threads.filter((t) => t.id !== threadId);
       setThreads(remaining);
-
-      try {
-        localStorage.removeItem(getMessagesKey(threadId));
-        localStorage.setItem(getThreadsKey(scope), JSON.stringify(remaining));
-      } catch {
-        // ignore
-      }
 
       if (threadId === activeThreadId) {
         if (remaining.length > 0) {
@@ -627,12 +514,13 @@ export default function Home() {
     void loadSplits();
     setIsLoginModalOpen(false);
 
+    const firstName = user.name.split(" ")[0] || user.name;
     setMessages((prev) => [
       ...prev,
       {
         id: `asst_welcome_user_${Date.now()}`,
         role: "assistant",
-        content: `👋 **Welcome, ${user.name}!** Signed in with PayPal Sandbox (\`${user.email}\`). Your live ledger, categories, and calendar are active.`,
+        content: `Hi ${firstName}! How can I help you today?`,
       },
     ]);
   };
@@ -649,14 +537,7 @@ export default function Home() {
     setSplits([]);
     setEvents([]);
     setIsLoginModalOpen(true);
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: `asst_logout_${Date.now()}`,
-        role: "assistant",
-        content: "🔒 **Signed out.** Please select a Sandbox profile or log in with PayPal to continue.",
-      },
-    ]);
+    setMessages([DEFAULT_WELCOME_MESSAGE]);
   };
 
   const handleAddCategory = async (newCat: Omit<CategoryItem, "id">) => {
@@ -903,8 +784,7 @@ export default function Home() {
         {
           id: `asst_paid_${Date.now()}`,
           role: "assistant",
-          content: `✅ **PayPal Sandbox Payment Confirmed!**\n\n• **Invoice:** ${paid.paypalInvoiceId}\n• **Amount:** $${paid.amount.toFixed(2)} USD\n• **Recipient:** ${paid.senderName} (${paid.senderEmail})\n• **Status:** Paid & Settled\n\nYour ledger has been updated and the sender has been notified.`,
-          toolBadges: ["tool: paypal_sandbox_capture", "status: SETTLED"],
+          content: `Payment of $${paid.amount.toFixed(2)} for ${paid.senderName} (${paid.paypalInvoiceId}) is confirmed and settled. Your ledger has been updated.`,
         },
       ]);
     }
@@ -1003,26 +883,10 @@ export default function Home() {
               const newT: ChatThreadItem = data.thread;
               setActiveThreadId(newT.id);
               setThreads((prev) => [newT, ...prev.filter((t) => t.id !== newT.id)]);
-              const scope = getStorageScope(currentUser);
-              try {
-                localStorage.setItem(getActiveThreadKey(scope), newT.id);
-              } catch {
-                // ignore
-              }
             } else if (event === "thread_renamed" && data.id && data.title) {
               setThreads((prev) =>
                 prev.map((t) => (t.id === data.id ? { ...t, title: data.title } : t))
               );
-              const scope = getStorageScope(currentUser);
-              try {
-                const cur = JSON.parse(localStorage.getItem(getThreadsKey(scope)) || "[]");
-                const upd = cur.map((t: ChatThreadItem) =>
-                  t.id === data.id ? { ...t, title: data.title } : t
-                );
-                localStorage.setItem(getThreadsKey(scope), JSON.stringify(upd));
-              } catch {
-                // ignore
-              }
             } else if (event === "text_delta" && data.text) {
               setMessages((prev) =>
                 prev.map((m) =>
@@ -1041,16 +905,6 @@ export default function Home() {
               ) {
                 calledMutatingTool = true;
               }
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantMsgId
-                    ? {
-                        ...m,
-                        toolBadges: Array.from(new Set([...(m.toolBadges || []), `tool: ${data.name}`])),
-                      }
-                    : m
-                )
-              );
             } else if (event === "grid_mutation") {
               setGridMutation(data as GridMutationState);
             } else if (event === "action_card") {
@@ -1138,8 +992,7 @@ export default function Home() {
           {
             id: `asst_audit_${Date.now()}`,
             role: "assistant",
-            content: `🧾 **Gemini Vision Receipt Audit Results**\n\n• **Merchant:** ${auditData.parsedReceipt.merchantName}\n• **Extracted Subtotal:** $${auditData.parsedReceipt.subtotal.toFixed(2)}\n• **Tax & Tip:** $${(auditData.parsedReceipt.tax + auditData.parsedReceipt.tip).toFixed(2)}\n• **Calculated Total:** $${audit.receiptTotal.toFixed(2)}\n• **Settled PayPal Charge:** $${audit.chargedTotal.toFixed(2)}\n\n⚠️ **Mismatch Detected:** An unrecognized difference of **$${audit.discrepancyAmount.toFixed(2)}** was billed by the merchant.\n\nWould you like me to initiate a PayPal dispute for the $${audit.discrepancyAmount.toFixed(2)} unauthorized surcharge, or split the settled $${audit.chargedTotal.toFixed(2)} evenly?`,
-            toolBadges: ["tool: audit_receipt_against_transaction", "gemini-3.5-flash-vision"],
+            content: `I audited your receipt against the PayPal charge for **${auditData.parsedReceipt.merchantName}**. The receipt items, tax, and tip total **$${audit.receiptTotal.toFixed(2)}**, but PayPal was charged **$${audit.chargedTotal.toFixed(2)}** (a difference of **$${audit.discrepancyAmount.toFixed(2)}**).\n\nWould you like me to file a dispute for the $${audit.discrepancyAmount.toFixed(2)} surcharge, or split the full $${audit.chargedTotal.toFixed(2)}?`,
           },
         ]);
       } else {
@@ -1528,14 +1381,13 @@ export default function Home() {
         onLogout={handleUserLogout}
       />
 
-      {/* Recipient Invoice Action Modal (Pay via official PayPal sandbox link, Dispute or Propose Adjustment) */}
+      {/* Recipient Invoice Action Modal (Pay via official PayPal sandbox link or Decline) */}
       <InvoiceActionModal
         invoice={activeInvoiceForAction}
         isOpen={!!activeInvoiceForAction}
         onClose={() => setActiveInvoiceForAction(null)}
         onPay={handlePayInvoice}
         onDecline={handleDeclineInvoice}
-        onRequestAdjustment={handleAdjustmentRequest}
       />
 
       {/* Interactive Uncategorized Transactions Review & Triage Modal */}

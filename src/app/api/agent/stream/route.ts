@@ -343,7 +343,7 @@ export async function POST(req: NextRequest) {
             "assistant",
             finalAssistantMsg,
             persona,
-            { actionCard: geminiLastActionCard || undefined, toolBadges: geminiBadges },
+            { actionCard: geminiLastActionCard || undefined },
             userId,
             activeThreadId
           );

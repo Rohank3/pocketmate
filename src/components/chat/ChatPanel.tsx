@@ -575,21 +575,6 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               role={m.role}
               intensity={0.75}
             >
-              {/* Tool Execution Badges if any */}
-              {m.toolBadges && m.toolBadges.length > 0 && (
-                <div className="mb-2 flex flex-wrap gap-1">
-                  {m.toolBadges.map((badge, bIdx) => (
-                    <span
-                      key={bIdx}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 border border-amber-300/80 text-[10px] text-amber-900 rounded font-mono font-medium"
-                    >
-                      <Sparkles className="w-2.5 h-2.5 text-amber-600" />
-                      {badge}
-                    </span>
-                  ))}
-                </div>
-              )}
-
               {m.role === "user" ? (
                 <div className="whitespace-pre-line text-xs md:text-sm font-medium text-white">{m.content}</div>
               ) : (
