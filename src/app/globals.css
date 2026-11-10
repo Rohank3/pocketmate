@@ -67,11 +67,23 @@
 
   --shadow-glass: 0 12px 32px -6px rgba(15, 23, 42, 0.06), 0 2px 8px -2px rgba(0, 112, 186, 0.06), inset 0 1px 1px 0 rgba(255, 255, 255, 0.9);
   --shadow-glass-hover: 0 16px 36px -6px rgba(0, 112, 186, 0.14), 0 4px 12px rgba(15, 23, 42, 0.05), inset 0 1px 1px 0 #ffffff;
-  --shadow-dropdown: 0 24px 56px -12px rgba(15, 23, 42, 0.14), 0 0 24px rgba(0, 112, 186, 0.08);
+  --shadow-dropdown: 0 24px 56px -12px rgba(15, 23, 42, 0.16), 0 8px 24px -6px rgba(0, 112, 186, 0.12);
   --border-kpi: rgba(0, 112, 186, 0.36);
   --border-kpi-hover: rgba(0, 112, 186, 0.68);
-  --shadow-kpi: 0 8px 24px -6px rgba(0, 112, 186, 0.12), 0 0 12px rgba(0, 112, 186, 0.1), inset 0 1px 1px 0 rgba(255, 255, 255, 0.95);
-  --shadow-kpi-hover: 0 14px 32px -6px rgba(0, 112, 186, 0.22), 0 0 18px rgba(0, 112, 186, 0.18), inset 0 1px 1px 0 #ffffff;
+  --shadow-kpi: 0 10px 28px -8px rgba(0, 112, 186, 0.14), 0 2px 10px -2px rgba(15, 23, 42, 0.04);
+  --shadow-kpi-hover: 0 16px 34px -8px rgba(0, 112, 186, 0.24), 0 0 18px rgba(0, 112, 186, 0.18);
+
+  /* Specular High-Transparency Glass Optical Tokens */
+  --glass-opacity: 0.56;
+  --glass-opacity-hover: 0.72;
+  --glass-blur: 28px;
+  --glass-sat: 1.85;
+  --glass-tint: rgba(235, 243, 255, 0.28);
+  --glass-highlight: #ffffff;
+  --glass-edge: 0.94;
+  --glass-dropdown-surface: rgba(255, 255, 255, 0.62);
+  --glass-subpanel: rgba(255, 255, 255, 0.58);
+  --glass-subpanel-hover: rgba(255, 255, 255, 0.78);
 
   --scrollbar-track: #f1f5f9;
   --scrollbar-thumb: #94a3b8;
@@ -140,11 +152,22 @@
 
     --shadow-glass: 0 12px 32px -6px rgba(0, 0, 0, 0.5), inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
     --shadow-glass-hover: 0 16px 36px -6px rgba(0, 0, 0, 0.65), 0 0 20px rgba(0, 112, 186, 0.14), inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
-    --shadow-dropdown: 0 24px 60px -12px rgba(0, 0, 0, 0.78), 0 0 0 1px rgba(148, 163, 184, 0.12);
+    --shadow-dropdown: 0 24px 60px -12px rgba(0, 0, 0, 0.78), 0 0 20px rgba(56, 189, 248, 0.16);
     --border-kpi: rgba(56, 189, 248, 0.44);
     --border-kpi-hover: rgba(56, 189, 248, 0.78);
-    --shadow-kpi: 0 10px 28px -6px rgba(0, 0, 0, 0.55), 0 0 14px rgba(0, 140, 255, 0.16), inset 0 1px 0 0 rgba(186, 230, 253, 0.14);
-    --shadow-kpi-hover: 0 16px 36px -6px rgba(0, 0, 0, 0.7), 0 0 22px rgba(56, 189, 248, 0.28), inset 0 1px 0 0 rgba(186, 230, 253, 0.24);
+    --shadow-kpi: 0 12px 28px -8px rgba(0, 0, 0, 0.58), 0 0 14px rgba(0, 140, 255, 0.16);
+    --shadow-kpi-hover: 0 16px 36px -6px rgba(0, 0, 0, 0.72), 0 0 22px rgba(56, 189, 248, 0.28);
+
+    --glass-opacity: 0.54;
+    --glass-opacity-hover: 0.68;
+    --glass-blur: 28px;
+    --glass-sat: 1.85;
+    --glass-tint: rgba(56, 189, 248, 0.08);
+    --glass-highlight: rgba(186, 230, 253, 0.68);
+    --glass-edge: 0.48;
+    --glass-dropdown-surface: rgba(15, 23, 42, 0.66);
+    --glass-subpanel: rgba(30, 41, 59, 0.52);
+    --glass-subpanel-hover: rgba(30, 41, 59, 0.72);
 
     --scrollbar-track: #0f172a;
     --scrollbar-thumb: #475569;
@@ -209,11 +232,22 @@ html[data-theme="dark"] {
 
   --shadow-glass: 0 12px 32px -6px rgba(0, 0, 0, 0.5), inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
   --shadow-glass-hover: 0 16px 36px -6px rgba(0, 0, 0, 0.65), 0 0 20px rgba(0, 112, 186, 0.14), inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
-  --shadow-dropdown: 0 24px 60px -12px rgba(0, 0, 0, 0.78), 0 0 0 1px rgba(148, 163, 184, 0.12);
+  --shadow-dropdown: 0 24px 60px -12px rgba(0, 0, 0, 0.78), 0 0 20px rgba(56, 189, 248, 0.16);
   --border-kpi: rgba(56, 189, 248, 0.44);
   --border-kpi-hover: rgba(56, 189, 248, 0.78);
-  --shadow-kpi: 0 10px 28px -6px rgba(0, 0, 0, 0.55), 0 0 14px rgba(0, 140, 255, 0.16), inset 0 1px 0 0 rgba(186, 230, 253, 0.14);
-  --shadow-kpi-hover: 0 16px 36px -6px rgba(0, 0, 0, 0.7), 0 0 22px rgba(56, 189, 248, 0.28), inset 0 1px 0 0 rgba(186, 230, 253, 0.24);
+  --shadow-kpi: 0 12px 28px -8px rgba(0, 0, 0, 0.58), 0 0 14px rgba(0, 140, 255, 0.16);
+  --shadow-kpi-hover: 0 16px 36px -6px rgba(0, 0, 0, 0.72), 0 0 22px rgba(56, 189, 248, 0.28);
+
+  --glass-opacity: 0.54;
+  --glass-opacity-hover: 0.68;
+  --glass-blur: 28px;
+  --glass-sat: 1.85;
+  --glass-tint: rgba(56, 189, 248, 0.08);
+  --glass-highlight: rgba(186, 230, 253, 0.68);
+  --glass-edge: 0.48;
+  --glass-dropdown-surface: rgba(15, 23, 42, 0.66);
+  --glass-subpanel: rgba(30, 41, 59, 0.52);
+  --glass-subpanel-hover: rgba(30, 41, 59, 0.72);
 
   --scrollbar-track: #0f172a;
   --scrollbar-thumb: #475569;
@@ -364,40 +398,84 @@ html[data-theme="dark"] .theme-icon-moon {
 }
 
 .glass-panel-interactive {
-  background: var(--surface-glass);
-  backdrop-filter: blur(22px) saturate(165%);
-  -webkit-backdrop-filter: blur(22px) saturate(165%);
+  isolation: isolate;
+  background: color-mix(in srgb, var(--surface-card) calc(var(--glass-opacity) * 100%), transparent);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
   border: 1px solid var(--border-kpi);
-  box-shadow: var(--shadow-kpi);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) calc(var(--glass-edge) * 100%), transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--glass-highlight) calc(var(--glass-edge) * 28%), transparent),
+    var(--shadow-kpi);
   color: var(--fg-primary);
-  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: background-color 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease, transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.glass-panel-interactive:hover {
-  background: var(--surface-glass-hover);
+.glass-panel-interactive::before,
+.glass-dropdown::before,
+.glass-strip::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(135deg, var(--glass-tint) 0%, transparent 65%);
+  pointer-events: none;
+  z-index: -1;
+}
+
+.glass-panel-interactive:hover,
+.glass-panel-interactive.glass-card-active {
+  background: color-mix(in srgb, var(--surface-card) calc(var(--glass-opacity-hover) * 100%), transparent);
   border-color: var(--border-kpi-hover);
-  box-shadow: var(--shadow-kpi-hover);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) 100%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--glass-highlight) calc(var(--glass-edge) * 42%), transparent),
+    var(--shadow-kpi-hover);
   transform: translateY(-2px);
 }
 
+.glass-panel-interactive.glass-card-danger {
+  border-color: var(--status-danger-border);
+}
+
 .glass-dropdown {
-  background: var(--surface-dropdown);
-  backdrop-filter: blur(28px) saturate(175%);
-  -webkit-backdrop-filter: blur(28px) saturate(175%);
+  isolation: isolate;
+  background: var(--glass-dropdown-surface);
+  backdrop-filter: blur(34px) saturate(190%);
+  -webkit-backdrop-filter: blur(34px) saturate(190%);
   border: 1px solid var(--border-dropdown);
-  box-shadow: var(--shadow-dropdown);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) calc(var(--glass-edge) * 100%), transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--glass-highlight) calc(var(--glass-edge) * 32%), transparent),
+    var(--shadow-dropdown);
   color: var(--fg-primary);
 }
 
 .glass-subitem {
-  background: var(--surface-elevated);
+  background: var(--glass-subpanel);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
   border: 1px solid var(--border-subtle);
-  transition: all 0.18s ease;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) calc(var(--glass-edge) * 65%), transparent);
+  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
 .glass-subitem:hover {
-  background: var(--surface-subtle);
+  background: var(--glass-subpanel-hover);
   border-color: var(--accent-border);
+}
+
+.glass-strip {
+  isolation: isolate;
+  background: color-mix(in srgb, var(--surface-card) calc(var(--glass-opacity) * 100%), transparent);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  border: 1px solid var(--border-glass);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) calc(var(--glass-edge) * 90%), transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--glass-highlight) calc(var(--glass-edge) * 24%), transparent),
+    var(--shadow-glass);
+  color: var(--fg-primary);
 }
 
 .liquid-glass-panel {
