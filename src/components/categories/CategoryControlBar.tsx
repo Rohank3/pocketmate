@@ -1,14 +1,12 @@
 "use client";
 
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useRef, useEffect, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import {
   ChevronLeft,
   ChevronRight,
   Settings2,
   DollarSign,
-  AlertTriangle,
-  CheckCircle2,
   X,
   Tag,
   MoreVertical,
@@ -90,11 +88,7 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
 
   // Delete confirmation modal state
   const [categoryPendingDelete, setCategoryPendingDelete] = useState<CategoryItem | null>(null);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useSyncExternalStore(() => () => {}, () => true, () => false);
 
   // Close dropdown on outside click
   useEffect(() => {

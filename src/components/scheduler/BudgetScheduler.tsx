@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import {
   Calendar as CalendarIcon,
@@ -72,11 +72,7 @@ export default function BudgetScheduler({
   const [viewDate, setViewDate] = useState<Date>(() => new Date());
   const viewYear = viewDate.getFullYear();
   const viewMonth = viewDate.getMonth(); // 0-indexed
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useSyncExternalStore(() => () => {}, () => true, () => false);
 
   const MONTH_NAMES = useMemo(
     () => [

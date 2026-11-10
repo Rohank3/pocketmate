@@ -59,25 +59,6 @@ body {
   }
 }
 
-/* Organic Dual-Harmonic Liquid Wave Flow Keyframes */
-@keyframes liquid-wave-flow {
-  0% {
-    transform: translateX(0);
-  }
-  100% {
-    transform: translateX(-50%);
-  }
-}
-
-@keyframes liquid-wave-reverse {
-  0% {
-    transform: translateX(0);
-  }
-  100% {
-    transform: translateX(50%);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;
