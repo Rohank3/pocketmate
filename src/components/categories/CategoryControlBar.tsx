@@ -77,8 +77,12 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
   const [editColorDraft, setEditColorDraft] = useState("");
   const [editReinitializeDraft, setEditReinitializeDraft] = useState(false);
 
-  // Pill context menu dropdown state
-  const [activeMenuCatId, setActiveMenuCatId] = useState<string | null>(null);
+  // Pill context menu dropdown state (portalled outside overflow-x-auto strip)
+  const [activeMenu, setActiveMenu] = useState<{
+    cat: CategoryItem;
+    top: number;
+    left: number;
+  } | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   // Quick single category edit modal state (when opened directly from pill context menu)
@@ -88,25 +92,30 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
   const [categoryPendingDelete, setCategoryPendingDelete] = useState<CategoryItem | null>(null);
   const mounted = useSyncExternalStore(() => () => {}, () => true, () => false);
 
-  // Close dropdown on outside click & close modals on Escape
+  // Close dropdown on outside click or scroll & close modals on Escape
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setActiveMenuCatId(null);
+        setActiveMenu(null);
       }
+    }
+    function handleScroll() {
+      setActiveMenu(null);
     }
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        setActiveMenuCatId(null);
+        setActiveMenu(null);
         setIsModalOpen(false);
         setQuickEditCategory(null);
         setCategoryPendingDelete(null);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener("scroll", handleScroll, true);
     document.addEventListener("keydown", handleKeyDown);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("scroll", handleScroll, true);
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
@@ -227,7 +236,7 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
     if (categoryPendingDelete) {
       onDeleteCategory(categoryPendingDelete.id);
       setCategoryPendingDelete(null);
-      setActiveMenuCatId(null);
+      setActiveMenu(null);
     }
   };
 
@@ -377,17 +386,40 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
                     tabIndex={0}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setActiveMenuCatId(activeMenuCatId === catObj.id ? null : catObj.id);
+                      if (activeMenu?.cat.id === catObj.id) {
+                        setActiveMenu(null);
+                        return;
+                      }
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const menuWidth = 176;
+                      const clampedLeft = Math.max(
+                        8,
+                        Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 8)
+                      );
+                      const top = Math.min(rect.bottom + 6, window.innerHeight - 120);
+                      setActiveMenu({ cat: catObj, top, left: clampedLeft });
                     }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
                         e.stopPropagation();
-                        setActiveMenuCatId(activeMenuCatId === catObj.id ? null : catObj.id);
+                        if (activeMenu?.cat.id === catObj.id) {
+                          setActiveMenu(null);
+                          return;
+                        }
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const menuWidth = 176;
+                        const clampedLeft = Math.max(
+                          8,
+                          Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 8)
+                        );
+                        const top = Math.min(rect.bottom + 6, window.innerHeight - 120);
+                        setActiveMenu({ cat: catObj, top, left: clampedLeft });
                       }
                     }}
                     className={`ml-0.5 p-0.5 rounded hover:bg-[var(--surface-hover)] transition-opacity cursor-pointer ${
                       isSelected ? "text-[var(--accent-text)]" : "text-[var(--fg-muted)] hover:text-[var(--fg-primary)]"
-                    } ${activeMenuCatId === catObj.id ? "opacity-100" : "opacity-70 group-hover/pill:opacity-100"}`}
+                    } ${activeMenu?.cat.id === catObj.id ? "opacity-100" : "opacity-70 group-hover/pill:opacity-100"}`}
                     title={`Options for ${catObj.name}`}
                     aria-label={`Options for ${catObj.name}`}
                   >
@@ -395,48 +427,53 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
                   </span>
                 )}
               </button>
-
-              {/* Context Dropdown Menu */}
-              {!isAll && catObj && activeMenuCatId === catObj.id && (
-                <div
-                  ref={menuRef}
-                  className="absolute left-0 top-full mt-1.5 z-40 w-44 rounded-xl glass-dropdown py-1 text-xs animate-in fade-in zoom-in-95 duration-100"
-                >
-                  <div className="px-3 py-1 text-[10px] font-bold text-[var(--fg-muted)] border-b border-[var(--border-subtle)] uppercase tracking-wider">
-                    {catObj.name}
-                  </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setQuickEditCategory(catObj);
-                      setEditNameDraft(catObj.name);
-                      setEditCapDraft(catObj.monthlyCap.toString());
-                      setEditColorDraft(catObj.color);
-                      setEditReinitializeDraft(false);
-                      setActiveMenuCatId(null);
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-[var(--accent-subtle)] text-left text-[var(--fg-primary)] cursor-pointer transition-colors"
-                  >
-                    <Edit2 className="w-3.5 h-3.5 text-[var(--accent-text)]" />
-                    <span>Edit Category</span>
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setCategoryPendingDelete(catObj);
-                      setActiveMenuCatId(null);
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-[var(--status-danger-bg)] text-left text-[var(--status-danger-text)] cursor-pointer transition-colors"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Delete Category</span>
-                  </button>
-                </div>
-              )}
             </div>
           );
         })}
       </div>
+
+      {/* Portalled 3-Dot Category Context Dropdown Menu */}
+      {activeMenu && mounted && typeof document !== "undefined" && createPortal(
+        <div
+          ref={menuRef}
+          style={{ top: activeMenu.top, left: activeMenu.left }}
+          className="fixed z-[210] w-44 rounded-xl glass-dropdown py-1 text-xs animate-in fade-in zoom-in-95 duration-100"
+        >
+          <div className="px-3 py-1 text-[10px] font-bold text-[var(--fg-muted)] border-b border-[var(--border-subtle)] uppercase tracking-wider">
+            {activeMenu.cat.name}
+          </div>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              const cat = activeMenu.cat;
+              setQuickEditCategory(cat);
+              setEditNameDraft(cat.name);
+              setEditCapDraft(cat.monthlyCap.toString());
+              setEditColorDraft(cat.color);
+              setEditReinitializeDraft(false);
+              setActiveMenu(null);
+            }}
+            className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-[var(--accent-subtle)] text-left text-[var(--fg-primary)] cursor-pointer transition-colors"
+          >
+            <Edit2 className="w-3.5 h-3.5 text-[var(--accent-text)]" />
+            <span>Edit Category</span>
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setCategoryPendingDelete(activeMenu.cat);
+              setActiveMenu(null);
+            }}
+            className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-[var(--status-danger-bg)] text-left text-[var(--status-danger-text)] cursor-pointer transition-colors"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Delete Category</span>
+          </button>
+        </div>,
+        document.body
+      )}
 
       {/* Progress Bar for Selected Category */}
       <div className="w-full bg-[var(--surface-subtle)] rounded-full h-1.5 overflow-hidden border border-[var(--border-subtle)]">
@@ -659,10 +696,12 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
               ) : (
                 <form onSubmit={handleCreateCategory} className="flex flex-col gap-3.5">
                   <div>
-                    <label className="text-xs font-semibold text-[var(--fg-primary)] block mb-1">
+                    <label htmlFor="new-category-name" className="text-xs font-semibold text-[var(--fg-primary)] block mb-1">
                       Name
                     </label>
                     <input
+                      id="new-category-name"
+                      name="categoryName"
                       type="text"
                       placeholder="e.g. Travel, Utilities"
                       value={newName}
@@ -673,12 +712,14 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
                   </div>
 
                   <div>
-                    <label className="text-xs font-semibold text-[var(--fg-primary)] block mb-1">
+                    <label htmlFor="new-category-cap" className="text-xs font-semibold text-[var(--fg-primary)] block mb-1">
                       Monthly Cap ($)
                     </label>
                     <div className="relative">
                       <DollarSign className="w-4 h-4 absolute left-2.5 top-2.5 text-[var(--fg-muted)]" />
                       <input
+                        id="new-category-cap"
+                        name="monthlyCap"
                         type="number"
                         min="10"
                         step="10"
@@ -770,10 +811,12 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-[var(--fg-primary)] block mb-1">Monthly Cap ($)</label>
+                <label htmlFor="quick-edit-category-cap" className="text-xs font-semibold text-[var(--fg-primary)] block mb-1">Monthly Cap ($)</label>
                 <div className="relative">
                   <DollarSign className="w-4 h-4 absolute left-2.5 top-2.5 text-[var(--fg-muted)]" />
                   <input
+                    id="quick-edit-category-cap"
+                    name="quickEditCap"
                     type="number"
                     min="10"
                     step="10"
