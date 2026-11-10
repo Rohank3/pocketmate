@@ -282,20 +282,20 @@ export default function FinancialStudio({
           </div>
         </div>
 
-        <div className="flex items-center gap-4 text-xs font-mono">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 sm:gap-x-4 text-xs font-mono">
           <div>
             <span className="text-[var(--fg-muted)] block text-[10px]">TOTAL SPENT</span>
             <span className="text-[var(--fg-primary)] font-bold text-sm tabular-nums">
               ${categoryAnalytics.totalSpent.toFixed(2)}
             </span>
           </div>
-          <div className="border-l border-[var(--border-subtle)] pl-4">
+          <div className="border-l border-[var(--border-subtle)] pl-3 sm:pl-4">
             <span className="text-[var(--fg-muted)] block text-[10px]">TOTAL CAP</span>
             <span className="text-[var(--fg-secondary)] font-semibold text-sm tabular-nums">
               ${categoryAnalytics.totalCap.toFixed(2)}
             </span>
           </div>
-          <div className="border-l border-[var(--border-subtle)] pl-4">
+          <div className="border-l border-[var(--border-subtle)] pl-3 sm:pl-4">
             <span className="text-[var(--fg-muted)] block text-[10px]">UTILIZATION</span>
             <span
               className={`font-bold text-sm tabular-nums ${
