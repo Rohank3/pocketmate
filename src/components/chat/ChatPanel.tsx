@@ -185,6 +185,26 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     }
   }, [editingThreadId]);
 
+  const [isBuoyant, setIsBuoyant] = useState(false);
+  const chatRootRef = useRef<HTMLDivElement>(null);
+
+  // Listen for liquid chamber velocity waves to trigger organic bubble buoyancy
+  useEffect(() => {
+    const el = chatRootRef.current;
+    if (!el) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const handleWave = () => {
+      setIsBuoyant(true);
+      clearTimeout(timer);
+      timer = setTimeout(() => setIsBuoyant(false), 850);
+    };
+    el.addEventListener("liquid-wave", handleWave);
+    return () => {
+      el.removeEventListener("liquid-wave", handleWave);
+      clearTimeout(timer);
+    };
+  }, []);
+
   // Handle escape to close drawer or cancel rename
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -273,7 +293,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   };
 
   return (
-    <LiquidGlassContainer
+    <div ref={chatRootRef} className="h-full w-full">
+      <LiquidGlassContainer
       className="h-full w-full"
       contentClassName="relative flex flex-col h-full p-2.5 sm:p-3 overflow-hidden"
       borderRadius={28}
@@ -569,9 +590,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
             <div
               className={`max-w-[85%] rounded-2xl px-4 py-3 leading-relaxed transition-all duration-300 ease-out animate-jelly-pop hover:scale-[1.02] active:scale-[0.98] cursor-default select-text ${
+                isBuoyant ? "liquid-buoyant" : ""
+              } ${
                 m.role === "user"
-                  ? "bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 text-white rounded-tr-xs shadow-xs hover:shadow-md"
-                  : "bg-white/80 backdrop-blur-md border border-white/90 text-zinc-900 rounded-tl-xs shadow-[0_4px_16px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_20px_rgba(245,158,11,0.08)] hover:border-amber-200/80"
+                  ? "bg-gradient-to-br from-amber-500/95 via-amber-600/95 to-amber-700/95 backdrop-blur-md text-white rounded-tr-xs shadow-[0_4px_16px_rgba(245,158,11,0.22),inset_0_1px_1.5px_rgba(255,255,255,0.5)] hover:shadow-[0_8px_24px_rgba(245,158,11,0.3)]"
+                  : "bg-white/75 backdrop-blur-xl border border-white/85 text-zinc-900 rounded-tl-xs shadow-[0_4px_16px_rgba(0,0,0,0.04),inset_0_1px_1.5px_rgba(255,255,255,0.95)] hover:shadow-[0_8px_24px_rgba(245,158,11,0.12)] hover:border-amber-200/90"
               }`}
               style={{
                 transitionTimingFunction: "cubic-bezier(0.34, 1.56, 0.64, 1)",
@@ -747,5 +770,6 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         </form>
       </div>
     </LiquidGlassContainer>
+  </div>
   );
 };

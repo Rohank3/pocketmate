@@ -17,6 +17,7 @@ import { UserAccount, InvoiceRecord } from "@/types/sandboxUser";
 import { ScheduledEvent } from "@/components/scheduler/BudgetScheduler";
 import { PulseBackground } from "@/components/ui/PulseBackground";
 import { ensureUniqueCategoryColors } from "@/lib/utils/categoryColors";
+import { LiquidGlassContainer } from "@/components/ui/LiquidGlassContainer";
 import {
   Wallet,
   CreditCard,
@@ -1348,8 +1349,24 @@ export default function Home() {
           </div>
 
           {/* Right Column: Transactions Ledger, Visual Insights & Upcoming Due Calendar (7 Cols) */}
-          <div className="lg:col-span-7 flex flex-col min-h-0 h-[640px] lg:h-[740px] gap-3.5">
-            {/* View Tab Switcher Styled with Frosted White Glass Segmented Control */}
+          <div className="lg:col-span-7 flex flex-col min-h-0 h-[640px] lg:h-[740px]">
+            <LiquidGlassContainer
+              className="h-full w-full"
+              contentClassName="relative flex flex-col h-full p-2.5 sm:p-3 overflow-hidden gap-3.5"
+              borderRadius={28}
+              glass={{
+                blur: 24,
+                opacity: 0.82,
+                saturation: 1.8,
+                tint: "#fdfbf7",
+                edge: 0.9,
+                distortion: 26,
+              }}
+              accent="#f59e0b"
+              intensity={1}
+              rippleStrength={1}
+            >
+              {/* View Tab Switcher Styled with Frosted White Glass Segmented Control */}
             <div className="flex items-center justify-between p-1.5 rounded-2xl glass-panel shadow-sm">
               <div className="flex flex-wrap items-center gap-1.5">
                 <button
@@ -1513,7 +1530,8 @@ export default function Home() {
               />
             )}
           </div>
-        </div>
+        </LiquidGlassContainer>
+      </div>
       </div>
 
       {/* PayPal Sandbox Login & Session Switch Modal */}
