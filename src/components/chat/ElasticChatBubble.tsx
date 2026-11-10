@@ -388,20 +388,20 @@ export const ElasticChatBubble: React.FC<ElasticChatBubbleProps> = ({
           stroke={
             isUser
               ? isDark
-                ? "rgba(56, 189, 248, 0.38)"
-                : "rgba(0, 112, 186, 0.4)"
+                ? "rgba(56, 189, 248, 0.78)"
+                : "rgba(0, 112, 186, 0.75)"
               : isDark
-              ? "rgba(56, 189, 248, 0.22)"
-              : "rgba(0, 112, 186, 0.24)"
+              ? "rgba(56, 189, 248, 0.56)"
+              : "rgba(0, 112, 186, 0.54)"
           }
-          strokeWidth={isUser ? "2px" : "1.8px"}
+          strokeWidth={isUser ? "2.4px" : "2.1px"}
           vectorEffect="non-scaling-stroke"
           style={{
             filter: isUser
-              ? "drop-shadow(0 0 4px rgba(0, 112, 186, 0.35))"
+              ? "drop-shadow(0 0 8px rgba(0, 140, 255, 0.42))"
               : isDark
-              ? "drop-shadow(0 0 4px rgba(0, 112, 186, 0.2))"
-              : "drop-shadow(0 0 3px rgba(0, 112, 186, 0.16))",
+              ? "drop-shadow(0 0 6px rgba(56, 189, 248, 0.3))"
+              : "drop-shadow(0 0 5px rgba(0, 112, 186, 0.22))",
           }}
         />
 
@@ -412,13 +412,13 @@ export const ElasticChatBubble: React.FC<ElasticChatBubbleProps> = ({
           stroke={
             isUser
               ? isDark
-                ? "rgba(255, 255, 255, 0.35)"
-                : "rgba(255, 255, 255, 0.65)"
+                ? "rgba(224, 242, 254, 0.58)"
+                : "rgba(255, 255, 255, 0.78)"
               : isDark
-              ? "rgba(148, 163, 184, 0.24)"
-              : "rgba(255, 255, 255, 0.85)"
+              ? "rgba(186, 230, 253, 0.42)"
+              : "rgba(255, 255, 255, 0.92)"
           }
-          strokeWidth="1.1px"
+          strokeWidth="1.25px"
           vectorEffect="non-scaling-stroke"
         />
       </svg>

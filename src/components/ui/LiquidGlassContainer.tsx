@@ -549,21 +549,21 @@ function LiquidGlassMotion({
           </clipPath>
         </defs>
 
-        {/* Outer caustic edge accent - calibrated per Light/Dark surface contrast */}
+        {/* Outer caustic edge accent - vibrant electric PayPal blue for Light & Dark */}
         <path
           ref={rimGlowRef}
           fill="none"
           stroke={
             isDark
-              ? "rgba(56, 189, 248, 0.34)"
-              : "rgba(0, 112, 186, 0.32)"
+              ? "rgba(56, 189, 248, 0.78)"
+              : "rgba(0, 112, 186, 0.72)"
           }
-          strokeWidth="2.2px"
+          strokeWidth="2.75px"
           vectorEffect="non-scaling-stroke"
           style={{
             filter: isDark
-              ? "drop-shadow(0 0 8px rgba(0, 112, 186, 0.28))"
-              : "drop-shadow(0 0 6px rgba(0, 112, 186, 0.22))",
+              ? "drop-shadow(0 0 11px rgba(0, 140, 255, 0.45))"
+              : "drop-shadow(0 0 8px rgba(0, 112, 186, 0.28))",
           }}
         />
 
@@ -571,8 +571,8 @@ function LiquidGlassMotion({
         <path
           ref={rimRef}
           fill="none"
-          stroke={isDark ? "rgba(148, 163, 184, 0.28)" : "rgba(255, 255, 255, 0.92)"}
-          strokeWidth="1.25px"
+          stroke={isDark ? "rgba(186, 230, 253, 0.52)" : "rgba(255, 255, 255, 0.95)"}
+          strokeWidth="1.35px"
           vectorEffect="non-scaling-stroke"
         />
       </svg>
