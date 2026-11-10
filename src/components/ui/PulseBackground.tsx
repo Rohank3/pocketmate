@@ -10,12 +10,12 @@ export type PulseBackgroundPalette = {
 };
 
 export const PULSE_PALETTES: Record<string, PulseBackgroundPalette> = {
-  // Midnight Slate under electric cyan/blue moonlight (Fintech signature)
-  midnight: {
-    from: "#0c111c",
-    to: "#04070d",
-    glow: "#38bdf8",
-    ink: "#f0f6fc",
+  // Champagne & Warm Obsidian Gold (Signature Single Modern Luxury Theme)
+  gold: {
+    from: "#140f09",
+    to: "#060504",
+    glow: "#f59e0b",
+    ink: "#fdf8ee",
   },
   // Sodium streetlamp warm amber glow
   sodium: {
@@ -24,19 +24,11 @@ export const PULSE_PALETTES: Record<string, PulseBackgroundPalette> = {
     glow: "#f59e0b",
     ink: "#fbf6ee",
   },
-  // Mercury cool silver & slate
-  mercury: {
-    from: "#111620",
-    to: "#05070a",
-    glow: "#93c5fd",
-    ink: "#eef4fa",
-  },
-  // Emerald Obsidian (Wealth & Ledger signature)
-  emerald: {
-    from: "#091410",
-    to: "#030806",
-    glow: "#10b981",
-    ink: "#ecfdf5",
+  midnight: {
+    from: "#140f09",
+    to: "#060504",
+    glow: "#f59e0b",
+    ink: "#fdf8ee",
   },
 };
 
@@ -53,14 +45,14 @@ export function stripeDelay(i: number, n: number, period = 4.8): number {
 }
 
 export const PulseBackground: React.FC<PulseBackgroundProps> = ({
-  palette = "midnight",
+  palette = "gold",
   stripes = 18,
   className = "",
   showGrain = true,
 }) => {
   const pal = useMemo(() => {
     return typeof palette === "string"
-      ? PULSE_PALETTES[palette] || PULSE_PALETTES.midnight
+      ? PULSE_PALETTES[palette] || PULSE_PALETTES.gold
       : palette;
   }, [palette]);
 
