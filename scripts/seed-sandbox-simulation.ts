@@ -819,21 +819,30 @@ async function runCleanup(): Promise<void> {
 
   const token = await getAccessToken();
 
-  // 1. Fetch existing invoices from PayPal Sandbox
-  console.log("• Fetching active sandbox invoices from PayPal Developer Sandbox...");
-  const listRes = await fetch(`${baseUrl}/v2/invoicing/invoices?page_size=100&total_required=true`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-  });
+  // 1. Fetch & clean all existing invoices from PayPal Sandbox with pagination
+  console.log("• Fetching and purging all sandbox invoices from PayPal Developer Sandbox...");
+  let page = 1;
+  let totalPages = 1;
+  let cleaned = 0;
 
-  if (listRes.ok) {
+  do {
+    const listRes = await fetch(`${baseUrl}/v2/invoicing/invoices?page_size=100&page=${page}&total_required=true`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!listRes.ok) {
+      console.warn(`  ⚠️ Failed to fetch invoice page ${page}: HTTP ${listRes.status}`);
+      break;
+    }
+
     const listData = await listRes.json();
+    totalPages = (listData.total_pages as number) || 1;
     const items = listData.items || [];
-    console.log(`  Found ${items.length} sandbox invoices.`);
+    console.log(`  Page ${page} of ${totalPages}: Found ${items.length} sandbox invoices.`);
 
-    let cleaned = 0;
     for (const inv of items) {
       try {
         const invId = inv.id;
@@ -894,29 +903,53 @@ async function runCleanup(): Promise<void> {
       } catch (itemErr) {
         console.warn(`  ⚠️ Error processing invoice ${inv?.id}:`, itemErr instanceof Error ? itemErr.message : itemErr);
       }
-      await sleep(100);
+      await sleep(80);
     }
-    console.log(`  Total sandbox invoices cleaned/cancelled/refunded: ${cleaned}`);
-  }
+
+    page++;
+  } while (page <= totalPages);
+
+  console.log(`  Total sandbox invoices cleaned/cancelled/refunded: ${cleaned}`);
 
   // 2. Clean Neon PostgreSQL Database records (Prisma)
-  console.log("\n• Purging local/Neon DB state (Chat, Categories, Contacts, Overrides)...");
+  console.log("\n• Purging local/Neon DB state (Users, Categories, Splits, Chat, Events, Contacts)...");
   try {
     const { prisma } = await import("@/lib/db");
-    const [delMessages, delThreads, delOverrides, delRules] = await Promise.all([
+    const [
+      delSplitItems,
+      delSplitRecords,
+      delBudgetEntries,
+      delBudgetCategories,
+      delEvents,
+      delContacts,
+      delMessages,
+      delThreads,
+      delOverrides,
+      delRules,
+      delUsers,
+    ] = await Promise.all([
+      prisma.splitItem.deleteMany({}),
+      prisma.splitRecord.deleteMany({}),
+      prisma.budgetEntry.deleteMany({}),
+      prisma.budgetCategory.deleteMany({}),
+      prisma.scheduledEvent.deleteMany({}),
+      prisma.contact.deleteMany({}),
       prisma.chatMessage.deleteMany({}),
       prisma.chatThread.deleteMany({}),
       prisma.transactionCategoryOverride.deleteMany({}),
       prisma.merchantCategoryRule.deleteMany({}),
+      prisma.user.deleteMany({}),
     ]);
-    console.log(`  ✓ Cleared ${delMessages.count} chat messages, ${delThreads.count} threads.`);
-    console.log(`  ✓ Cleared ${delOverrides.count} category overrides, ${delRules.count} merchant rules.`);
+    console.log(`  ✓ Cleared ${delUsers.count} users, ${delBudgetCategories.count} categories, ${delBudgetEntries.count} budget entries.`);
+    console.log(`  ✓ Cleared ${delSplitRecords.count} split records, ${delSplitItems.count} split items.`);
+    console.log(`  ✓ Cleared ${delMessages.count} chat messages, ${delThreads.count} threads, ${delEvents.count} scheduled events.`);
+    console.log(`  ✓ Cleared ${delContacts.count} contacts, ${delOverrides.count} category overrides, ${delRules.count} merchant rules.`);
     await prisma.$disconnect();
   } catch (err) {
     console.warn("  ℹ️ DB purge note:", err instanceof Error ? err.message : err);
   }
 
-  console.log("\n✨ Teardown complete! Environment and state are reset.\n");
+  console.log("\n✨ Teardown complete! Database and PayPal sandbox invoices are fully reset.\n");
 }
 
 // -----------------------------------------------------------------------------
