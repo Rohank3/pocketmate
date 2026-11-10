@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useSyncExternalStore } from "react";
 import {
   Bot,
   User,
@@ -77,13 +77,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
   const [showScrollBottomButton, setShowScrollBottomButton] = useState(false);
 
-  // Web Speech API Voice Recognition State
+  // Web Speech API Voice Recognition State (Hydration-safe via useSyncExternalStore)
   const [isListening, setIsListening] = useState(false);
-  const [speechSupported] = useState(() => {
-    if (typeof window === "undefined") return false;
+  const speechSupported = useSyncExternalStore(
+    () => () => {},
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
-  });
+    () => typeof window !== "undefined" && Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition),
+    () => false
+  );
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
 
@@ -589,7 +590,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             )}
 
             <div
-              className={`max-w-[85%] rounded-2xl px-4 py-3 leading-relaxed transition-all duration-300 ease-out animate-jelly-pop hover:scale-[1.02] active:scale-[0.98] cursor-default select-text ${
+              className={`max-w-[85%] rounded-2xl px-4 py-3 leading-relaxed transition-all duration-300 ease-out animate-jelly-pop cursor-default select-text ${
                 isBuoyant ? "liquid-buoyant" : ""
               } ${
                 m.role === "user"
@@ -701,7 +702,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       <div className="relative shrink-0">
         <form onSubmit={handleSubmit} className="p-0 relative">
           <div
-            className="relative flex items-center rounded-[30px] bg-white/80 border border-white/90 shadow-[inset_0_1px_3px_rgba(0,0,0,0.06),inset_0_-1px_1px_rgba(255,255,255,0.95),0_2px_8px_rgba(0,0,0,0.03)] p-1 transition-all duration-300 hover:scale-[1.01] hover:border-amber-300/80 hover:shadow-[0_4px_16px_rgba(245,158,11,0.1)] focus-within:border-amber-400/80 focus-within:ring-2 focus-within:ring-amber-400/25 focus-within:scale-[1.01] active:scale-[0.995]"
+            className="relative flex items-center rounded-[30px] bg-white/80 border border-white/90 shadow-[inset_0_1px_3px_rgba(0,0,0,0.06),inset_0_-1px_1px_rgba(255,255,255,0.95),0_2px_8px_rgba(0,0,0,0.03)] p-1 transition-all duration-300 hover:border-amber-300/80 hover:shadow-[0_4px_16px_rgba(245,158,11,0.1)] focus-within:border-amber-400/80 focus-within:ring-2 focus-within:ring-amber-400/25"
             style={{
               transitionTimingFunction: "cubic-bezier(0.34, 1.56, 0.64, 1)",
             }}
