@@ -4,7 +4,6 @@ import React, {
   useEffect,
   useId,
   useRef,
-  useLayoutEffect,
   type CSSProperties,
   type ReactNode,
   type RefObject,
@@ -241,7 +240,7 @@ function LiquidGlassMotion({
   const rimRef = useRef<SVGPathElement>(null);
   const rippleLayerRef = useRef<SVGGElement>(null);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     const container = containerRef.current;
     const surface = svgRef.current;
     const outline = rimRef.current;
@@ -633,7 +632,7 @@ function LiquidGlassMotion({
       {/* Living SVG Meniscus Outline & Refractive Ripples */}
       <svg
         ref={svgRef}
-        className="g-liquid-rim pointer-events-none absolute select-none z-25 overflow-visible"
+        className="g-liquid-rim pointer-events-none absolute select-none z-[30] overflow-visible"
         style={{
           width: "calc(100% + 64px)",
           height: "calc(100% + 64px)",
@@ -742,10 +741,10 @@ export const LiquidGlassContainer: React.FC<LiquidGlassContainerProps> = ({
     >
       {/* Living Liquid Refraction Surface - Clipped directly to the elastic SVG path with 32px overscan */}
       <div
-        className="g-liquid-material pointer-events-none absolute -inset-8 transition-shadow duration-300 z-5"
+        className="g-liquid-material pointer-events-none absolute -inset-8 transition-shadow duration-300 z-[5]"
         style={{
           background: `linear-gradient(135deg, rgba(255, 255, 255, 0.58) 0%, rgba(253, 251, 247, 0.38) 100%), color-mix(in srgb, ${tint} calc(${opacity} * 100%), transparent)`,
-          backdropFilter: `blur(var(--glass-blur)) saturate(var(--glass-saturation))`,
+          backdropFilter: `blur(var(--glass-blur)) saturate(var(--glass-saturation)) var(--glass-refraction, blur(0px))`,
           WebkitBackdropFilter: `blur(var(--glass-blur)) saturate(var(--glass-saturation))`,
           boxShadow: `0 20px 48px -12px rgba(24, 24, 27, 0.09), 0 0 32px rgba(245, 158, 11, 0.08)`,
           clipPath: `url(#${clipId})`,
@@ -763,6 +762,11 @@ export const LiquidGlassContainer: React.FC<LiquidGlassContainerProps> = ({
         />
       </div>
 
+      {/* Content Wrapper */}
+      <div className={`relative z-[10] h-full w-full ${contentClassName}`}>
+        {children}
+      </div>
+
       {/* Living Elastic Rim & Cursor Ripple Motion */}
       {motion && (
         <LiquidGlassMotion
@@ -773,11 +777,6 @@ export const LiquidGlassContainer: React.FC<LiquidGlassContainerProps> = ({
           rippleStrength={rippleStrength}
         />
       )}
-
-      {/* Content Wrapper */}
-      <div className={`relative z-20 h-full w-full ${contentClassName}`}>
-        {children}
-      </div>
     </div>
   );
 };
