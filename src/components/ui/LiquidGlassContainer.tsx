@@ -36,7 +36,7 @@ const defaultGlassSettings: Required<LiquidGlassSettings> = {
   blur: 20,
   opacity: 0.85,
   saturation: 1.8,
-  tint: "#fdfbf7",
+  tint: "#f8fafc",
   edge: 0.85,
   distortion: 28,
 };
@@ -220,7 +220,7 @@ function LiquidGlassMotion({
   clipId,
   elasticEdges = true,
   intensity = 1,
-  accent = "#f59e0b",
+  isDark = false,
 }: {
   containerRef: RefObject<HTMLElement | null>;
   clipId: string;
@@ -228,6 +228,7 @@ function LiquidGlassMotion({
   intensity?: number;
   rippleStrength?: number;
   accent?: string;
+  isDark?: boolean;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const clipRef = useRef<SVGPathElement>(null);
@@ -548,24 +549,30 @@ function LiquidGlassMotion({
           </clipPath>
         </defs>
 
-        {/* Outer living caustic edge glow - the living liquid border */}
+        {/* Outer caustic edge accent - calibrated per Light/Dark surface contrast */}
         <path
           ref={rimGlowRef}
           fill="none"
-          stroke={accent || "rgba(245, 158, 11, 0.75)"}
-          strokeWidth="3.5px"
+          stroke={
+            isDark
+              ? "rgba(56, 189, 248, 0.34)"
+              : "rgba(0, 112, 186, 0.32)"
+          }
+          strokeWidth="2.2px"
           vectorEffect="non-scaling-stroke"
           style={{
-            filter: `drop-shadow(0 0 10px ${accent || "rgba(245, 158, 11, 0.6)"}) drop-shadow(0 2px 8px ${accent || "rgba(217, 119, 6, 0.4)"})`,
+            filter: isDark
+              ? "drop-shadow(0 0 8px rgba(0, 112, 186, 0.28))"
+              : "drop-shadow(0 0 6px rgba(0, 112, 186, 0.22))",
           }}
         />
 
-        {/* Inner crisp specular meniscus highlight */}
+        {/* Inner specular meniscus hairline */}
         <path
           ref={rimRef}
           fill="none"
-          stroke="rgba(255, 255, 255, 0.98)"
-          strokeWidth="1.8px"
+          stroke={isDark ? "rgba(148, 163, 184, 0.28)" : "rgba(255, 255, 255, 0.92)"}
+          strokeWidth="1.25px"
           vectorEffect="non-scaling-stroke"
         />
       </svg>
@@ -582,7 +589,7 @@ export const LiquidGlassContainer: React.FC<LiquidGlassContainerProps> = ({
   className = "",
   style,
   glass = {},
-  accent = "#f59e0b",
+  accent = "#0070ba",
   motion = true,
   elasticEdges = true,
   intensity = 1,
@@ -600,6 +607,7 @@ export const LiquidGlassContainer: React.FC<LiquidGlassContainerProps> = ({
   const tint = glass.tint || defaultGlassSettings.tint;
   const edge = clamp(glass.edge, 0, 1, defaultGlassSettings.edge);
   const distortion = clamp(glass.distortion, 0, 60, defaultGlassSettings.distortion);
+  const isDark = tint.startsWith("#0") || tint.startsWith("#1");
 
   const dynamicGlassStyle: CSSProperties = {
     "--glass-blur": `${blur}px`,
@@ -625,14 +633,14 @@ export const LiquidGlassContainer: React.FC<LiquidGlassContainerProps> = ({
       <div
         className="g-liquid-material pointer-events-none absolute -inset-8 transition-shadow duration-300 z-[5]"
         style={{
-          background: tint.startsWith("#0") || tint.startsWith("#1")
-            ? `linear-gradient(135deg, rgba(28, 28, 36, 0.7) 0%, rgba(14, 14, 20, 0.6) 100%), color-mix(in srgb, ${tint} calc(${opacity} * 100%), transparent)`
-            : `linear-gradient(135deg, rgba(255, 255, 255, 0.58) 0%, rgba(253, 251, 247, 0.38) 100%), color-mix(in srgb, ${tint} calc(${opacity} * 100%), transparent)`,
+          background: isDark
+            ? `linear-gradient(135deg, rgba(17, 24, 39, 0.78) 0%, rgba(11, 15, 25, 0.72) 100%), color-mix(in srgb, ${tint} calc(${opacity} * 100%), transparent)`
+            : `linear-gradient(135deg, rgba(255, 255, 255, 0.65) 0%, rgba(248, 250, 252, 0.45) 100%), color-mix(in srgb, ${tint} calc(${opacity} * 100%), transparent)`,
           backdropFilter: `blur(var(--glass-blur)) saturate(var(--glass-saturation)) var(--glass-refraction, blur(0px))`,
           WebkitBackdropFilter: `blur(var(--glass-blur)) saturate(var(--glass-saturation))`,
-          boxShadow: tint.startsWith("#0") || tint.startsWith("#1")
-            ? `0 20px 48px -12px rgba(0, 0, 0, 0.6), 0 0 32px ${accent}26`
-            : `0 20px 48px -12px rgba(24, 24, 27, 0.09), 0 0 32px ${accent}1f`,
+          boxShadow: isDark
+            ? `0 20px 48px -12px rgba(0, 0, 0, 0.65), 0 0 24px ${accent}1f`
+            : `0 20px 48px -12px rgba(15, 23, 42, 0.08), 0 0 24px ${accent}14`,
           clipPath: `url(#${clipId})`,
           WebkitClipPath: `url(#${clipId})`,
         }}
@@ -640,10 +648,10 @@ export const LiquidGlassContainer: React.FC<LiquidGlassContainerProps> = ({
       >
         {/* Ambient Liquid Shimmer Layer */}
         <div
-          className="absolute inset-0 opacity-40 mix-blend-overlay pointer-events-none"
+          className="absolute inset-0 opacity-30 mix-blend-overlay pointer-events-none"
           style={{
             background:
-              `radial-gradient(circle at 35% 25%, ${accent}40 0%, transparent 50%), radial-gradient(circle at 75% 70%, ${accent}33 0%, transparent 45%)`,
+              `radial-gradient(circle at 35% 25%, ${accent}33 0%, transparent 50%), radial-gradient(circle at 75% 70%, ${accent}26 0%, transparent 45%)`,
           }}
         />
       </div>
@@ -661,6 +669,7 @@ export const LiquidGlassContainer: React.FC<LiquidGlassContainerProps> = ({
           elasticEdges={elasticEdges}
           intensity={intensity}
           accent={accent}
+          isDark={isDark}
         />
       )}
     </div>

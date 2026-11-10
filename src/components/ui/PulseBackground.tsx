@@ -7,50 +7,32 @@ export type PulseBackgroundPalette = {
   to: string;
   glow: string;
   ink: string;
+  isDark?: boolean;
+};
+
+const LIGHT_PALETTE: PulseBackgroundPalette = {
+  from: "#f6f8fa",
+  to: "#edf3f9",
+  glow: "#0070ba",
+  ink: "#0f172a",
+  isDark: false,
+};
+
+const DARK_PALETTE: PulseBackgroundPalette = {
+  from: "#090d16",
+  to: "#05080f",
+  glow: "#0070ba",
+  ink: "#f1f5f9",
+  isDark: true,
 };
 
 export const PULSE_PALETTES: Record<string, PulseBackgroundPalette> = {
-  // White & Orange (Default Executive Warm Ivory & Champagne Gold)
-  "white-orange": {
-    from: "#fbf9f4",
-    to: "#f1ebe0",
-    glow: "#f59e0b",
-    ink: "#18181b",
-  },
-  gold: {
-    from: "#fbf9f4",
-    to: "#f1ebe0",
-    glow: "#f59e0b",
-    ink: "#18181b",
-  },
-  // White & PayPal Blue
-  "white-blue": {
-    from: "#f8fafc",
-    to: "#edf4fb",
-    glow: "#0070ba",
-    ink: "#18181b",
-  },
-  // Black & PayPal Blue
-  "black-blue": {
-    from: "#09090b",
-    to: "#040406",
-    glow: "#0070ba",
-    ink: "#f4f4f5",
-  },
-  // Black & Orange
-  "black-orange": {
-    from: "#09090b",
-    to: "#050302",
-    glow: "#f59e0b",
-    ink: "#f4f4f5",
-  },
-  // Paper Linen warm tone
-  paper: {
-    from: "#fdfbf7",
-    to: "#f3efe6",
-    glow: "#d97706",
-    ink: "#18181b",
-  },
+  light: LIGHT_PALETTE,
+  dark: DARK_PALETTE,
+  "white-blue": LIGHT_PALETTE,
+  "white-orange": LIGHT_PALETTE,
+  "black-blue": DARK_PALETTE,
+  "black-orange": DARK_PALETTE,
 };
 
 export interface PulseBackgroundProps {
@@ -66,59 +48,44 @@ export function stripeDelay(i: number, n: number, period = 4.8): number {
 }
 
 export const PulseBackground: React.FC<PulseBackgroundProps> = ({
-  palette = "white-orange",
+  palette = "light",
   stripes = 18,
   className = "",
   showGrain = true,
 }) => {
   const pal = useMemo(() => {
     if (typeof palette === "string") {
-      return PULSE_PALETTES[palette] || PULSE_PALETTES["white-orange"];
+      return PULSE_PALETTES[palette] || LIGHT_PALETTE;
     }
     return palette;
   }, [palette]);
 
   const n = Math.max(1, Math.round(stripes));
-  const isBlue = pal.glow === "#0070ba";
-  const isDark = pal.ink === "#f4f4f5" || pal.from.startsWith("#0");
+  const isDark = pal.isDark ?? (pal.ink === "#f1f5f9" || pal.from.startsWith("#0"));
 
-  const stripeGradient = isBlue
-    ? `linear-gradient(180deg, transparent, rgba(0, 112, 186, 0.05) 25%, rgba(0, 121, 193, 0.18) 60%, rgba(0, 70, 124, 0.28) 90%, transparent 100%)`
-    : `linear-gradient(180deg, transparent, rgba(245, 158, 11, 0.05) 25%, rgba(251, 191, 36, 0.18) 60%, rgba(217, 119, 6, 0.28) 90%, transparent 100%)`;
+  const stripeGradient = isDark
+    ? "linear-gradient(180deg, transparent, rgba(0, 112, 186, 0.03) 25%, rgba(0, 112, 186, 0.12) 60%, rgba(0, 69, 124, 0.18) 90%, transparent 100%)"
+    : "linear-gradient(180deg, transparent, rgba(0, 112, 186, 0.04) 25%, rgba(0, 112, 186, 0.12) 60%, rgba(0, 70, 124, 0.18) 90%, transparent 100%)";
 
-  const breathingLamp = isBlue
-    ? isDark
-      ? `radial-gradient(closest-side, rgba(0, 112, 186, 0.32), rgba(0, 121, 193, 0.18), transparent)`
-      : `radial-gradient(closest-side, rgba(0, 112, 186, 0.2), rgba(0, 121, 193, 0.1), transparent)`
-    : isDark
-    ? `radial-gradient(closest-side, rgba(245, 158, 11, 0.28), rgba(251, 191, 36, 0.15), transparent)`
-    : `radial-gradient(closest-side, rgba(245, 158, 11, 0.2), rgba(251, 191, 36, 0.1), transparent)`;
+  const breathingLamp = isDark
+    ? "radial-gradient(closest-side, rgba(0, 112, 186, 0.2), rgba(0, 94, 166, 0.1), transparent)"
+    : "radial-gradient(closest-side, rgba(0, 112, 186, 0.14), rgba(0, 121, 193, 0.07), transparent)";
 
-  const topLamp = isBlue
-    ? isDark
-      ? `radial-gradient(closest-side, rgba(0, 121, 193, 0.25), rgba(0, 112, 186, 0.12), transparent)`
-      : `radial-gradient(closest-side, rgba(0, 121, 193, 0.18), rgba(0, 112, 186, 0.08), transparent)`
-    : isDark
-    ? `radial-gradient(closest-side, rgba(251, 191, 36, 0.22), rgba(245, 158, 11, 0.1), transparent)`
-    : `radial-gradient(closest-side, rgba(251, 191, 36, 0.18), rgba(245, 158, 11, 0.08), transparent)`;
+  const topLamp = isDark
+    ? "radial-gradient(closest-side, rgba(0, 112, 186, 0.16), rgba(0, 69, 124, 0.08), transparent)"
+    : "radial-gradient(closest-side, rgba(0, 121, 193, 0.12), rgba(0, 112, 186, 0.05), transparent)";
 
-  const centerBloom = isBlue
-    ? `radial-gradient(closest-side, rgba(0, 112, 186, 0.15), transparent)`
-    : `radial-gradient(closest-side, rgba(245, 158, 11, 0.15), transparent)`;
+  const centerBloom = isDark
+    ? "radial-gradient(closest-side, rgba(0, 112, 186, 0.1), transparent)"
+    : "radial-gradient(closest-side, rgba(0, 112, 186, 0.09), transparent)";
 
   const vignette = isDark
-    ? `radial-gradient(75% 60% at 50% 35%, transparent 40%, rgba(0, 0, 0, 0.8) 95%)`
-    : isBlue
-    ? `radial-gradient(75% 60% at 50% 35%, transparent 50%, rgba(210, 225, 240, 0.35) 90%)`
-    : `radial-gradient(75% 60% at 50% 35%, transparent 50%, rgba(230, 222, 210, 0.35) 90%)`;
+    ? "radial-gradient(75% 60% at 50% 35%, transparent 45%, rgba(3, 6, 12, 0.72) 95%)"
+    : "radial-gradient(75% 60% at 50% 35%, transparent 55%, rgba(203, 213, 225, 0.28) 92%)";
 
   const stripeBorderClass = isDark
-    ? isBlue
-      ? "border-sky-500/[0.08]"
-      : "border-amber-500/[0.08]"
-    : isBlue
-    ? "border-blue-900/[0.05]"
-    : "border-amber-900/[0.05]";
+    ? "border-sky-400/[0.04]"
+    : "border-slate-900/[0.035]";
 
   return (
     <div
@@ -189,7 +156,7 @@ export const PulseBackground: React.FC<PulseBackgroundProps> = ({
       {/* Analog Noise Texture Overlay */}
       {showGrain && (
         <div
-          className="absolute inset-0 pointer-events-none opacity-[0.14] mix-blend-overlay"
+          className="absolute inset-0 pointer-events-none opacity-[0.12] mix-blend-overlay"
           style={{
             backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
           }}

@@ -4,64 +4,42 @@ import React, {
   createContext,
   useContext,
   useCallback,
+  useEffect,
   useSyncExternalStore,
   type ReactNode,
 } from "react";
 
-export type ColorTheme = "white-orange" | "white-blue" | "black-blue" | "black-orange";
+export type ColorTheme = "light" | "dark";
 
 export interface ThemeOption {
   id: ColorTheme;
   name: string;
-  description: string;
   mode: "light" | "dark";
-  accent: "orange" | "blue";
   baseColor: string;
   accentColor: string;
 }
 
 export const THEME_OPTIONS: ThemeOption[] = [
   {
-    id: "white-orange",
-    name: "White & Orange",
-    description: "Light ivory canvas with champagne gold & warm amber",
+    id: "light",
+    name: "Light",
     mode: "light",
-    accent: "orange",
-    baseColor: "#fbfbfa",
-    accentColor: "#f59e0b",
-  },
-  {
-    id: "white-blue",
-    name: "White & PayPal Blue",
-    description: "Crisp white canvas with official PayPal signature blue",
-    mode: "light",
-    accent: "blue",
-    baseColor: "#f8fafc",
+    baseColor: "#f6f8fa",
     accentColor: "#0070ba",
   },
   {
-    id: "black-blue",
-    name: "Black & PayPal Blue",
-    description: "Deep obsidian dark glass with vibrant PayPal blue",
+    id: "dark",
+    name: "Dark",
     mode: "dark",
-    accent: "blue",
-    baseColor: "#09090b",
+    baseColor: "#090d16",
     accentColor: "#0070ba",
-  },
-  {
-    id: "black-orange",
-    name: "Black & Orange",
-    description: "Deep obsidian dark glass with vivid amber & orange",
-    mode: "dark",
-    accent: "orange",
-    baseColor: "#09090b",
-    accentColor: "#f59e0b",
   },
 ];
 
 export interface ThemeContextValue {
   theme: ColorTheme;
   setTheme: (theme: ColorTheme) => void;
+  toggleTheme: () => void;
   isDark: boolean;
   isBlue: boolean;
   accentColor: string;
@@ -70,19 +48,36 @@ export interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
-const STORAGE_KEY = "pocketmate_color_theme";
+export const THEME_STORAGE_KEY = "pocketmate_color_theme";
 
-function getStoredTheme(): ColorTheme {
-  if (typeof window === "undefined") return "white-orange";
+function normalizeStoredTheme(raw: string | null): ColorTheme | null {
+  if (!raw) return null;
+  if (raw === "dark" || raw === "black-blue" || raw === "black-orange") return "dark";
+  if (raw === "light" || raw === "white-blue" || raw === "white-orange") return "light";
+  return null;
+}
+
+function getResolvedTheme(): ColorTheme {
+  if (typeof window === "undefined") return "light";
   try {
-    const saved = localStorage.getItem(STORAGE_KEY) as ColorTheme | null;
-    if (saved && THEME_OPTIONS.some((t) => t.id === saved)) {
-      return saved;
+    const saved = normalizeStoredTheme(localStorage.getItem(THEME_STORAGE_KEY));
+    if (saved) return saved;
+    if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      return "dark";
     }
   } catch {
-    // fallback
+    // ignore storage access issues
   }
-  return "white-orange";
+  return "light";
+}
+
+function applyThemeToDocument(resolvedTheme: ColorTheme, hasExplicitOverride: boolean): void {
+  if (typeof document === "undefined") return;
+  document.documentElement.setAttribute("data-theme", resolvedTheme);
+  const meta = document.querySelector('meta[name="color-scheme"]');
+  if (meta) {
+    meta.setAttribute("content", hasExplicitOverride ? resolvedTheme : "light dark");
+  }
 }
 
 let listeners: Array<() => void> = [];
@@ -95,44 +90,97 @@ function emitChange() {
 export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const subscribe = useCallback((onStoreChange: () => void) => {
     listeners.push(onStoreChange);
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === THEME_STORAGE_KEY || e.key === null) {
+        onStoreChange();
+      }
+    };
+
+    const mediaQuery =
+      typeof window !== "undefined" && window.matchMedia
+        ? window.matchMedia("(prefers-color-scheme: dark)")
+        : null;
+
+    const handleMediaChange = () => {
+      try {
+        if (!normalizeStoredTheme(localStorage.getItem(THEME_STORAGE_KEY))) {
+          onStoreChange();
+        }
+      } catch {
+        onStoreChange();
+      }
+    };
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("storage", handleStorage);
+    }
+    mediaQuery?.addEventListener("change", handleMediaChange);
+
     return () => {
       listeners = listeners.filter((l) => l !== onStoreChange);
+      if (typeof window !== "undefined") {
+        window.removeEventListener("storage", handleStorage);
+      }
+      mediaQuery?.removeEventListener("change", handleMediaChange);
     };
   }, []);
 
   const theme: ColorTheme = useSyncExternalStore<ColorTheme>(
     subscribe,
-    getStoredTheme,
-    () => "white-orange" as ColorTheme
+    getResolvedTheme,
+    () => "light" as ColorTheme
   );
 
   const setTheme = useCallback((newTheme: ColorTheme) => {
     try {
-      localStorage.setItem(STORAGE_KEY, newTheme);
-      document.documentElement.setAttribute("data-theme", newTheme);
+      const systemMatches =
+        typeof window !== "undefined" &&
+        window.matchMedia &&
+        window.matchMedia("(prefers-color-scheme: dark)").matches
+          ? "dark"
+          : "light";
+
+      if (newTheme === systemMatches) {
+        localStorage.removeItem(THEME_STORAGE_KEY);
+        applyThemeToDocument(newTheme, false);
+      } else {
+        localStorage.setItem(THEME_STORAGE_KEY, newTheme);
+        applyThemeToDocument(newTheme, true);
+      }
     } catch {
-      // ignore
+      applyThemeToDocument(newTheme, false);
     }
     emitChange();
   }, []);
 
-  // Update data-theme attribute on client
-  React.useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
+  const toggleTheme = useCallback(() => {
+    const current = getResolvedTheme();
+    setTheme(current === "dark" ? "light" : "dark");
+  }, [setTheme]);
+
+  useEffect(() => {
+    let hasExplicit = false;
+    try {
+      hasExplicit = Boolean(normalizeStoredTheme(localStorage.getItem(THEME_STORAGE_KEY)));
+    } catch {
+      hasExplicit = false;
+    }
+    applyThemeToDocument(theme, hasExplicit);
   }, [theme]);
 
-  const isDark = theme.startsWith("black");
-  const isBlue = theme.endsWith("blue");
-  const accentColor = isBlue ? "#0070ba" : "#f59e0b";
-  const tintColor = isDark ? "#121218" : (isBlue ? "#f8fafc" : "#fdfbf7");
+  const isDark = theme === "dark";
+  const accentColor = "#0070ba";
+  const tintColor = isDark ? "#0f172a" : "#f8fafc";
 
   return (
     <ThemeContext.Provider
       value={{
         theme,
         setTheme,
+        toggleTheme,
         isDark,
-        isBlue,
+        isBlue: true,
         accentColor,
         tintColor,
       }}
@@ -146,12 +194,13 @@ export function useTheme(): ThemeContextValue {
   const context = useContext(ThemeContext);
   if (!context) {
     return {
-      theme: "white-orange",
+      theme: "light",
       setTheme: () => {},
+      toggleTheme: () => {},
       isDark: false,
-      isBlue: false,
-      accentColor: "#f59e0b",
-      tintColor: "#fdfbf7",
+      isBlue: true,
+      accentColor: "#0070ba",
+      tintColor: "#f8fafc",
     };
   }
   return context;
