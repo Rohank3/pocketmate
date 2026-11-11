@@ -29,6 +29,7 @@ export interface PayPalTransaction {
   debtorName?: string;
   recipientEmail?: string;
   invoicerEmail?: string;
+  relatedInvoiceId?: string;
   direction?: "incoming" | "outgoing" | "outgoing_split";
   isOutgoingSplit?: boolean;
 }
@@ -367,6 +368,16 @@ class PayPalSandboxClient {
 
           const payer = (tx.payer_info as Record<string, unknown>) || {};
           const payerName = (payer.payer_name as Record<string, unknown>) || {};
+          const cartInfo = (tx.cart_info as Record<string, unknown>) || {};
+          const itemDetails = Array.isArray(cartInfo.item_details)
+            ? (cartInfo.item_details as Array<Record<string, unknown>>)
+            : [];
+          const cartItemName = String(
+            itemDetails[0]?.item_name || itemDetails[0]?.item_description || ""
+          ).trim();
+          const cartInvoiceId = String(cartInfo.paypal_invoice_id || "").trim();
+          const storeInfo = (tx.store_info as Record<string, unknown>) || {};
+          const storeName = String(storeInfo.store_name || "").trim();
           const amountObj = (info.transaction_amount as Record<string, string>) || {};
           const feeObj = (info.fee_amount as Record<string, string>) || {};
           const payerEmail = ((payer.email_address as string) || "").toLowerCase().trim();
@@ -377,25 +388,20 @@ class PayPalSandboxClient {
             continue;
           }
 
+          const txSubject = ((info.transaction_subject as string) || "").trim();
           const rawNote = (
             (info.transaction_note as string) ||
-            (info.transaction_subject as string) ||
+            txSubject ||
             ""
           ).trim();
-          const isSplit = Boolean(rawNote && /\bsplit\b/i.test(rawNote));
 
-          const merchantName =
-            ((payerName.alternate_full_name as string) || "").trim() ||
-            ((info.transaction_subject as string) || "").trim() ||
-            payerEmail ||
-            txId;
-
-          const memo =
-            rawNote && rawNote.toLowerCase() !== merchantName.toLowerCase()
-              ? rawNote
-              : undefined;
-
-          const counterpartyName = ((payerName.alternate_full_name as string) || "").trim();
+          const counterpartyName = (
+            (payerName.alternate_full_name as string) ||
+            (payerName.given_name
+              ? `${payerName.given_name} ${payerName.surname || ""}`
+              : "") ||
+            ""
+          ).trim();
 
           if (targetEmailClean) {
             const matchesPayer =
@@ -413,6 +419,20 @@ class PayPalSandboxClient {
           );
           const direction: "incoming" | "outgoing" = isIncoming ? "incoming" : "outgoing";
 
+          const isSplit = Boolean(
+            (rawNote && /\bsplit\b/i.test(rawNote)) ||
+              (cartItemName && /\bsplit\b/i.test(cartItemName))
+          );
+
+          const merchantName = isIncoming
+            ? counterpartyName || cartItemName || storeName || txSubject || payerEmail || txId
+            : cartItemName || storeName || txSubject || rawNote || cartInvoiceId || txId;
+
+          const memo =
+            rawNote && rawNote.toLowerCase() !== merchantName.toLowerCase()
+              ? rawNote
+              : undefined;
+
           results.push({
             id: txId,
             status: txStatus === "S" ? "COMPLETED" : "PENDING",
@@ -424,8 +444,9 @@ class PayPalSandboxClient {
             txType: isSplit ? "split" : "merchant",
             timestamp: (info.transaction_initiation_date as string) || new Date().toISOString(),
             feeAmount: parseFloat(feeObj.value || "0.00"),
-            debtorName: isSplit && counterpartyName ? counterpartyName : undefined,
+            debtorName: isSplit && isIncoming && counterpartyName ? counterpartyName : undefined,
             recipientEmail: payerEmail || undefined,
+            relatedInvoiceId: cartInvoiceId || undefined,
             direction,
           });
         }
@@ -504,7 +525,7 @@ class PayPalSandboxClient {
     const reference = typeof detail.reference === "string" ? detail.reference.trim() : "";
     const rawMemoField = typeof detail.memo === "string" ? detail.memo.trim() : "";
     const parsedTag = this.parseInvoiceTag(reference, rawMemoField);
-    const effectiveInvoicerEmail = invoicerEmail || parsedTag.senderEmail;
+    const effectiveInvoicerEmail = parsedTag.senderEmail || invoicerEmail;
 
     const userFrag = targetEmailClean
       ? targetEmailClean.split("@")[0].replace(/[._]/g, " ").toLowerCase()
@@ -950,11 +971,19 @@ class PayPalSandboxClient {
     const senderName =
       sender?.name?.trim() ||
       (senderEmail ? senderEmail.split("@")[0].replace(/[._]/g, " ") : "");
-    const senderParts = senderName ? senderName.split(" ") : [];
+    const senderParts = senderName ? senderName.split(/\s+/).filter(Boolean) : [];
     const tagSegments: string[] = [];
     if (senderEmail) tagSegments.push(`sender:${senderEmail}`);
     tagSegments.push(`type:${txType}`);
     const refTag = tagSegments.join("|");
+
+    // Only attach invoicer.email_address if it matches the verified PayPal app business account;
+    // unverified emails in invoicer.email_address cause PayPal /send to fail with 422 USER_NOT_FOUND.
+    // The real PocketMate sender identity is always preserved in invoicer.name and detail.reference/memo.
+    const verifiedBusinessEmail = (process.env.PAYPAL_BUSINESS_EMAIL || "").trim().toLowerCase();
+    const attachInvoicerEmail = Boolean(
+      senderEmail && verifiedBusinessEmail && senderEmail === verifiedBusinessEmail
+    );
 
     // 1. Create draft invoice
     const createRes = await fetch(`${this.baseUrl}/v2/invoicing/invoices`, {
@@ -970,18 +999,20 @@ class PayPalSandboxClient {
           reference: refTag,
           memo: refTag,
         },
-        ...(senderName || senderEmail
+        ...(senderParts.length > 0 || attachInvoicerEmail
           ? {
               invoicer: {
                 ...(senderParts.length > 0
                   ? {
                       name: {
                         given_name: senderParts[0],
-                        surname: senderParts.slice(1).join(" "),
+                        ...(senderParts.length > 1
+                          ? { surname: senderParts.slice(1).join(" ") }
+                          : {}),
                       },
                     }
                   : {}),
-                ...(senderEmail ? { email_address: senderEmail } : {}),
+                ...(attachInvoicerEmail ? { email_address: senderEmail } : {}),
               },
             }
           : {}),
@@ -1025,7 +1056,17 @@ class PayPalSandboxClient {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
+      body: JSON.stringify({
+        send_to_recipient: true,
+      }),
     });
+
+    if (!sendRes.ok) {
+      const sendErr = await sendRes.text();
+      throw new Error(
+        `Failed to send PayPal invoice ${invoiceId}: HTTP ${sendRes.status} - ${sendErr}`
+      );
+    }
 
     const isLive = process.env.PAYPAL_ENVIRONMENT === "live";
     const viewUrl = isLive
@@ -1037,7 +1078,7 @@ class PayPalSandboxClient {
       invoiceNumber: invoiceData.detail?.invoice_number || invoiceId,
       recipientEmail: recipient.email,
       amount: recipient.amount,
-      status: sendRes.ok ? "SENT" : "DRAFT_SAVED",
+      status: "SENT",
       viewUrl,
     };
   }

@@ -99,8 +99,18 @@ export async function syncUserPayPalLedger(
       }),
     ]);
 
-    const combined = [...reportingTxs, ...invoiceTxs];
     const returnedInvoiceIds = new Set(invoiceTxs.map((t) => t.id));
+    const knownInvoiceIds = new Set<string>(returnedInvoiceIds);
+    if (existingTerminalInvoiceIds) {
+      for (const id of existingTerminalInvoiceIds) knownInvoiceIds.add(id);
+    }
+    for (const id of pendingInvoiceIdsToRefresh) knownInvoiceIds.add(id);
+
+    const dedupedReportingTxs = reportingTxs.filter(
+      (tx) => !tx.relatedInvoiceId || !knownInvoiceIds.has(tx.relatedInvoiceId)
+    );
+
+    const combined = [...dedupedReportingTxs, ...invoiceTxs];
 
     for (const tx of combined) {
       const txTimestamp = new Date(tx.timestamp);
