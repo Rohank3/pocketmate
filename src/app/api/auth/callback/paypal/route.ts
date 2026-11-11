@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { exchangePayPalCodeForTokens, fetchPayPalUserInfo } from "@/lib/paypal/auth";
+import { exchangePayPalCodeForTokens, fetchPayPalUserInfo, resolvePublicOrigin } from "@/lib/paypal/auth";
 import { prisma } from "@/lib/db";
 import { createSignedSessionCookie } from "@/lib/auth/session";
 import crypto from "crypto";
 
 export async function GET(req: NextRequest) {
+  const appUrl = resolvePublicOrigin(req);
   try {
     const code = req.nextUrl.searchParams.get("code");
     const stateParam = req.nextUrl.searchParams.get("state");
     const savedState = req.cookies.get("paypal_oauth_state")?.value;
-    const appUrl = process.env.RENDER_EXTERNAL_URL || process.env.NEXTAUTH_URL || "http://localhost:3000";
 
     const isStateValid =
       Boolean(savedState) &&
@@ -22,14 +22,26 @@ export async function GET(req: NextRequest) {
     }
 
     if (!code) {
-      return NextResponse.redirect(`${appUrl}/?auth_error=missing_code`);
+      const providerError = req.nextUrl.searchParams.get("error");
+      const errorDesc = req.nextUrl.searchParams.get("error_description");
+      if (providerError) {
+        console.error("[PayPal OAuth Provider Error]", providerError, errorDesc);
+      }
+      const mapped =
+        providerError === "access_denied"
+          ? "access_denied"
+          : providerError === "invalid_scope"
+            ? "invalid_scope"
+            : "missing_code";
+      return NextResponse.redirect(`${appUrl}/?auth_error=${mapped}`);
     }
 
-    // Exchange auth code for user access token
-    const { accessToken } = await exchangePayPalCodeForTokens(code);
+    // Exchange auth code for user access token using the exact request origin callback URI
+    const redirectUri = `${appUrl}/api/auth/callback/paypal`;
+    const { accessToken, idToken } = await exchangePayPalCodeForTokens(code, redirectUri);
 
-    // Fetch user profile from PayPal OpenID Connect endpoint
-    const profile = await fetchPayPalUserInfo(accessToken);
+    // Fetch user profile from PayPal OpenID Connect / v1.1 / id_token claims
+    const profile = await fetchPayPalUserInfo(accessToken, idToken);
 
     // Upsert user into live Neon PostgreSQL database
     const user = await prisma.user.upsert({
@@ -86,8 +98,11 @@ export async function GET(req: NextRequest) {
       }
     }
     console.error("[PayPal Auth Callback Error]", error);
-    const appUrl = process.env.RENDER_EXTERNAL_URL || process.env.NEXTAUTH_URL || "http://localhost:3000";
-    return NextResponse.redirect(`${appUrl}/?auth_error=exchange_failed`);
+    const errorCode =
+      error instanceof Error && error.message === "MISSING_PAYPAL_EMAIL"
+        ? "missing_email"
+        : "exchange_failed";
+    return NextResponse.redirect(`${appUrl}/?auth_error=${errorCode}`);
   }
 }
 

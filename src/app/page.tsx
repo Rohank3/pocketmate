@@ -94,6 +94,7 @@ export default function Home() {
   const [isAuthChecked, setIsAuthChecked] = useState(false);
   const [activeScope, setActiveScope] = useState<"personal" | "all">("personal");
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [activeInvoiceForAction, setActiveInvoiceForAction] = useState<InvoiceRecord | null>(null);
   const [, setInvoices] = useState<InvoiceRecord[]>([]);
@@ -295,16 +296,43 @@ export default function Home() {
       if (typeof window !== "undefined") {
         const params = new URLSearchParams(window.location.search);
         const connectedParam = params.get("connected");
+        const authErrorParam = params.get("auth_error");
         const onboardedParam = params.get("paypal_onboarded");
         const orderStatusParam = params.get("order_status");
         const orderToken = params.get("token");
         const orderInvoiceId = params.get("invoice_id") || undefined;
 
-        if (connectedParam === "paypal") {
+        if (authErrorParam) {
+          const authErrorMessages: Record<string, string> = {
+            missing_email:
+              "PayPal did not return an email address for your account. In PayPal Developer Dashboard -> App Settings, check 'Log in with PayPal' -> Manage (select Full name, Email, PayPal account ID, and Unconfirmed email), click Save, then Save Changes on your app.",
+            missing_credentials:
+              "PayPal OAuth credentials are missing in the server environment.",
+            invalid_state:
+              "PayPal sign-in state expired or did not match. Please try logging in again.",
+            missing_code:
+              "PayPal did not return an authorization code. Verify your Return URL matches this domain.",
+            access_denied:
+              "PayPal sign-in was cancelled before authorization was granted.",
+            invalid_scope:
+              "PayPal rejected the requested profile scope. Enable 'Log in with PayPal' (Full name + Email) in App Settings.",
+            exchange_failed:
+              "Failed to verify PayPal sign-in response. Verify your Return URL and client credentials.",
+          };
+          if (isSubscribed) {
+            setAuthError(
+              authErrorMessages[authErrorParam] ||
+                "PayPal sign-in could not be completed. Please try again."
+            );
+            setIsLoginModalOpen(true);
+          }
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } else if (connectedParam === "paypal") {
           const rawUserName = params.get("userName") || "PayPal User";
           const userName = rawUserName.replace(/[<>[\]()]/g, "").slice(0, 50);
           const firstName = userName.split(" ")[0] || userName;
           if (isSubscribed) {
+            setAuthError(null);
             setMessages((prev) => [
               ...prev,
               {
@@ -1582,10 +1610,14 @@ export default function Home() {
       <PayPalLoginModal
         isOpen={isLoginModalOpen || (isAuthChecked && !currentUser)}
         currentUser={currentUser}
+        authError={authError}
         onClose={() => {
           if (currentUser) setIsLoginModalOpen(false);
         }}
-        onLogin={handleUserLogin}
+        onLogin={(user) => {
+          setAuthError(null);
+          handleUserLogin(user);
+        }}
         onLogout={handleUserLogout}
       />
 

@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   Building2,
   ExternalLink,
+  AlertCircle,
 } from "lucide-react";
 import { UserAccount } from "@/types/sandboxUser";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
@@ -25,6 +26,7 @@ const INDUSTRY_OPTIONS = [
 interface PayPalLoginModalProps {
   isOpen: boolean;
   currentUser: UserAccount | null;
+  authError?: string | null;
   onClose: () => void;
   onLogin?: (user: UserAccount) => void;
   onLogout: () => void;
@@ -33,6 +35,7 @@ interface PayPalLoginModalProps {
 export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
   isOpen,
   currentUser,
+  authError,
   onClose,
   onLogin,
   onLogout,
@@ -217,6 +220,16 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
                   Sign in with your Sandbox account.
                 </p>
               </div>
+
+              {authError && (
+                <div
+                  role="alert"
+                  className="flex items-start gap-2.5 p-3 rounded-xl border border-rose-500/30 bg-rose-500/10 text-xs text-rose-600 dark:text-rose-300 leading-relaxed"
+                >
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-500 dark:text-rose-400" />
+                  <span>{authError}</span>
+                </div>
+              )}
 
               {/* Primary CTA Button */}
               <a
