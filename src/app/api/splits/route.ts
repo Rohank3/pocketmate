@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthenticatedUser } from "@/lib/auth/session";
 import { saveOrUpdateContact } from "@/lib/contacts/contactResolver";
+import { resolveSourceCategoryForSplit } from "@/lib/services/categorizer";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 
@@ -9,6 +10,8 @@ const CreateSplitApiSchema = z.object({
   title: z.string().trim().min(1).max(200),
   totalAmount: z.number().finite().positive().max(500000),
   currency: z.string().default("USD"),
+  category: z.string().trim().max(100).optional(),
+  sourceTransactionId: z.string().trim().max(100).optional(),
   items: z.array(
     z.object({
       participantName: z.string().trim().min(1).max(100),
@@ -70,7 +73,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { title, totalAmount, items } = parseResult.data;
+    const { title, totalAmount, category, sourceTransactionId, items } = parseResult.data;
+    const catLookup = await resolveSourceCategoryForSplit({
+      userId,
+      explicitCategory: category,
+      sourceTransactionId,
+      merchantName: title,
+    });
 
     const created = await prisma.splitRecord.create({
       data: {
@@ -78,6 +87,8 @@ export async function POST(req: NextRequest) {
         totalAmount,
         status: "PENDING_CONFIRMATION",
         description: title,
+        category: catLookup.category || undefined,
+        sourceTransactionId: catLookup.sourceTransactionId || undefined,
         itemsJson: items as unknown as Prisma.InputJsonValue,
         items: {
           create: items.map((item) => ({

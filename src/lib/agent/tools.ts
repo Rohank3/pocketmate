@@ -19,6 +19,8 @@ import {
   categorizeTransactionsBatch,
   normalizeMerchant,
   reclassifyTransactionWithScope,
+  resolveSourceCategoryForSplit,
+  inheritCategoryForSplitInvoices,
 } from "../services/categorizer";
 import { resolveContact, saveOrUpdateContact } from "../contacts/contactResolver";
 
@@ -56,6 +58,9 @@ export const DispatchInvoicesSchema = z.object({
     )
     .min(1)
     .max(50),
+  category: z.string().trim().max(100).optional(),
+  sourceTransactionId: z.string().trim().max(100).optional(),
+  merchantName: z.string().trim().max(100).optional(),
   isConfirmed: z.boolean().default(false), // Layer D: Requires explicit confirmation before live write
 });
 
@@ -215,6 +220,8 @@ export const ProposeSplitBreakdownSchema = z.object({
   totalAmount: z.number().finite().positive().max(1000000),
   merchantName: z.string().trim().min(1).max(100),
   transactionId: z.string().trim().max(100).optional(),
+  sourceTransactionId: z.string().trim().max(100).optional(),
+  category: z.string().trim().max(100).optional(),
   memo: z.string().trim().max(255).optional(),
   participants: z
     .array(
@@ -663,7 +670,23 @@ export async function executeAgentTool(
     }
 
     case "dispatch_paypal_invoices": {
-      const { recipients, isConfirmed } = DispatchInvoicesSchema.parse(safeArgs);
+      const {
+        recipients,
+        category: explicitCategory,
+        sourceTransactionId,
+        merchantName,
+        isConfirmed,
+      } = DispatchInvoicesSchema.parse(safeArgs);
+
+      const resolvedCategoryInfo = userId
+        ? await resolveSourceCategoryForSplit({
+            userId,
+            explicitCategory,
+            sourceTransactionId,
+            merchantName: merchantName || recipients[0]?.description,
+            description: recipients[0]?.description,
+          })
+        : { category: explicitCategory?.trim() || null, sourceTransactionId };
 
       if (!isConfirmed) {
         // Return structured confirmation card for Layer D security
@@ -673,6 +696,11 @@ export async function executeAgentTool(
           totalRecipients: recipients.length,
           totalAmount: recipients.reduce((sum, r) => sum + r.amount, 0),
           recipients,
+          ...(resolvedCategoryInfo.category ? { category: resolvedCategoryInfo.category } : {}),
+          ...(resolvedCategoryInfo.sourceTransactionId
+            ? { sourceTransactionId: resolvedCategoryInfo.sourceTransactionId }
+            : {}),
+          ...(merchantName ? { merchant: merchantName } : {}),
           message: "Preview prepared. Awaiting user tap on Confirm & Send.",
         };
       }
@@ -713,6 +741,8 @@ export async function executeAgentTool(
 
       // Persist to PostgreSQL if authenticated user
       if (userId) {
+        const inheritedCategory = resolvedCategoryInfo.category;
+        const resolvedSourceTxId = resolvedCategoryInfo.sourceTransactionId;
         try {
           const totalDispatchedAmount = recipients.reduce((sum, r) => sum + r.amount, 0);
           const initialItemsJson = results.map((inv, idx) => ({
@@ -724,6 +754,7 @@ export async function executeAgentTool(
             difference: 0,
             status: "SENT",
             invoiceId: inv.invoiceId,
+            ...(inheritedCategory ? { category: inheritedCategory } : {}),
           }));
           await prisma.splitRecord.create({
             data: {
@@ -731,6 +762,8 @@ export async function executeAgentTool(
               totalAmount: totalDispatchedAmount,
               status: "SENT",
               description: recipients[0]?.description || "Shared Bill Split",
+              category: inheritedCategory || undefined,
+              sourceTransactionId: resolvedSourceTxId || undefined,
               itemsJson: initialItemsJson as unknown as Prisma.InputJsonValue,
               items: {
                 create: results.map((inv, idx) => ({
@@ -745,6 +778,19 @@ export async function executeAgentTool(
           });
         } catch (dbErr) {
           console.warn("[Split Record DB Persistence Warning]", dbErr);
+        }
+
+        if (inheritedCategory) {
+          try {
+            await inheritCategoryForSplitInvoices({
+              organizerUserId: userId,
+              categoryName: inheritedCategory,
+              invoiceIds: results.map((inv) => inv.invoiceId),
+              participantEmails: recipients.map((r) => r.email),
+            });
+          } catch (catErr) {
+            console.warn("[Split Category Inheritance Warning]", catErr);
+          }
         }
 
         await syncLedgerAfterDispatch(
@@ -1444,12 +1490,22 @@ export async function executeAgentTool(
           description: p.note || `${parsed.merchantName} shared split`,
         }));
 
+      const resolvedSplitSource = await resolveSourceCategoryForSplit({
+        userId,
+        explicitCategory: parsed.category,
+        sourceTransactionId: parsed.sourceTransactionId || parsed.transactionId,
+        merchantName: parsed.merchantName,
+        description: parsed.memo,
+      });
+
       return {
         action: "PROPOSE_SPLIT_BREAKDOWN",
         type: "split_breakdown",
         totalAmount: parsed.totalAmount,
         merchant: parsed.merchantName,
-        transactionId: parsed.transactionId,
+        transactionId: resolvedSplitSource.sourceTransactionId || parsed.transactionId,
+        sourceTransactionId: resolvedSplitSource.sourceTransactionId || parsed.transactionId,
+        ...(resolvedSplitSource.category ? { category: resolvedSplitSource.category } : {}),
         memo: parsed.memo || `${parsed.merchantName} shared expense`,
         participants: resolvedParticipants,
         recipients,

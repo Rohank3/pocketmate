@@ -15,6 +15,7 @@ export interface ActionCardData {
   invoiceId?: string;
   splitItemId?: string;
   transactionId?: string;
+  sourceTransactionId?: string;
   merchant?: string;
   merchantName?: string;
   senderName?: string;

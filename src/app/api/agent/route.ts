@@ -19,6 +19,10 @@ const ActionToConfirmSchema = z.discriminatedUnion("action", [
       )
       .min(1)
       .max(50),
+    category: z.string().trim().max(100).optional(),
+    sourceTransactionId: z.string().trim().max(100).optional(),
+    transactionId: z.string().trim().max(100).optional(),
+    merchant: z.string().trim().max(100).optional(),
   }),
   z.object({
     action: z.literal("PROPOSE_SPLIT_BREAKDOWN"),
@@ -36,6 +40,9 @@ const ActionToConfirmSchema = z.discriminatedUnion("action", [
     participants: z.array(z.record(z.string(), z.unknown())).optional(),
     totalAmount: z.number().optional(),
     merchant: z.string().optional(),
+    category: z.string().trim().max(100).optional(),
+    sourceTransactionId: z.string().trim().max(100).optional(),
+    transactionId: z.string().trim().max(100).optional(),
   }),
   z.object({
     action: z.literal("DISPATCH_PAYOUT"),
@@ -158,6 +165,10 @@ export async function POST(req: NextRequest) {
         "dispatch_paypal_invoices",
         {
           recipients: actionToConfirm.recipients,
+          category: actionToConfirm.category,
+          sourceTransactionId:
+            actionToConfirm.sourceTransactionId || actionToConfirm.transactionId,
+          merchantName: actionToConfirm.merchant,
           isConfirmed: true,
         },
         userId,
