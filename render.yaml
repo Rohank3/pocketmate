@@ -12,7 +12,7 @@ services:
     runtime: node
     plan: free # 100% Free Tier - No credit card or payment info required!
     region: oregon
-    buildCommand: npm install --include=dev && npx prisma generate && npm run build
+    buildCommand: npm install --include=dev && npx prisma generate && npx prisma db push --skip-generate && npm run build
     startCommand: npm start
     envVars:
       - key: NODE_ENV
@@ -23,18 +23,26 @@ services:
         sync: false # Google AI Studio API key
       - key: GEMINI_API_KEY_SECONDARY
         sync: false # Optional failover API key
+      - key: GEMINI_MODEL
+        value: gemini-3.1-flash-lite
       - key: PAYPAL_CLIENT_ID
-        sync: false # PayPal Sandbox Client ID
+        sync: false # PayPal Platform Sandbox Client ID
       - key: PAYPAL_CLIENT_SECRET
-        sync: false # PayPal Sandbox Client Secret
+        sync: false # PayPal Platform Sandbox Client Secret
       - key: PAYPAL_ENVIRONMENT
         value: sandbox
       - key: PAYPAL_WEBHOOK_ID
         sync: false # PayPal Sandbox Webhook ID for signature verification
+      - key: PAYPAL_BN_CODE
+        sync: false # PayPal Partner Attribution ID (BN Code)
+      - key: NEXTAUTH_URL
+        value: https://pocketmate.onrender.com
       - key: NEXTAUTH_SECRET
         generateValue: true # Render automatically generates a cryptographically secure secret
       - key: CRON_SECRET
         generateValue: true # Secret token for the audit endpoint
+      - key: AG_STUDIO_LICENSE_KEY
+        sync: false
       - key: NEXT_PUBLIC_AG_STUDIO_LICENSE_KEY
         sync: false
       - key: NEXT_PUBLIC_BRYNTUM_LICENSE_KEY

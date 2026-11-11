@@ -46,10 +46,13 @@ model User {
   persona             PersonaType      @default(GENERAL)
   industry            IndustryType?
   confidenceThreshold Float            @default(0.80)
-  lastSyncedAt        DateTime?
-  lastTransactionAt   DateTime?
-  lastTransactionId   String?
-  createdAt           DateTime         @default(now())
+  lastSyncedAt            DateTime?
+  lastTransactionAt       DateTime?
+  lastTransactionId       String?
+  paypalMerchantId        String?
+  paypalOnboardingStatus  String?
+  paypalPartnerTrackingId String?
+  createdAt               DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
   budgetCategories    BudgetCategory[]
