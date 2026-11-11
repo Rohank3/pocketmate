@@ -270,7 +270,7 @@ export default function Home() {
         const authErrorParam = params.get("auth_error");
         if (authErrorParam) {
           const rawDetail = params.get("auth_detail") || "";
-          const safeDetail = rawDetail.replace(/[^\w\s.,:;=()/\[\]-]/g, "").slice(0, 180);
+          const safeDetail = rawDetail.replace(/[^+\w\s.,:;=()/\[\]-]/g, "").slice(0, 320);
           const authErrorMessages: Record<string, string> = {
             missing_email:
               "PayPal did not return an email address for your account. In PayPal Developer Dashboard -> App Settings, ensure the 'Log in with PayPal' checkbox itself is checked (not just inside Manage), click Save in Manage (with Full name, Email, and Unconfirmed email checked), click Save Changes on the App page, and allow PayPal settings propagation.",

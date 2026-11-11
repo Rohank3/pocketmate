@@ -109,7 +109,7 @@ export async function GET(req: NextRequest) {
     if (error instanceof PayPalMissingEmailError || (error instanceof Error && error.message === "MISSING_PAYPAL_EMAIL")) {
       const detailQuery =
         error instanceof PayPalMissingEmailError && error.detail
-          ? `&auth_detail=${encodeURIComponent(error.detail.slice(0, 180))}`
+          ? `&auth_detail=${encodeURIComponent(error.detail.slice(0, 320))}`
           : "";
       return NextResponse.redirect(`${appUrl}/?auth_error=missing_email${detailQuery}`);
     }

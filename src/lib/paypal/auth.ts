@@ -257,6 +257,11 @@ export async function fetchPayPalUserInfo(
     status: 0,
     data: null,
   };
+  let pp11Res: { ok: boolean; status: number; data: PayPalV11UserInfoResponse | null } = {
+    ok: false,
+    status: 0,
+    data: null,
+  };
 
   if (!extractEmailFromSource(openid) || !extractDisplayName(openid)) {
     oauth2OpenidRes = await fetchUserInfoSchema<OpenIdUserInfoResponse>(
@@ -279,7 +284,29 @@ export async function fetchPayPalUserInfo(
   }
   const v11 = v11Res.data;
 
-  if (!openidRes.ok && !oauth2OpenidRes.ok && !v11Res.ok && !extractEmailFromSource(idClaims)) {
+  if (
+    (!extractEmailFromSource(openid) &&
+      !extractEmailFromSource(oauth2Openid) &&
+      !extractEmailFromSource(v11)) ||
+    (!extractDisplayName(openid) &&
+      !extractDisplayName(oauth2Openid) &&
+      !extractDisplayName(v11))
+  ) {
+    pp11Res = await fetchUserInfoSchema<PayPalV11UserInfoResponse>(
+      baseUrl,
+      "/v1/identity/openidconnect/userinfo?schema=paypalv1.1",
+      accessToken
+    );
+  }
+  const pp11 = pp11Res.data;
+
+  if (
+    !openidRes.ok &&
+    !oauth2OpenidRes.ok &&
+    !v11Res.ok &&
+    !pp11Res.ok &&
+    !extractEmailFromSource(idClaims)
+  ) {
     throw new Error(`Failed to fetch PayPal user info: HTTP ${openidRes.status || oauth2OpenidRes.status}`);
   }
 
@@ -287,19 +314,27 @@ export async function fetchPayPalUserInfo(
     extractEmailFromSource(openid) ||
     extractEmailFromSource(oauth2Openid) ||
     extractEmailFromSource(v11) ||
+    extractEmailFromSource(pp11) ||
     extractEmailFromSource(idClaims) ||
     "";
 
   if (!email) {
+    const scopeList = (grantedScope || "").split(/\s+/).filter(Boolean);
+    const oidcScopes = scopeList.filter(
+      (s) => !s.startsWith("http") || s.includes("paypalattributes")
+    );
+    const uriCount = scopeList.length - oidcScopes.length;
     const keySummary = (obj: object | null | undefined) =>
       obj ? Object.keys(obj).join(",") || "empty" : "null";
-    const detail = `scope=[${grantedScope || "none"}]; openid=${openidRes.status}(${keySummary(
-      openid
-    )}); oauth2_openid=${oauth2OpenidRes.status}(${keySummary(
+    const detail = `oidc=[${oidcScopes.join(",") || "none"}](+${uriCount}uri); openid=${
+      openidRes.status
+    }(${keySummary(openid)}); o2id=${oauth2OpenidRes.status}(${keySummary(
       oauth2Openid
-    )}); v11=${v11Res.status}(${keySummary(v11)}); id_token=(${keySummary(idClaims)})`;
+    )}); v11=${v11Res.status}(${keySummary(v11)}); pp11=${pp11Res.status}(${keySummary(
+      pp11
+    )}); jwt=(${keySummary(idClaims)})`;
 
-    console.error("[PayPal OAuth Profile Missing Email]", detail);
+    console.error("[PayPal OAuth Profile Missing Email]", detail, "rawScope:", grantedScope);
     throw new PayPalMissingEmailError(detail);
   }
 
@@ -307,17 +342,23 @@ export async function fetchPayPalUserInfo(
     extractDisplayName(openid) ||
     extractDisplayName(oauth2Openid) ||
     extractDisplayName(v11) ||
+    extractDisplayName(pp11) ||
     extractDisplayName(idClaims) ||
     formatNameFromEmail(email);
 
   const payerId =
-    openid?.payer_id || oauth2Openid?.payer_id || v11?.payer_id || idClaims?.payer_id;
+    openid?.payer_id ||
+    oauth2Openid?.payer_id ||
+    v11?.payer_id ||
+    pp11?.payer_id ||
+    idClaims?.payer_id;
   const userId =
     openid?.user_id ||
     openid?.sub ||
     oauth2Openid?.user_id ||
     oauth2Openid?.sub ||
     v11?.user_id ||
+    pp11?.user_id ||
     idClaims?.user_id ||
     idClaims?.sub ||
     payerId ||
@@ -335,6 +376,8 @@ export async function fetchPayPalUserInfo(
       oauth2Openid?.email_verified ??
       normalizeVerifiedFlag(v11?.verified_account) ??
       normalizeVerifiedFlag(v11?.verified) ??
+      normalizeVerifiedFlag(pp11?.verified_account) ??
+      normalizeVerifiedFlag(pp11?.verified) ??
       normalizeVerifiedFlag(idClaims?.verified_account),
   };
 }
