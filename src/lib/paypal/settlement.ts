@@ -148,8 +148,29 @@ export async function finalizeInvoiceResolution(ctx: InvoiceSettlementContext) {
       },
     });
 
-    const rawItems = (splitItem.splitRecord.itemsJson as Array<Record<string, unknown>>) || [];
+    const rawItems = Array.isArray(splitItem.splitRecord.itemsJson)
+      ? ([...splitItem.splitRecord.itemsJson] as Array<Record<string, unknown>>)
+      : [];
+    const resolvedMetaEntry = {
+      participantName: splitItem.participantName,
+      participantEmail: splitItem.participantEmail || ctx.payerEmail,
+      amount: effectiveOriginal,
+      amountPaid: effectivePaid,
+      settledReason: ctx.reason || (ctx.action === "pay" ? "Paid in full" : "Declined"),
+      status: newStatus,
+      isAdjusted: false,
+      originalAmount: effectiveOriginal,
+      difference: Math.max(0, effectiveOriginal - effectivePaid),
+      invoiceId: resolvedInvoiceId,
+      settledAt: new Date().toISOString(),
+      actionRequiredDismissed: newStatus === "CANCELLED" ? false : true,
+    };
+
+    let matchedExisting = false;
     const updatedItems = rawItems.map((item) => {
+      const itemInvoiceId =
+        typeof item.invoiceId === "string" ? item.invoiceId.trim() : "";
+      const matchesInvoice = Boolean(itemInvoiceId && itemInvoiceId === resolvedInvoiceId);
       const matchesEmail =
         typeof item.participantEmail === "string" &&
         (item.participantEmail.toLowerCase() === ctx.payerEmail.toLowerCase() ||
@@ -158,21 +179,22 @@ export async function finalizeInvoiceResolution(ctx: InvoiceSettlementContext) {
         typeof item.participantName === "string" &&
         item.participantName.toLowerCase() === splitItem.participantName.toLowerCase();
 
-      if (matchesEmail || matchesName) {
+      if (matchesInvoice || (!itemInvoiceId && (matchesEmail || matchesName)) || (!matchedExisting && (matchesEmail || matchesName))) {
+        matchedExisting = true;
+        const baseOriginal = Number(item.originalAmount ?? item.amount) || effectiveOriginal;
         return {
           ...item,
-          amountPaid: effectivePaid,
-          settledReason: ctx.reason || (ctx.action === "pay" ? "Paid in full" : "Declined"),
-          status: newStatus,
-          isAdjusted: false,
-          originalAmount: item.amount || splitItem.amount,
-          difference: (Number(item.amount) || splitItem.amount) - effectivePaid,
-          invoiceId: resolvedInvoiceId,
-          settledAt: new Date().toISOString(),
+          ...resolvedMetaEntry,
+          originalAmount: baseOriginal,
+          difference: Math.max(0, baseOriginal - effectivePaid),
         };
       }
       return item;
     });
+
+    if (!matchedExisting) {
+      updatedItems.push(resolvedMetaEntry);
+    }
 
     const remainingUnpaid = await prisma.splitItem.count({
       where: {
@@ -265,7 +287,7 @@ export async function finalizeInvoiceResolution(ctx: InvoiceSettlementContext) {
         role: "assistant",
         content: notificationContent,
         toolCallsJson: resolutionCardData
-          ? (resolutionCardData as unknown as Prisma.InputJsonValue)
+          ? ({ actionCard: resolutionCardData } as unknown as Prisma.InputJsonValue)
           : undefined,
         persona: "GENERAL",
       },

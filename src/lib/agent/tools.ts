@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { paypalClient, type InvoiceDispatchResult } from "../paypal/client";
-import { getUserLedgerTransactions, syncUserPayPalLedger } from "../paypal/sync";
+import {
+  getUserLedgerTransactions,
+  syncLedgerAfterDispatch,
+} from "../paypal/sync";
 import {
   calculateEqualSplit,
   calculateUnequalSplit,
@@ -18,41 +21,6 @@ import {
   reclassifyTransactionWithScope,
 } from "../services/categorizer";
 import { resolveContact, saveOrUpdateContact } from "../contacts/contactResolver";
-
-async function syncLedgerAfterDispatch(
-  userId: string | undefined,
-  senderEmail: string | undefined,
-  recipientEmails: string[]
-): Promise<void> {
-  if (!userId) return;
-
-  const cleanRecipients = Array.from(
-    new Set(recipientEmails.map((e) => e.toLowerCase().trim()).filter(Boolean))
-  );
-  if (cleanRecipients.length > 0) {
-    try {
-      await prisma.user.updateMany({
-        where: {
-          email: { in: cleanRecipients },
-          lastSyncedAt: { not: null },
-        },
-        data: {
-          lastSyncedAt: new Date(Date.now() - 60_000),
-        },
-      });
-    } catch {
-      // ignore recipient checkpoint nudge failure
-    }
-  }
-
-  if (senderEmail) {
-    try {
-      await syncUserPayPalLedger(userId, senderEmail);
-    } catch (syncErr) {
-      console.warn("[Post-Dispatch Ledger Sync Warning]", syncErr);
-    }
-  }
-}
 
 // ============================================================================
 // Parameter Validation Schemas (Layer B: Validation Middleware)
@@ -747,12 +715,23 @@ export async function executeAgentTool(
       if (userId) {
         try {
           const totalDispatchedAmount = recipients.reduce((sum, r) => sum + r.amount, 0);
+          const initialItemsJson = results.map((inv, idx) => ({
+            participantName: recipients[idx]?.name || "Recipient",
+            participantEmail: recipients[idx]?.email || "",
+            amount: recipients[idx]?.amount || 0,
+            originalAmount: recipients[idx]?.amount || 0,
+            amountPaid: 0,
+            difference: 0,
+            status: "SENT",
+            invoiceId: inv.invoiceId,
+          }));
           await prisma.splitRecord.create({
             data: {
               userId,
               totalAmount: totalDispatchedAmount,
               status: "SENT",
               description: recipients[0]?.description || "Shared Bill Split",
+              itemsJson: initialItemsJson as unknown as Prisma.InputJsonValue,
               items: {
                 create: results.map((inv, idx) => ({
                   participantName: recipients[idx]?.name || "Recipient",

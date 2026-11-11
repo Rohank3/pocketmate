@@ -279,3 +279,42 @@ export async function getUserLedgerTransactions(
     isOutgoingSplit: r.isOutgoingSplit,
   }));
 }
+
+/**
+ * Nudges recipient sync checkpoints and refreshes the organizer's ledger after
+ * dispatching or re-issuing split invoices.
+ */
+export async function syncLedgerAfterDispatch(
+  userId: string | undefined,
+  senderEmail: string | undefined,
+  recipientEmails: string[]
+): Promise<void> {
+  if (!userId) return;
+
+  const cleanRecipients = Array.from(
+    new Set(recipientEmails.map((e) => e.toLowerCase().trim()).filter(Boolean))
+  );
+  if (cleanRecipients.length > 0) {
+    try {
+      await prisma.user.updateMany({
+        where: {
+          email: { in: cleanRecipients },
+          lastSyncedAt: { not: null },
+        },
+        data: {
+          lastSyncedAt: new Date(Date.now() - 60_000),
+        },
+      });
+    } catch {
+      // ignore recipient checkpoint nudge failure
+    }
+  }
+
+  if (senderEmail) {
+    try {
+      await syncUserPayPalLedger(userId, senderEmail);
+    } catch (syncErr) {
+      console.warn("[Post-Dispatch Ledger Sync Warning]", syncErr);
+    }
+  }
+}
