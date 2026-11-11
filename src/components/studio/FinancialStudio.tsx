@@ -14,6 +14,7 @@ import type { CategoryItem } from "@/components/categories/CategoryControlBar";
 import type { TransactionRow } from "@/components/grid/TransactionGrid";
 import type { UserAccount } from "@/types/sandboxUser";
 import { ensureUniqueCategoryColors } from "@/lib/utils/categoryColors";
+import { computeCategorySpending, isBudgetExpenseTransaction } from "@/lib/utils/budgetMetrics";
 
 export interface FinancialStudioProps {
   categories?: CategoryItem[];
@@ -49,7 +50,7 @@ export default function FinancialStudio({
 
     const extraCats: Array<{ id: string; name: string; monthlyCap: number; color?: string }> = [];
     for (const tx of transactions) {
-      if (!tx.category) continue;
+      if (!tx.category || !isBudgetExpenseTransaction(tx)) continue;
       const norm = tx.category.trim();
       if (
         norm &&
@@ -67,44 +68,12 @@ export default function FinancialStudio({
     }
 
     const allCategories = ensureUniqueCategoryColors([...existingCats, ...extraCats]);
-
-    const catOutflowMap: Record<string, { amount: number; count: number }> = {};
-    const catInflowMap: Record<string, number> = {};
-
-    for (const c of allCategories) {
-      catOutflowMap[c.name.toLowerCase()] = { amount: 0, count: 0 };
-    }
-
-    for (const tx of transactions) {
-      const key = (tx.category || "Uncategorized").toLowerCase();
-      if (key === "income" || key === "revenue") {
-        // Exclude general income from expense caps
-        continue;
-      }
-
-      const matched = allCategories.find(
-        (c) =>
-          c.name.toLowerCase() === key ||
-          c.name.toLowerCase().includes(key) ||
-          key.includes(c.name.toLowerCase())
-      );
-
-      const targetKey = matched ? matched.name.toLowerCase() : key;
-
-      if (tx.direction === "incoming") {
-        catInflowMap[targetKey] = (catInflowMap[targetKey] || 0) + (tx.amount || 0);
-      } else {
-        if (!catOutflowMap[targetKey]) catOutflowMap[targetKey] = { amount: 0, count: 0 };
-        catOutflowMap[targetKey].amount += (tx.amount || 0);
-        catOutflowMap[targetKey].count += 1;
-      }
-    }
+    const spendingSummary = computeCategorySpending(allCategories, transactions);
 
     const items = allCategories.map((cat) => {
       const normKey = cat.name.toLowerCase();
-      const outflow = catOutflowMap[normKey]?.amount || 0;
-      const inflow = catInflowMap[normKey] || 0;
-      const netSpent = Math.max(0, outflow - inflow);
+      const bucket = spendingSummary.byCategory[normKey];
+      const netSpent = bucket?.spent || 0;
 
       const isOver = netSpent > cat.monthlyCap;
       const diff = Math.abs(netSpent - cat.monthlyCap);
@@ -113,7 +82,7 @@ export default function FinancialStudio({
       return {
         ...cat,
         spent: netSpent,
-        txCount: catOutflowMap[normKey]?.count || 0,
+        txCount: bucket?.count || 0,
         isOver,
         diff,
         percent,

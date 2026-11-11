@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { TransactionRow } from "@/components/grid/TransactionGrid";
 import { DISTINCT_CATEGORY_PALETTE } from "@/lib/utils/categoryColors";
+import { computeCategorySpending } from "@/lib/utils/budgetMetrics";
 
 gsap.registerPlugin(useGSAP);
 
@@ -148,42 +149,11 @@ export const CategoryControlBar: React.FC<CategoryControlBarProps> = ({
     };
   }, []);
 
-  // Compute spent amount per category dynamically from transactions
-  const categoryStats = useMemo(() => {
-    const stats: Record<string, { spent: number; count: number }> = {};
-    for (const cat of categories) {
-      stats[cat.name.toLowerCase()] = { spent: 0, count: 0 };
-    }
-
-    let totalSpent = 0;
-    let totalCount = 0;
-
-    for (const tx of transactions) {
-      const catKey = tx.category.toLowerCase();
-      totalSpent += tx.amount;
-      totalCount += 1;
-
-      const matched = categories.find(
-        (c) =>
-          c.name.toLowerCase() === catKey ||
-          c.name.toLowerCase().includes(catKey) ||
-          catKey.includes(c.name.toLowerCase())
-      );
-
-      if (matched) {
-        const key = matched.name.toLowerCase();
-        if (!stats[key]) stats[key] = { spent: 0, count: 0 };
-        stats[key].spent += tx.amount;
-        stats[key].count += 1;
-      }
-    }
-
-    return {
-      byCategory: stats,
-      totalSpent,
-      totalCount,
-    };
-  }, [categories, transactions]);
+  // Compute net realized expenditure per category (excludes receivables, pending bills, and income)
+  const categoryStats = useMemo(
+    () => computeCategorySpending(categories, transactions),
+    [categories, transactions]
+  );
 
   // Roundabout navigation options: ["All", ...categories]
   const options = useMemo(() => ["All", ...categories.map((c) => c.name)], [categories]);

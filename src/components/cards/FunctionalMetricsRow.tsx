@@ -25,6 +25,7 @@ import type { TransactionRow } from "@/components/grid/TransactionGrid";
 import type { ScheduledEvent } from "@/components/scheduler/BudgetScheduler";
 import type { UserAccount } from "@/types/sandboxUser";
 import { ensureUniqueCategoryColors } from "@/lib/utils/categoryColors";
+import { computeCategorySpending } from "@/lib/utils/budgetMetrics";
 import { InvoiceReminderModal, PendingInvoiceItem } from "@/components/modals/InvoiceReminderModal";
 import { useTheme } from "@/components/theme/ThemeContext";
 
@@ -233,31 +234,12 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
     committedBarWidth,
     categoryBars,
   } = useMemo(() => {
-      // Map category outflows and reimbursement inflows
-      const catOutflowMap: Record<string, number> = {};
-      const catInflowMap: Record<string, number> = {};
-
-      transactions.forEach((tx) => {
-        const catName = (tx.category || "Uncategorized").toLowerCase();
-        if (catName === "income" || catName === "revenue") {
-          // General income is excluded from expense budget calculations
-          return;
-        }
-
-        if (tx.direction === "incoming") {
-          catInflowMap[catName] = (catInflowMap[catName] || 0) + (tx.amount || 0);
-        } else {
-          catOutflowMap[catName] = (catOutflowMap[catName] || 0) + (tx.amount || 0);
-        }
-      });
-
       const normalizedCats = ensureUniqueCategoryColors(categories);
+      const spendingSummary = computeCategorySpending(normalizedCats, transactions);
 
       const bars = normalizedCats.map((cat) => {
         const normKey = cat.name.toLowerCase();
-        const outflow = catOutflowMap[normKey] || 0;
-        const inflow = catInflowMap[normKey] || 0;
-        const catSpent = Math.max(0, outflow - inflow);
+        const catSpent = spendingSummary.byCategory[normKey]?.spent || 0;
 
         const catPercent = cat.monthlyCap > 0 ? Math.round((catSpent / cat.monthlyCap) * 100) : 0;
         const barWidth = Math.min(100, catPercent);
@@ -274,7 +256,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
         };
       });
 
-      const netTotalSpent = bars.reduce((sum, b) => sum + b.spent, 0);
+      const netTotalSpent = spendingSummary.totalSpent;
 
       const cap = categories.reduce((sum, c) => sum + (c.monthlyCap || 0), 0);
       const over = netTotalSpent > cap;
