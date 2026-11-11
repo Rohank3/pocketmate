@@ -59,14 +59,17 @@ interface SeedInvoicePayload {
   amount: number;
   note: string;
   daysAgo: number;
+  txType?: "merchant" | "p2p" | "split";
   items?: Array<{ name: string; quantity: string; unitPrice: number }>;
 }
 
 interface SeedPayoutPayload {
+  recipientName: string;
   recipientEmail: string;
+  senderName: string;
+  senderEmail: string;
   amount: number;
   note: string;
-  senderName?: string;
   daysAgo?: number;
 }
 
@@ -132,6 +135,8 @@ async function createPaidInvoice(payload: SeedInvoicePayload): Promise<string> {
 
   const invoicerParts = payload.invoicerName.split(" ");
   const recipientParts = payload.recipientName.split(" ");
+  const typeTag = payload.txType ? `|type:${payload.txType}` : "";
+  const refTag = `sender:${payload.invoicerEmail.toLowerCase().trim()}${typeTag}`;
 
   // 1. Create draft invoice
   const draftRes = await fetch(`${baseUrl}/v2/invoicing/invoices`, {
@@ -145,8 +150,8 @@ async function createPaidInvoice(payload: SeedInvoicePayload): Promise<string> {
         currency_code: "USD",
         note: payload.note || undefined,
         invoice_date: dateStr,
-        reference: `sender:${payload.invoicerEmail.toLowerCase().trim()}`,
-        memo: `sender:${payload.invoicerEmail.toLowerCase().trim()}`,
+        reference: refTag,
+        memo: refTag,
       },
       invoicer: {
         name: {
@@ -252,17 +257,22 @@ async function dispatchP2PTransfer(payload: SeedPayoutPayload): Promise<string> 
     return data.batch_header?.payout_batch_id || batchId;
   }
 
-  // Fallback to recorded invoice if payouts endpoint is restricted
+  // Fallback to recorded invoice if payouts endpoint is restricted:
+  // Invoicer is the actual payee receiving funds; primary recipient is the actual sender paying funds.
   const errText = await res.text();
   if (res.status === 403 || errText.includes("PAYOUT_NOT_AVAILABLE") || errText.includes("USER_BUSINESS_TOTAL_EXCEEDED")) {
     return await createPaidInvoice({
-      invoicerName: payload.senderName || "PocketMate Friend",
-      invoicerEmail: "settlement@pocketmate.sandbox",
-      recipientName: payload.recipientEmail.split("@")[0].replace(/[._]/g, " "),
-      recipientEmail: payload.recipientEmail,
+      invoicerName: payload.recipientName,
+      invoicerEmail: payload.recipientEmail,
+      recipientName: payload.senderName,
+      recipientEmail: payload.senderEmail,
       amount: payload.amount,
       note: payload.note,
       daysAgo: payload.daysAgo || 7,
+      txType: "p2p",
+      items: payload.note
+        ? [{ name: payload.note, quantity: "1", unitPrice: payload.amount }]
+        : undefined,
     });
   }
 
@@ -418,66 +428,84 @@ async function runPhase2Seeding(): Promise<void> {
   console.log("  • Seeding bidirectional P2P transfers for Dynamic Contact Graph...");
   const p2pTransfers: SeedPayoutPayload[] = [
     {
+      recipientName: "Mark Spencer",
       recipientEmail: "mark.spencer.pm@personal.example.com",
       amount: 35.00,
       note: "concert tix",
       senderName: "Dave Chen",
+      senderEmail: "dave.chen.pm@personal.example.com",
       daysAgo: 24,
     },
     {
+      recipientName: "Dave Chen",
       recipientEmail: "dave.chen.pm@personal.example.com",
       amount: 22.50,
       note: "🍕🍻",
       senderName: "Mark Spencer",
+      senderEmail: "mark.spencer.pm@personal.example.com",
       daysAgo: 18,
     },
     {
+      recipientName: "Oliver Wright",
       recipientEmail: "oliver.wright.us@personal.example.com",
       amount: 42.00,
       note: "gas",
       senderName: "Dave Chen",
+      senderEmail: "dave.chen.pm@personal.example.com",
       daysAgo: 15,
     },
     {
+      recipientName: "Leo Vance",
       recipientEmail: "leo.vance.pm@personal.example.com",
       amount: 25.00,
       note: "uber ride share",
       senderName: "Dave Chen",
+      senderEmail: "dave.chen.pm@personal.example.com",
       daysAgo: 12,
     },
     {
+      recipientName: "Dave Chen",
       recipientEmail: "dave.chen.pm@personal.example.com",
       amount: 18.00,
       note: "", // Blank note as humans often do
       senderName: "Oliver Wright",
+      senderEmail: "oliver.wright.us@personal.example.com",
       daysAgo: 10,
     },
     {
+      recipientName: "Dave Chen",
       recipientEmail: "dave.chen.pm@personal.example.com",
       amount: 15.00,
       note: "coffee ☕",
       senderName: "Leo Vance",
+      senderEmail: "leo.vance.pm@personal.example.com",
       daysAgo: 8,
     },
     {
+      recipientName: "Dave Chen",
       recipientEmail: "dave.chen.pm@personal.example.com",
       amount: 12.50,
       note: "lunch share",
       senderName: "Leo Vance",
+      senderEmail: "leo.vance.pm@personal.example.com",
       daysAgo: 4,
     },
     {
+      recipientName: "Sofia Martinez",
       recipientEmail: "sofia.martinez.food@personal.example.com",
       amount: 28.00,
       note: "groceries",
       senderName: "Dave Chen",
+      senderEmail: "dave.chen.pm@personal.example.com",
       daysAgo: 5,
     },
     {
+      recipientName: "Dave Chen",
       recipientEmail: "dave.chen.pm@personal.example.com",
       amount: 14.00,
       note: "tacos 🌮",
       senderName: "Sofia Martinez",
+      senderEmail: "sofia.martinez.food@personal.example.com",
       daysAgo: 2,
     },
   ];
@@ -918,6 +946,7 @@ async function runCleanup(): Promise<void> {
       delThreads,
       delOverrides,
       delRules,
+      delLedger,
       delUsers,
     ] = await Promise.all([
       prisma.splitItem.deleteMany({}),
@@ -930,10 +959,11 @@ async function runCleanup(): Promise<void> {
       prisma.chatThread.deleteMany({}),
       prisma.transactionCategoryOverride.deleteMany({}),
       prisma.merchantCategoryRule.deleteMany({}),
+      prisma.ledgerTransaction.deleteMany({}),
       prisma.user.deleteMany({}),
     ]);
     console.log(`  ✓ Cleared ${delUsers.count} users, ${delBudgetCategories.count} categories, ${delBudgetEntries.count} budget entries.`);
-    console.log(`  ✓ Cleared ${delSplitRecords.count} split records, ${delSplitItems.count} split items.`);
+    console.log(`  ✓ Cleared ${delSplitRecords.count} split records, ${delSplitItems.count} split items, ${delLedger.count} ledger txs.`);
     console.log(`  ✓ Cleared ${delMessages.count} chat messages, ${delThreads.count} threads, ${delEvents.count} scheduled events.`);
     console.log(`  ✓ Cleared ${delContacts.count} contacts, ${delOverrides.count} category overrides, ${delRules.count} merchant rules.`);
     await prisma.$disconnect();

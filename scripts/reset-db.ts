@@ -36,6 +36,9 @@ async function main() {
   const deletedContacts = await prisma.contact.deleteMany({});
   console.log(`• Deleted ${deletedContacts.count} contacts.`);
 
+  const deletedLedger = await prisma.ledgerTransaction.deleteMany({});
+  console.log(`• Deleted ${deletedLedger.count} cached ledger transactions.`);
+
   // 2. Reset all budget category expenditures to zero
   const updatedCategories = await prisma.budgetCategory.updateMany({
     data: { currentSpent: 0.0 },
@@ -49,6 +52,9 @@ async function main() {
     update: {
       name: "Dave Chen",
       persona: "GENERAL",
+      lastSyncedAt: null,
+      lastTransactionAt: null,
+      lastTransactionId: null,
     },
     create: {
       email: daveEmail,
@@ -62,6 +68,7 @@ async function main() {
     { name: "Dining", monthlyCap: 250.0, color: "#3b82f6" },
     { name: "Shopping", monthlyCap: 200.0, color: "#a855f7" },
     { name: "Entertainment", monthlyCap: 150.0, color: "#6366f1" },
+    { name: "Travel", monthlyCap: 600.0, color: "#f59e0b" },
   ];
 
   for (const cat of baselineCategories) {

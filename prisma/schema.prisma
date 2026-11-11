@@ -39,24 +39,28 @@ enum SplitStatus {
 }
 
 model User {
-  id               String           @id @default(cuid())
-  email            String           @unique
-  name             String?
-  avatarUrl        String?
-  persona          PersonaType      @default(GENERAL)
-  industry         IndustryType?
-  confidenceThreshold Float          @default(0.80)
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  id                  String           @id @default(cuid())
+  email               String           @unique
+  name                String?
+  avatarUrl           String?
+  persona             PersonaType      @default(GENERAL)
+  industry            IndustryType?
+  confidenceThreshold Float            @default(0.80)
+  lastSyncedAt        DateTime?
+  lastTransactionAt   DateTime?
+  lastTransactionId   String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
-  budgetCategories BudgetCategory[]
-  splitRecords     SplitRecord[]
-  chatMessages     ChatMessage[]
-  chatThreads      ChatThread[]
-  contacts         Contact[]
-  scheduledEvents  ScheduledEvent[]
-  merchantRules    MerchantCategoryRule[]
-  categoryOverrides TransactionCategoryOverride[]
+  budgetCategories    BudgetCategory[]
+  splitRecords        SplitRecord[]
+  chatMessages        ChatMessage[]
+  chatThreads         ChatThread[]
+  contacts            Contact[]
+  scheduledEvents     ScheduledEvent[]
+  merchantRules       MerchantCategoryRule[]
+  categoryOverrides   TransactionCategoryOverride[]
+  ledgerTransactions  LedgerTransaction[]
 }
 
 model BudgetCategory {
@@ -203,4 +207,32 @@ model TransactionCategoryOverride {
 
   @@unique([userId, transactionId])
   @@index([userId])
+}
+
+model LedgerTransaction {
+  id              String   @id @default(cuid())
+  userId          String
+  paypalId        String
+  sourceType      String   // "reporting" | "invoice"
+  txType          String   // "merchant" | "p2p" | "split"
+  status          String   // "COMPLETED" | "PENDING" | "DRAFT" | "DISPUTED" | "CANCELLED"
+  amount          Float
+  currency        String   @default("USD")
+  merchantName    String
+  memo            String?
+  timestamp       DateTime
+  feeAmount       Float?
+  debtorName      String?
+  recipientEmail  String?
+  invoicerEmail   String?
+  direction       String   @default("outgoing") // "incoming" | "outgoing" | "outgoing_split"
+  isOutgoingSplit Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, paypalId])
+  @@index([userId, timestamp])
+  @@index([userId, status])
 }
