@@ -347,7 +347,7 @@ export async function POST(req: NextRequest) {
           }
 
           const finalAssistantMsg = geminiAccumulatedText || "Processed your request.";
-          persistChatMessage(
+          const persistedMessageId = await persistChatMessage(
             "assistant",
             finalAssistantMsg,
             persona,
@@ -356,7 +356,11 @@ export async function POST(req: NextRequest) {
             activeThreadId
           );
 
-          sendEvent("done", { status: "complete", threadId: activeThreadId });
+          sendEvent("done", {
+            status: "complete",
+            threadId: activeThreadId,
+            messageId: persistedMessageId,
+          });
           safeClose();
         } catch (err: unknown) {
           console.error("[Stream API Exception]", err);
