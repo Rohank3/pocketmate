@@ -1,17 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { verifySessionCookie } from "@/lib/auth/session";
+import {
+  formatUserAvatar,
+  PENDING_PAYPAL_COOKIE_NAME,
+  verifyPendingPayPalCookie,
+  verifySessionCookie,
+} from "@/lib/auth/session";
+import { formatNameFromEmail } from "@/lib/paypal/auth";
+
+function getPendingPayPalResponse(req: NextRequest) {
+  const pending = verifyPendingPayPalCookie(req.cookies.get(PENDING_PAYPAL_COOKIE_NAME)?.value);
+  if (!pending) return null;
+  return {
+    payerId: pending.payerId || null,
+    userId: pending.userId,
+    suggestedName: pending.suggestedName || "",
+  };
+}
 
 export async function GET(req: NextRequest) {
   try {
     const cookie = req.cookies.get("pocketmate_user")?.value;
     if (!cookie) {
-      return NextResponse.json({ user: null });
+      return NextResponse.json({ user: null, pendingPayPal: getPendingPayPalResponse(req) });
     }
 
     const verified = verifySessionCookie(cookie);
     if (!verified?.email) {
-      return NextResponse.json({ user: null });
+      return NextResponse.json({ user: null, pendingPayPal: getPendingPayPalResponse(req) });
     }
 
     const user = await prisma.user.findUnique({
@@ -24,28 +40,24 @@ export async function GET(req: NextRequest) {
     });
 
     if (!user) {
-      return NextResponse.json({ user: null });
+      return NextResponse.json({ user: null, pendingPayPal: getPendingPayPalResponse(req) });
     }
 
     return NextResponse.json({
       user: {
         id: user.id,
-        name: user.name || "PayPal Sandbox User",
+        name: user.name || formatNameFromEmail(user.email),
         email: user.email,
         persona: user.persona,
         industry: user.industry,
         paypalMerchantId: user.paypalMerchantId,
         paypalOnboardingStatus: user.paypalOnboardingStatus,
-        avatar: (user.name || user.email)
-          .split(" ")
-          .map((n) => n[0])
-          .join("")
-          .toUpperCase()
-          .slice(0, 2),
+        avatar: formatUserAvatar(user.name, user.email),
         budgetCategories: user.budgetCategories,
         contacts: user.contacts,
         scheduledEvents: user.scheduledEvents,
       },
+      pendingPayPal: null,
     });
   } catch (error: unknown) {
     if (typeof error === "object" && error !== null && "digest" in error) {
