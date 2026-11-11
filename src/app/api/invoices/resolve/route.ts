@@ -84,18 +84,33 @@ export async function POST(req: NextRequest) {
       effectiveOriginal > 0
     ) {
       const origin = resolvePublicOrigin(req);
-      const order = await paypalClient.createOrder({
-        amount: effectiveOriginal,
-        description: effectiveDescription,
-        customId: resolvedInvoiceId,
-        payeeMerchantId: parties.organizerUser.paypalMerchantId,
-        returnUrl: `${origin}/?order_status=approved&invoice_id=${encodeURIComponent(
-          resolvedInvoiceId
-        )}`,
-        cancelUrl: `${origin}/?order_status=cancelled&invoice_id=${encodeURIComponent(
-          resolvedInvoiceId
-        )}`,
-      });
+      let order: Awaited<ReturnType<typeof paypalClient.createOrder>>;
+      try {
+        order = await paypalClient.createOrder({
+          amount: effectiveOriginal,
+          description: effectiveDescription,
+          customId: resolvedInvoiceId,
+          payeeMerchantId: parties.organizerUser.paypalMerchantId,
+          returnUrl: `${origin}/?order_status=approved&invoice_id=${encodeURIComponent(
+            resolvedInvoiceId
+          )}`,
+          cancelUrl: `${origin}/?order_status=cancelled&invoice_id=${encodeURIComponent(
+            resolvedInvoiceId
+          )}`,
+        });
+      } catch (orderErr: unknown) {
+        const rawMsg =
+          orderErr instanceof Error ? orderErr.message : "Failed to initialize PayPal checkout order.";
+        console.error("[Invoice Resolution Order Error]", orderErr);
+        const httpMatch = rawMsg.match(/HTTP\s+(\d{3})/i);
+        const upstreamStatus = httpMatch ? Number(httpMatch[1]) : 502;
+        const clientStatus =
+          upstreamStatus >= 400 && upstreamStatus < 500 ? upstreamStatus : 502;
+        return NextResponse.json(
+          { error: rawMsg },
+          { status: clientStatus }
+        );
+      }
 
       return NextResponse.json({
         success: true,

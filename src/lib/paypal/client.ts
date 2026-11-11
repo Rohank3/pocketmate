@@ -146,6 +146,45 @@ class PayPalSandboxClient {
   }
 
   /**
+   * Executes a PayPal REST request with `PayPal-Auth-Assertion` when a merchant Payer ID is supplied,
+   * automatically falling back to platform partner headers without `PayPal-Auth-Assertion` when
+   * PayPal returns 401/403 (e.g. Sandbox merchants without third-party API permission grants).
+   */
+  private async fetchWithAssertionFallback(
+    url: string,
+    init: Omit<RequestInit, "headers"> & { headers?: Record<string, string> },
+    token: string,
+    merchantPayerId?: string
+  ): Promise<Response> {
+    const cleanMerchantId = merchantPayerId?.trim() || undefined;
+    const baseHeaders: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      ...(init.headers || {}),
+    };
+
+    const res = await fetch(url, {
+      ...init,
+      headers: {
+        ...baseHeaders,
+        ...this.getPartnerHeaders(cleanMerchantId),
+      },
+    });
+
+    if ((res.status === 401 || res.status === 403) && cleanMerchantId) {
+      return fetch(url, {
+        ...init,
+        headers: {
+          ...baseHeaders,
+          ...this.getPartnerHeaders(),
+        },
+      });
+    }
+
+    return res;
+  }
+
+  /**
    * Generates a PayPal Partner Referrals v2 onboarding link so a Business user can grant
    * third-party checkout, search, and dispute permissions directly to PocketMate.
    */
@@ -296,15 +335,15 @@ class PayPalSandboxClient {
       },
     };
 
-    const res = await fetch(`${this.baseUrl}/v2/checkout/orders`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        ...this.getPartnerHeaders(params.payeeMerchantId),
+    const res = await this.fetchWithAssertionFallback(
+      `${this.baseUrl}/v2/checkout/orders`,
+      {
+        method: "POST",
+        body: JSON.stringify(body),
       },
-      body: JSON.stringify(body),
-    });
+      token,
+      params.payeeMerchantId
+    );
 
     if (!res.ok) {
       const errText = await res.text();
@@ -351,14 +390,12 @@ class PayPalSandboxClient {
       }
     }
 
-    const res = await fetch(`${this.baseUrl}/v2/checkout/orders/${encodeURIComponent(orderId)}/capture`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        ...this.getPartnerHeaders(effectiveMerchantId || undefined),
-      },
-    });
+    const res = await this.fetchWithAssertionFallback(
+      `${this.baseUrl}/v2/checkout/orders/${encodeURIComponent(orderId)}/capture`,
+      { method: "POST" },
+      token,
+      effectiveMerchantId || undefined
+    );
 
     if (!res.ok) {
       const errText = await res.text();
@@ -476,23 +513,12 @@ class PayPalSandboxClient {
           startIso
         )}&end_date=${encodeURIComponent(endIso)}&fields=all&page_size=100`;
 
-        let repRes = await fetch(url, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-            ...this.getPartnerHeaders(merchantPayerId),
-          },
-        });
-
-        // Fallback to platform-level Reporting API if merchant-level assertion isn't authorized yet
-        if ((repRes.status === 401 || repRes.status === 403) && merchantPayerId) {
-          repRes = await fetch(url, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-          });
-        }
+        const repRes = await this.fetchWithAssertionFallback(
+          url,
+          { method: "GET" },
+          token,
+          merchantPayerId
+        );
 
         if (!repRes.ok) return [];
         const data = await repRes.json();
