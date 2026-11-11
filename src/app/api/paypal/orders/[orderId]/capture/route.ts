@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { paypalClient } from "@/lib/paypal/client";
 import { getAuthenticatedUser } from "@/lib/auth/session";
 import { finalizeInvoiceResolution } from "@/lib/paypal/settlement";
+import { persistChatMessage } from "@/lib/agent/dbSync";
 
 export async function POST(
   req: NextRequest,
@@ -44,6 +45,17 @@ export async function POST(
         reason: `Paid via PayPal Checkout (Order ${captureResult.orderId})`,
       });
     }
+
+    const paidAmt = captureResult.amount > 0 ? captureResult.amount : settlementSummary?.amount || 0;
+    await persistChatMessage(
+      "assistant",
+      `PayPal payment of **$${paidAmt.toFixed(2)} USD** (${
+        resolvedInvoiceId || captureResult.orderId
+      }) captured directly to the organizer's PayPal Business account and settled on your ledger.`,
+      "GENERAL",
+      undefined,
+      user.id
+    );
 
     return NextResponse.json({
       success: true,
