@@ -44,13 +44,13 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
   const [isUpdatingIndustry, setIsUpdatingIndustry] = useState(false);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !currentUser) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, currentUser, onClose]);
 
   if (!isOpen) return null;
 
@@ -91,7 +91,9 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
       aria-modal="true"
       aria-labelledby="paypal-auth-title"
       className="fixed inset-0 z-[200] bg-black/55 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
-      onClick={onClose}
+      onClick={() => {
+        if (currentUser) onClose();
+      }}
     >
       <div
         className="w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl border theme-modal transition-all duration-200 animate-in zoom-in-95 flex flex-col relative"
@@ -120,14 +122,16 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
 
           <div className="flex items-center gap-1.5">
             <ThemeToggle />
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close dialog"
-              className="p-1.5 rounded-lg transition-colors cursor-pointer text-[var(--fg-muted)] hover:text-[var(--fg-primary)] hover:bg-[var(--surface-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0070ba]"
-            >
-              <X className="w-4 h-4" />
-            </button>
+            {currentUser && (
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close dialog"
+                className="p-1.5 rounded-lg transition-colors cursor-pointer text-[var(--fg-muted)] hover:text-[var(--fg-primary)] hover:bg-[var(--surface-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0070ba]"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -229,15 +233,6 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
                 <span>Log In with PayPal</span>
                 <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
               </a>
-
-              {/* Minimal Secondary Action: Explore as Guest */}
-              <button
-                type="button"
-                onClick={onClose}
-                className="w-full py-2 px-3 rounded-xl text-xs font-semibold transition-colors cursor-pointer text-center text-[var(--fg-secondary)] hover:text-[var(--fg-primary)] hover:bg-[var(--surface-subtle)]"
-              >
-                Continue as Guest
-              </button>
 
               {/* Minimal 1-line Footer */}
               <div className="pt-3 border-t border-[var(--border-subtle)] flex items-center justify-between text-[11px] text-[var(--fg-muted)]">

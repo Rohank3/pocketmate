@@ -4,15 +4,12 @@ import React, { useState } from "react";
 import {
   CheckCircle2,
   CreditCard,
-  Edit3,
   XCircle,
   AlertCircle,
   ExternalLink,
   Loader2,
   ArrowLeft,
-  DollarSign,
   User,
-  ShieldCheck,
 } from "lucide-react";
 
 export interface InvoiceReviewCardData {
@@ -35,8 +32,7 @@ interface InvoiceReviewCardProps {
   cardData: InvoiceReviewCardData;
   onCancel?: () => void;
   onResolved?: (resolution: {
-    action: "pay" | "pay_adjusted" | "decline";
-    adjustedAmount?: number;
+    action: "pay" | "decline";
     reason?: string;
   }) => void;
 }
@@ -46,32 +42,25 @@ export const InvoiceReviewCard: React.FC<InvoiceReviewCardProps> = ({
   onCancel,
   onResolved,
 }) => {
-  const [mode, setMode] = useState<"initial" | "adjust" | "decline">("initial");
-  const [adjustedAmount, setAdjustedAmount] = useState<string>(
-    cardData.amount ? cardData.amount.toFixed(2) : "0.00"
-  );
+  const [mode, setMode] = useState<"initial" | "decline">("initial");
   const [reason, setReason] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [resolvedStatus, setResolvedStatus] = useState<{
-    action: "pay" | "pay_adjusted" | "decline";
+    action: "pay" | "decline";
     amount: number;
     reason?: string;
     message: string;
   } | null>(null);
 
   const originalAmount = cardData.amount ?? cardData.totalAmount ?? 0;
-  const invoiceId = cardData.invoiceId || "INV2-SANDBOX";
-  const senderName = cardData.senderName || "Organizer";
-  const memo = cardData.memo || cardData.merchantName || cardData.merchant || "Split Expense";
+  const invoiceId = cardData.invoiceId || "";
+  const senderName = cardData.senderName || "";
+  const memo = cardData.memo || cardData.merchantName || cardData.merchant || "";
   const defaultPaypalUrl =
-    cardData.paypalInvoiceUrl || `https://www.sandbox.paypal.com/invoice/p/#${invoiceId}`;
+    cardData.paypalInvoiceUrl || (invoiceId ? `https://www.sandbox.paypal.com/invoice/p/#${invoiceId}` : "");
 
-  const handleResolve = async (
-    action: "pay" | "pay_adjusted" | "decline",
-    customAmount?: number,
-    explanation?: string
-  ) => {
+  const handleResolve = async (action: "pay" | "decline", explanation?: string) => {
     setIsSubmitting(true);
     setErrorMsg(null);
 
@@ -83,7 +72,6 @@ export const InvoiceReviewCard: React.FC<InvoiceReviewCardProps> = ({
           invoiceId,
           splitItemId: cardData.splitItemId,
           action,
-          adjustedAmount: customAmount,
           reason: explanation,
           originalAmount,
           senderName,
@@ -100,34 +88,26 @@ export const InvoiceReviewCard: React.FC<InvoiceReviewCardProps> = ({
       const checkoutUrl = data.paypalInvoiceUrl || defaultPaypalUrl;
 
       if (action === "pay") {
-        window.open(checkoutUrl, "_blank", "noopener,noreferrer");
+        if (checkoutUrl) {
+          window.open(checkoutUrl, "_blank", "noopener,noreferrer");
+        }
         setResolvedStatus({
           action: "pay",
           amount: originalAmount,
-          message: `Opened PayPal Sandbox checkout. ${senderName} has been notified that your invoice of $${originalAmount.toFixed(
+          message: `Opened PayPal Sandbox checkout. ${senderName || "The sender"} has been notified that your invoice of $${originalAmount.toFixed(
             2
           )} is paid in full.`,
-        });
-      } else if (action === "pay_adjusted") {
-        window.open(checkoutUrl, "_blank", "noopener,noreferrer");
-        setResolvedStatus({
-          action: "pay_adjusted",
-          amount: customAmount || 0,
-          reason: explanation,
-          message: `Opened PayPal Sandbox checkout for $${(customAmount || 0).toFixed(
-            2
-          )}. ${senderName} has been notified with your reason: "${explanation}".`,
         });
       } else {
         setResolvedStatus({
           action: "decline",
           amount: originalAmount,
           reason: explanation,
-          message: `Invoice declined. ${senderName} has been notified with your reason: "${explanation}".`,
+          message: `Invoice declined. ${senderName || "The sender"} has been notified with your reason: "${explanation}".`,
         });
       }
 
-      onResolved?.({ action, adjustedAmount: customAmount, reason: explanation });
+      onResolved?.({ action, reason: explanation });
     } catch (err: unknown) {
       console.error("[Invoice Resolution Error]", err);
       setErrorMsg(err instanceof Error ? err.message : "Network error resolving invoice.");
@@ -138,35 +118,30 @@ export const InvoiceReviewCard: React.FC<InvoiceReviewCardProps> = ({
 
   if (resolvedStatus) {
     const isPaid = resolvedStatus.action === "pay";
-    const isAdjusted = resolvedStatus.action === "pay_adjusted";
 
     return (
       <div
         className={`my-3 p-4 rounded-xl border flex flex-col gap-2.5 transition-all animate-in fade-in ${
-          isPaid || isAdjusted
+          isPaid
             ? "bg-[var(--status-success-bg)] border-[var(--status-success-border)] text-[var(--status-success-text)]"
             : "bg-[var(--status-danger-bg)] border-[var(--status-danger-border)] text-[var(--status-danger-text)]"
         }`}
       >
         <div className="flex items-center gap-2.5">
-          {isPaid || isAdjusted ? (
+          {isPaid ? (
             <CheckCircle2 className="w-5 h-5 shrink-0" />
           ) : (
             <XCircle className="w-5 h-5 shrink-0" />
           )}
           <div className="flex-1">
             <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--fg-primary)]">
-              {isPaid
-                ? "Invoice Paid"
-                : isAdjusted
-                ? "Adjusted Payment Sent"
-                : "Invoice Declined"}
+              {isPaid ? "Invoice Paid" : "Invoice Declined"}
             </h4>
             <p className="text-xs mt-0.5 text-[var(--fg-secondary)]">{resolvedStatus.message}</p>
           </div>
         </div>
 
-        {(isPaid || isAdjusted) && (
+        {isPaid && defaultPaypalUrl && (
           <div className="mt-1 flex items-center justify-between text-[11px] theme-card-inset px-3 py-1.5 rounded-lg border">
             <span className="text-[var(--fg-muted)]">Checkout:</span>
             <a
@@ -203,18 +178,20 @@ export const InvoiceReviewCard: React.FC<InvoiceReviewCardProps> = ({
       <div className="py-3 text-xs">
         <div className="p-3 rounded-xl theme-card-inset border space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="font-bold text-[var(--fg-primary)] text-sm">{memo}</span>
+            <span className="font-bold text-[var(--fg-primary)] text-sm">{memo || invoiceId}</span>
             <span className="text-xs font-mono tabular-nums font-bold text-[var(--fg-primary)]">
               ${originalAmount.toFixed(2)}
             </span>
           </div>
 
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[var(--fg-muted)] pt-1 border-t border-[var(--border-subtle)]">
-            <span className="flex items-center gap-1">
-              <User className="w-3 h-3" />
-              <strong className="text-[var(--fg-primary)]">{senderName}</strong>
-            </span>
-            <span className="font-mono">ID: {invoiceId}</span>
+            {senderName && (
+              <span className="flex items-center gap-1">
+                <User className="w-3 h-3" />
+                <strong className="text-[var(--fg-primary)]">{senderName}</strong>
+              </span>
+            )}
+            {invoiceId && <span className="font-mono">ID: {invoiceId}</span>}
             <span className="text-[var(--accent-text)] font-semibold">Pending</span>
           </div>
         </div>
@@ -228,16 +205,16 @@ export const InvoiceReviewCard: React.FC<InvoiceReviewCardProps> = ({
         </div>
       )}
 
-      {/* MODE 1: Initial 3-Choice Action Selector */}
+      {/* MODE 1: Initial 2-Choice Action Selector (Pay in Full or Decline) */}
       {mode === "initial" && (
         <div className="pt-2 border-t border-[var(--border-subtle)] space-y-2">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {/* 1. Pay in Full */}
             <button
               type="button"
               onClick={() => handleResolve("pay")}
               disabled={isSubmitting}
-              className="flex flex-col items-center justify-center p-3 rounded-xl bg-[var(--status-success-bg)] hover:brightness-105 border border-[var(--status-success-border)] text-[var(--status-success-text)] transition-all cursor-pointer text-center"
+              className="flex flex-col items-center justify-center p-3 rounded-xl bg-[var(--status-success-bg)] hover:brightness-105 border border-[var(--status-success-border)] text-[var(--status-success-text)] transition-all cursor-pointer text-center disabled:opacity-50"
             >
               <div className="flex items-center gap-1.5 font-bold text-xs">
                 <CreditCard className="w-4 h-4" />
@@ -248,24 +225,7 @@ export const InvoiceReviewCard: React.FC<InvoiceReviewCardProps> = ({
               </span>
             </button>
 
-            {/* 2. Pay Different Value */}
-            <button
-              type="button"
-              onClick={() => {
-                setMode("adjust");
-                setErrorMsg(null);
-              }}
-              disabled={isSubmitting}
-              className="flex flex-col items-center justify-center p-3 rounded-xl bg-[var(--status-info-bg)] hover:bg-[var(--accent-subtle-hover)] border border-[var(--status-info-border)] text-[var(--status-info-text)] transition-all cursor-pointer text-center"
-            >
-              <div className="flex items-center gap-1.5 font-bold text-xs">
-                <Edit3 className="w-4 h-4" />
-                <span>Adjust Value</span>
-              </div>
-              <span className="text-[11px] font-semibold mt-0.5">Custom amount</span>
-            </button>
-
-            {/* 3. Decline */}
+            {/* 2. Decline */}
             <button
               type="button"
               onClick={() => {
@@ -273,13 +233,13 @@ export const InvoiceReviewCard: React.FC<InvoiceReviewCardProps> = ({
                 setErrorMsg(null);
               }}
               disabled={isSubmitting}
-              className="flex flex-col items-center justify-center p-3 rounded-xl bg-[var(--status-danger-bg)] hover:brightness-105 border border-[var(--status-danger-border)] text-[var(--status-danger-text)] transition-all cursor-pointer text-center"
+              className="flex flex-col items-center justify-center p-3 rounded-xl bg-[var(--status-danger-bg)] hover:brightness-105 border border-[var(--status-danger-border)] text-[var(--status-danger-text)] transition-all cursor-pointer text-center disabled:opacity-50"
             >
               <div className="flex items-center gap-1.5 font-bold text-xs">
                 <XCircle className="w-4 h-4" />
                 <span>Decline</span>
               </div>
-              <span className="text-[11px] font-semibold mt-0.5">Reject invoice</span>
+              <span className="text-[11px] font-semibold mt-0.5">Request revision or reject</span>
             </button>
           </div>
 
@@ -295,104 +255,7 @@ export const InvoiceReviewCard: React.FC<InvoiceReviewCardProps> = ({
         </div>
       )}
 
-      {/* MODE 2: Pay with Different Value Form */}
-      {mode === "adjust" && (
-        <div className="pt-2 border-t border-[var(--border-subtle)] space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-[var(--accent-text)] flex items-center gap-1.5">
-              <Edit3 className="w-3.5 h-3.5" />
-              Adjust Amount
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                setMode("initial");
-                setErrorMsg(null);
-              }}
-              className="text-[11px] text-[var(--fg-muted)] hover:text-[var(--fg-primary)] flex items-center gap-1 cursor-pointer font-medium"
-            >
-              <ArrowLeft className="w-3 h-3" />
-              Back
-            </button>
-          </div>
-
-          <div className="space-y-2.5 text-xs">
-            <div>
-              <label className="block text-[11px] font-semibold text-[var(--fg-secondary)] mb-1">
-                Amount (Original: ${originalAmount.toFixed(2)})
-              </label>
-              <div className="relative">
-                <DollarSign className="w-3.5 h-3.5 text-[var(--fg-muted)] absolute left-2.5 top-2.5" />
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  max="10000"
-                  value={adjustedAmount}
-                  onChange={(e) => setAdjustedAmount(e.target.value)}
-                  className="w-full bg-[var(--surface-elevated)] border border-[var(--border-strong)] focus:border-[#0070ba] rounded-lg pl-8 pr-3 py-1.5 text-xs text-[var(--fg-primary)] font-mono outline-none"
-                  placeholder="100.00"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-semibold text-[var(--fg-secondary)] mb-1">
-                Reason *
-              </label>
-              <textarea
-                rows={2}
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                placeholder="Reason for adjustment..."
-                className="w-full bg-[var(--surface-elevated)] border border-[var(--border-strong)] focus:border-[#0070ba] rounded-lg px-3 py-1.5 text-xs text-[var(--fg-primary)] outline-none resize-none"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center justify-end gap-2 pt-1">
-            <button
-              type="button"
-              onClick={() => setMode("initial")}
-              disabled={isSubmitting}
-              className="px-3 py-1.5 text-xs text-[var(--fg-muted)] hover:text-[var(--fg-primary)] cursor-pointer font-medium"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={isSubmitting || !reason.trim() || parseFloat(adjustedAmount) <= 0}
-              onClick={() => {
-                const num = parseFloat(adjustedAmount);
-                if (isNaN(num) || num <= 0) {
-                  setErrorMsg("Enter a valid dollar amount.");
-                  return;
-                }
-                if (!reason.trim()) {
-                  setErrorMsg("Enter a reason.");
-                  return;
-                }
-                handleResolve("pay_adjusted", num, reason.trim());
-              }}
-              className="px-4 py-2 text-xs font-bold rounded-xl theme-btn-primary active:scale-95 transition-all disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Processing...</span>
-                </>
-              ) : (
-                <>
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>Pay ${parseFloat(adjustedAmount || "0").toFixed(2)}</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* MODE 3: Decline Form with Required Reason */}
+      {/* MODE 2: Decline Form with Required Reason */}
       {mode === "decline" && (
         <div className="pt-2 border-t border-[var(--border-subtle)] space-y-3">
           <div className="flex items-center justify-between">
@@ -418,7 +281,7 @@ export const InvoiceReviewCard: React.FC<InvoiceReviewCardProps> = ({
               rows={2}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="Reason for declining..."
+              placeholder="Explain why you're declining or what amount should be revised..."
               className="w-full bg-[var(--surface-elevated)] border border-[var(--border-strong)] focus:border-rose-500 rounded-lg px-3 py-1.5 text-xs text-[var(--fg-primary)] outline-none resize-none"
             />
           </div>
@@ -440,7 +303,7 @@ export const InvoiceReviewCard: React.FC<InvoiceReviewCardProps> = ({
                   setErrorMsg("Enter a reason.");
                   return;
                 }
-                handleResolve("decline", undefined, reason.trim());
+                handleResolve("decline", reason.trim());
               }}
               className="px-4 py-2 text-xs font-bold rounded-xl bg-rose-600 hover:bg-rose-500 text-white transition-all shadow-xs disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
             >

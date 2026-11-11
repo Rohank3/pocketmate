@@ -592,3 +592,15 @@ html[data-theme="dark"] textarea::placeholder {
     background: var(--scrollbar-thumb-hover);
   }
 }
+
+/* Native top-layer modal scroll containment & backdrop */
+dialog:modal {
+  overscroll-behavior: contain;
+}
+
+dialog::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+}

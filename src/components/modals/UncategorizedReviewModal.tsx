@@ -55,24 +55,14 @@ export const UncategorizedReviewModal: React.FC<UncategorizedReviewModalProps> =
       (t.category.toLowerCase() === "uncategorized" || !t.category || t.category === "—")
   );
 
-  // Fallback category list if user has none defined
-  const activeCategoryList =
-    categories.length > 0
-      ? categories
-      : [
-          { id: "c1", name: "Dining", color: "#3b82f6" },
-          { id: "c2", name: "Groceries", color: "#10b981" },
-          { id: "c3", name: "Shopping", color: "#a855f7" },
-          { id: "c4", name: "Entertainment", color: "#6366f1" },
-          { id: "c5", name: "Travel", color: "#f59e0b" },
-        ];
+  const activeCategoryList = categories;
 
   // Dynamically resolve category from active user categories without hardcoded merchant heuristics
   const getSmartSuggestion = (t: UncategorizedTx): string => {
     if (t.category && t.category.toLowerCase() !== "uncategorized" && t.category !== "—") {
       return t.category;
     }
-    return activeCategoryList[0]?.name || "Uncategorized";
+    return activeCategoryList[0]?.name || "";
   };
 
   const handleSelectCategory = async (tx: UncategorizedTx, categoryName: string) => {
@@ -147,7 +137,7 @@ export const UncategorizedReviewModal: React.FC<UncategorizedReviewModalProps> =
         </div>
 
         {/* Batch Actions Bar */}
-        {uncategorizedItems.length > 0 && (
+        {uncategorizedItems.length > 0 && activeCategoryList.length > 0 && (
           <div className="flex items-center justify-between px-6 py-2.5 bg-[var(--surface-elevated)] border-b border-[var(--border-subtle)] text-xs">
             <span className="text-[var(--fg-muted)]">
               {completedCount > 0 ? (
@@ -232,33 +222,43 @@ export const UncategorizedReviewModal: React.FC<UncategorizedReviewModalProps> =
 
                   {/* Category Assignment Buttons */}
                   <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-[var(--border-subtle)]">
-                    <button
-                      onClick={() => handleSelectCategory(item, suggestedCategory)}
-                      disabled={isProcessing || isBatchApplying}
-                      className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-[var(--status-info-bg)] text-[var(--status-info-text)] hover:bg-[var(--accent-subtle-hover)] border border-[var(--status-info-border)] transition-all cursor-pointer disabled:opacity-50"
-                      title={`Accept: ${suggestedCategory}`}
-                    >
-                      <Sparkles className="w-3 h-3" />
-                      <span>{suggestedCategory}</span>
-                      <ArrowRight className="w-2.5 h-2.5" />
-                    </button>
+                    {activeCategoryList.length === 0 ? (
+                      <span className="text-[11px] text-[var(--fg-muted)]">
+                        Create a budget category first to assign transactions.
+                      </span>
+                    ) : (
+                      <>
+                        {suggestedCategory && (
+                          <button
+                            onClick={() => handleSelectCategory(item, suggestedCategory)}
+                            disabled={isProcessing || isBatchApplying}
+                            className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-[var(--status-info-bg)] text-[var(--status-info-text)] hover:bg-[var(--accent-subtle-hover)] border border-[var(--status-info-border)] transition-all cursor-pointer disabled:opacity-50"
+                            title={`Accept: ${suggestedCategory}`}
+                          >
+                            <Sparkles className="w-3 h-3" />
+                            <span>{suggestedCategory}</span>
+                            <ArrowRight className="w-2.5 h-2.5" />
+                          </button>
+                        )}
 
-                    <span className="text-[var(--border-strong)] text-xs px-1">|</span>
+                        <span className="text-[var(--border-strong)] text-xs px-1">|</span>
 
-                    {activeCategoryList.map((cat) => (
-                      <button
-                        key={cat.id}
-                        onClick={() => handleSelectCategory(item, cat.name)}
-                        disabled={isProcessing || isBatchApplying}
-                        className={`text-[11px] px-2 py-0.5 rounded-md border transition-all cursor-pointer disabled:opacity-50 font-medium ${
-                          cat.name === suggestedCategory
-                            ? "bg-[var(--accent-subtle)] text-[var(--accent-text)] border-[var(--accent-border)]"
-                            : "theme-btn-secondary"
-                        }`}
-                      >
-                        {cat.name}
-                      </button>
-                    ))}
+                        {activeCategoryList.map((cat) => (
+                          <button
+                            key={cat.id}
+                            onClick={() => handleSelectCategory(item, cat.name)}
+                            disabled={isProcessing || isBatchApplying}
+                            className={`text-[11px] px-2 py-0.5 rounded-md border transition-all cursor-pointer disabled:opacity-50 font-medium ${
+                              cat.name === suggestedCategory
+                                ? "bg-[var(--accent-subtle)] text-[var(--accent-text)] border-[var(--accent-border)]"
+                                : "theme-btn-secondary"
+                            }`}
+                          >
+                            {cat.name}
+                          </button>
+                        ))}
+                      </>
+                    )}
 
                     {isProcessing && (
                       <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--accent-text)] ml-auto" />

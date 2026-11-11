@@ -48,7 +48,8 @@ interface ChatPanelProps {
     merchantName: string,
     targetCategory: string,
     scope: "single" | "merchant" | "similar"
-  ) => Promise<{ success: boolean; message: string; updatedTransactionIds?: string[] }>;
+  ) => Promise<{ success: boolean; message: string; warning?: string; updatedTransactionIds?: string[] }>;
+  onRequestCreateCategory?: (initialName: string) => Promise<string | null>;
   onNewChat?: () => void;
   onSelectThread?: (threadId: string) => void;
   onRenameThread?: (threadId: string, newTitle: string) => Promise<void> | void;
@@ -66,6 +67,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   onConfirmAction,
   onCancelAction,
   onAssignCategory,
+  onRequestCreateCategory,
   onNewChat,
   onSelectThread,
   onRenameThread,
@@ -609,6 +611,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                   onConfirm={onConfirmAction}
                   onCancel={() => onCancelAction?.(m.id)}
                   onAssignCategory={onAssignCategory}
+                  onRequestCreateCategory={onRequestCreateCategory}
                 />
               )}
             </ElasticChatBubble>

@@ -395,7 +395,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
             isAdjusted,
             status: item.status as "PAID" | "CANCELLED",
             reason,
-            sampleMerchant: split.description || "Shared Split Expense",
+            sampleMerchant: split.description || "",
             invoiceId:
               item.paypalInvoiceId ||
               (typeof meta?.invoiceId === "string" ? meta.invoiceId : undefined),
@@ -407,7 +407,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
         const invDetail: PendingInvoiceItem = {
           id: item.paypalInvoiceId || item.id || `inv_${Date.now()}_${Math.random().toString(36).substring(7)}`,
           amount: item.amount,
-          memo: split.description || "Shared Split Expense",
+          memo: split.description || "",
         };
 
         const existing = map.get(name);
@@ -420,7 +420,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
             name,
             totalOwed: item.amount,
             count: 1,
-            sampleMerchant: split.description || "Shared Split Expense",
+            sampleMerchant: split.description || "",
             invoices: [invDetail],
           });
         }
@@ -438,14 +438,14 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
 
       const isPendingSplit =
         (t.status === "pending" || t.status === "disputed" || t.status === "unresolved") &&
-        (t.isOutgoingSplit === true || t.splitAllocation === "split" || (!d.includes("self") && d !== "shared split"));
+        t.isOutgoingSplit === true;
 
       if (isPendingSplit) {
-        const name = t.debtor_name || "Friend";
+        const name = t.debtor_name || "Counterparty";
         const invDetail: PendingInvoiceItem = {
           id: t.id,
           amount: t.amount,
-          memo: t.memo || t.merchant || "Shared Split Expense",
+          memo: t.memo || t.merchant || "",
           date: t.date,
         };
 
@@ -459,26 +459,26 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
             name,
             totalOwed: t.amount,
             count: 1,
-            sampleMerchant: t.memo || t.merchant || "Shared Split Expense",
+            sampleMerchant: t.memo || t.merchant || "",
             invoices: [invDetail],
           });
         }
       } else if (
         (t.status === "settled" || (t.status as string) === "COMPLETED") &&
-        (t.isOutgoingSplit === true || (t.direction === "incoming" && t.splitAllocation === "split"))
+        t.isOutgoingSplit === true
       ) {
         // Collect settled invoices from live PayPal API
         settledList.push({
           id: t.id,
           splitRecordId: t.id,
-          name: t.debtor_name || "Friend",
+          name: t.debtor_name || "Counterparty",
           email: "",
           amountPaid: t.amount,
           originalAmount: t.amount,
           difference: 0,
           isAdjusted: false,
           status: "PAID",
-          sampleMerchant: t.memo || t.merchant || "Shared Split Settlement",
+          sampleMerchant: t.memo || t.merchant || "",
           invoiceId: t.id,
         });
       }

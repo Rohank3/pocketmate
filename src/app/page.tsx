@@ -8,6 +8,7 @@ import { TransactionGrid, TransactionRow } from "@/components/grid/TransactionGr
 import { ActionCardData } from "@/components/cards/ActionConfirmCard";
 import { GridMutationState } from "@/types/agent";
 import { CategoryControlBar, CategoryItem } from "@/components/categories/CategoryControlBar";
+import { AddCategoryModal } from "@/components/categories/AddCategoryModal";
 import { PayPalLoginModal } from "@/components/auth/PayPalLoginModal";
 import { InvoiceActionModal } from "@/components/cards/InvoiceActionModal";
 import { UncategorizedReviewModal } from "@/components/modals/UncategorizedReviewModal";
@@ -64,9 +65,6 @@ const DEFAULT_WELCOME_MESSAGE: ChatMessageItem = {
   content: "Hi! How can I help you today?",
 };
 
-const getStorageScope = (user?: UserAccount | null) =>
-  user?.email ? user.email.toLowerCase().trim() : "guest";
-
 export default function Home() {
   const { theme, accentColor, tintColor, isDark } = useTheme();
   const [activePersona, setActivePersona] = useState<"GENERAL" | "FREELANCER" | "BUSINESS">("GENERAL");
@@ -88,11 +86,25 @@ export default function Home() {
 
   // Multi-user sandbox authentication & cross-account sync state
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
+  const currentUserRef = useRef<UserAccount | null>(null);
+  const [isAuthChecked, setIsAuthChecked] = useState(false);
   const [activeScope, setActiveScope] = useState<"personal" | "all">("personal");
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [activeInvoiceForAction, setActiveInvoiceForAction] = useState<InvoiceRecord | null>(null);
   const [, setInvoices] = useState<InvoiceRecord[]>([]);
+
+  // Modal request queue for creating a real BudgetCategory from '+ Custom...' inline flows
+  const [addCategoryModalRequest, setAddCategoryModalRequest] = useState<{
+    initialName: string;
+    resolve: (createdName: string | null) => void;
+  } | null>(null);
+
+  const requestCreateCategory = useCallback((initialName: string): Promise<string | null> => {
+    return new Promise((resolve) => {
+      setAddCategoryModalRequest({ initialName, resolve });
+    });
+  }, []);
 
   // Dynamic Categories & Scheduled Events state
   const [categories, setCategories] = useState<CategoryItem[]>([]);
@@ -140,10 +152,20 @@ export default function Home() {
 
   // Load live transactions from PayPal Sandbox (role & user-aware)
   const loadTransactions = useCallback(async (scopeOverride?: "personal" | "all") => {
+    if (!currentUserRef.current) {
+      setIsLoadingTransactions(false);
+      return;
+    }
     setIsLoadingTransactions(true);
     const scopeToUse = scopeOverride || activeScope;
     try {
       const res = await fetch(`/api/paypal/transactions?scope=${scopeToUse}`);
+      if (res.status === 401) {
+        currentUserRef.current = null;
+        setCurrentUser(null);
+        setIsLoginModalOpen(true);
+        return;
+      }
       const data = await res.json();
       if (data.transactions) {
         setTransactions(data.transactions);
@@ -212,18 +234,34 @@ export default function Home() {
     let isSubscribed = true;
 
     const init = async () => {
+      let authedUser: UserAccount | null = null;
       try {
         const userRes = await fetch("/api/auth/me");
         const userData = await userRes.json();
         if (isSubscribed && userData.user) {
+          authedUser = userData.user;
+          currentUserRef.current = userData.user;
           setCurrentUser(userData.user);
         } else if (isSubscribed) {
+          currentUserRef.current = null;
+          setCurrentUser(null);
           setIsLoginModalOpen(true);
         }
       } catch {
         if (isSubscribed) {
+          currentUserRef.current = null;
+          setCurrentUser(null);
           setIsLoginModalOpen(true);
         }
+      } finally {
+        if (isSubscribed) {
+          setIsAuthChecked(true);
+        }
+      }
+
+      if (!authedUser) {
+        if (isSubscribed) setIsLoadingTransactions(false);
+        return;
       }
 
       try {
@@ -254,9 +292,7 @@ export default function Home() {
         const params = new URLSearchParams(window.location.search);
         if (params.get("connected") === "paypal") {
           const rawUserName = params.get("userName") || "PayPal User";
-          const rawUserEmail = params.get("userEmail") || "Sandbox Account";
           const userName = rawUserName.replace(/[<>[\]()]/g, "").slice(0, 50);
-          const userEmail = rawUserEmail.replace(/[<>[\]()]/g, "").slice(0, 80);
           const firstName = userName.split(" ")[0] || userName;
           if (isSubscribed) {
             setMessages((prev) => [
@@ -277,13 +313,19 @@ export default function Home() {
 
     // Revalidate live transactions on window focus (e.g. user returns from PayPal payment/invoice tab)
     const onFocus = () => {
-      void loadTransactions();
+      if (currentUserRef.current) {
+        void loadTransactions();
+      }
     };
     window.addEventListener("focus", onFocus);
 
     // Periodic background sync every 25 seconds when browser tab is active
     const interval = setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+      if (
+        currentUserRef.current &&
+        typeof document !== "undefined" &&
+        document.visibilityState === "visible"
+      ) {
         void loadTransactions();
       }
     }, 25000);
@@ -507,6 +549,7 @@ export default function Home() {
   );
 
   const handleUserLogin = (user: UserAccount) => {
+    currentUserRef.current = user;
     setCurrentUser(user);
     setActiveScope("personal");
     void loadTransactions("personal");
@@ -533,34 +576,55 @@ export default function Home() {
       // ignore
     }
     SandboxStore.setCurrentUser(null);
+    currentUserRef.current = null;
     setCurrentUser(null);
     setTransactions([]);
+    setCategories([]);
     setSplits([]);
     setEvents([]);
     setIsLoginModalOpen(true);
     setMessages([DEFAULT_WELCOME_MESSAGE]);
   };
 
-  const handleAddCategory = async (newCat: Omit<CategoryItem, "id">) => {
-    try {
-      const res = await fetch("/api/categories", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newCat),
-      });
-      const data = await res.json();
-      if (data.category) {
-        setCategories((prev) => [...prev, data.category]);
-        setSelectedCategory(data.category.name);
-        return;
+  const handleAddCategory = useCallback(
+    async (
+      newCat: Omit<CategoryItem, "id">,
+      options?: { selectCreated?: boolean }
+    ): Promise<CategoryItem | null> => {
+      try {
+        const res = await fetch("/api/categories", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(newCat),
+        });
+        const data = await res.json();
+        if (res.ok && data.category) {
+          const created: CategoryItem = data.category;
+          setCategories((prev) => {
+            const exists = prev.some(
+              (c) => c.id === created.id || c.name.toLowerCase() === created.name.toLowerCase()
+            );
+            const next = exists
+              ? prev.map((c) =>
+                  c.id === created.id || c.name.toLowerCase() === created.name.toLowerCase()
+                    ? created
+                    : c
+                )
+              : [...prev, created];
+            return ensureUniqueCategoryColors(next);
+          });
+          if (options?.selectCreated !== false) {
+            setSelectedCategory(created.name);
+          }
+          return created;
+        }
+      } catch (err) {
+        console.error("[Add Category Error]", err);
       }
-    } catch {
-      // fallback
-    }
-    const id = `cat_${Date.now()}`;
-    setCategories((prev) => [...prev, { ...newCat, id }]);
-    setSelectedCategory(newCat.name);
-  };
+      return null;
+    },
+    []
+  );
 
   const handleEditCategory = async (
     categoryId: string,
@@ -637,6 +701,7 @@ export default function Home() {
           allTransactions: currentTransactions.map((t) => ({
             id: t.id,
             merchantName: t.merchant,
+            memo: t.memo,
             amount: t.amount,
             category: t.category,
           })),
@@ -653,6 +718,8 @@ export default function Home() {
         setTransactions(updatedTxs);
         void loadCategories();
 
+        const warningNotice = data.warning ? `\n\n⚠️ ${data.warning}` : "";
+
         // Check if there are remaining uncategorized items across the ledger via Gemini AI
         if (data.nextSuggestion) {
           const next = data.nextSuggestion;
@@ -661,7 +728,7 @@ export default function Home() {
             {
               id: `asst_triage_next_${Date.now()}`,
               role: "assistant",
-              content: `Reclassified **${merchantName}** as *${targetCategory}*. **${next.remainingCount} unclassified transaction(s) remaining** in your ledger. Next up: **${next.merchantName}** ($${next.amount.toFixed(2)}).`,
+              content: `Reclassified **${merchantName}** as *${targetCategory}*.${warningNotice} **${next.remainingCount} unclassified transaction(s) remaining** in your ledger. Next up: **${next.merchantName}** ($${next.amount.toFixed(2)}).`,
               actionCard: {
                 action: "CATEGORY_TRIAGE",
                 type: "category_triage",
@@ -680,7 +747,7 @@ export default function Home() {
             {
               id: `asst_triage_complete_${Date.now()}`,
               role: "assistant",
-              content: `🎉 **All transactions classified!** Every item in your ledger has been categorized and your budget spending caps are up to date.`,
+              content: `🎉 **All transactions classified!** Every item in your ledger has been categorized and your budget spending caps are up to date.${warningNotice}`,
             },
           ]);
         }
@@ -801,21 +868,6 @@ export default function Home() {
           id: `asst_dec_${Date.now()}`,
           role: "assistant",
           content: `❌ **Invoice Declined:** ${declined.paypalInvoiceId}\n\n• **Reason:** "${reason}"\n• **Action:** Obligation cancelled for your account. Sender (${declined.senderName}) has been notified.`,
-        },
-      ]);
-    }
-  };
-
-  const handleAdjustmentRequest = (invoiceId: string, amount: number, reason: string) => {
-    const adjusted = SandboxStore.requestAdjustment(invoiceId, amount, reason);
-    if (adjusted) {
-      setInvoices(SandboxStore.getInvoices());
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `asst_adj_${Date.now()}`,
-          role: "assistant",
-          content: `📝 **Adjustment Request Sent:** ${adjusted.paypalInvoiceId}\n\n• **Proposed Amount:** $${amount.toFixed(2)}\n• **Reason:** "${reason}"\n• **Status:** Awaiting review from ${adjusted.senderName}.`,
         },
       ]);
     }
@@ -952,7 +1004,7 @@ export default function Home() {
     } finally {
       setIsLoading(false);
     }
-  }, [activePersona, activeScope, activeThreadId, currentUser, loadCategories, loadTransactions, messages]);
+  }, [activePersona, activeScope, activeThreadId, loadCategories, loadTransactions, messages]);
 
   const handleUploadReceipt = async (file: File) => {
     setIsLoading(true);
@@ -1099,7 +1151,7 @@ export default function Home() {
                 }`}
               />
               <span className="font-mono text-[11px] font-medium">
-                {currentUser ? "Sandbox Connected" : "Sandbox Mode"}
+                {currentUser ? "Sandbox Connected" : "PayPal Required"}
               </span>
             </div>
 
@@ -1185,6 +1237,7 @@ export default function Home() {
               onConfirmAction={handleConfirmAction}
               onCancelAction={handleCancelAction}
               onAssignCategory={handleReclassifyTransaction}
+              onRequestCreateCategory={requestCreateCategory}
               onNewChat={handleNewChat}
               onSelectThread={handleSelectThread}
               onRenameThread={handleRenameThread}
@@ -1312,7 +1365,7 @@ export default function Home() {
                     selectedCategory={selectedCategory}
                     transactions={transactions}
                     onSelectCategory={setSelectedCategory}
-                    onAddCategory={handleAddCategory}
+                    onAddCategory={(newCat) => void handleAddCategory(newCat, { selectCreated: true })}
                     onEditCategory={handleEditCategory}
                     onDeleteCategory={handleDeleteCategory}
                   />
@@ -1349,6 +1402,7 @@ export default function Home() {
                       selectedCategory={selectedCategory}
                       categories={categories}
                       onReclassifyTransaction={handleReclassifyTransaction}
+                      onRequestCreateCategory={requestCreateCategory}
                       onOpenReviewModal={() => setIsReviewModalOpen(true)}
                       onClearMutation={() => setGridMutation(null)}
                     />
@@ -1381,13 +1435,31 @@ export default function Home() {
       </div>
       </div>
 
-      {/* PayPal Sandbox Login & Session Switch Modal */}
+      {/* PayPal Sandbox Login & Session Switch Modal (Mandatory when logged out) */}
       <PayPalLoginModal
-        isOpen={isLoginModalOpen}
+        isOpen={isLoginModalOpen || (isAuthChecked && !currentUser)}
         currentUser={currentUser}
-        onClose={() => setIsLoginModalOpen(false)}
+        onClose={() => {
+          if (currentUser) setIsLoginModalOpen(false);
+        }}
         onLogin={handleUserLogin}
         onLogout={handleUserLogout}
+      />
+
+      {/* Shared Add Category Dialog (triggered from '+ Custom...' in Triage or Grid modals) */}
+      <AddCategoryModal
+        isOpen={Boolean(addCategoryModalRequest)}
+        initialName={addCategoryModalRequest?.initialName || ""}
+        existingCategories={categories}
+        onSaveCategory={(newCat) => handleAddCategory(newCat, { selectCreated: false })}
+        onCreated={(created) => {
+          addCategoryModalRequest?.resolve(created.name);
+          setAddCategoryModalRequest(null);
+        }}
+        onCancel={() => {
+          addCategoryModalRequest?.resolve(null);
+          setAddCategoryModalRequest(null);
+        }}
       />
 
       {/* Recipient Invoice Action Modal (Pay via official PayPal sandbox link or Decline) */}

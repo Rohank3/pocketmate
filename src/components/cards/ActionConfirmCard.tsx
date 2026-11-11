@@ -71,7 +71,8 @@ interface ActionConfirmCardProps {
     merchantName: string,
     targetCategory: string,
     scope: "single" | "merchant" | "similar"
-  ) => Promise<{ success: boolean; message: string; updatedTransactionIds?: string[] }>;
+  ) => Promise<{ success: boolean; message: string; warning?: string; updatedTransactionIds?: string[] }>;
+  onRequestCreateCategory?: (initialName: string) => Promise<string | null>;
 }
 
 const TRANSFER_PURPOSES = [
@@ -91,6 +92,7 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
   onConfirm,
   onCancel,
   onAssignCategory,
+  onRequestCreateCategory,
 }) => {
   const [loading, setLoading] = useState(false);
   const [completed, setCompleted] = useState<string | false>(false);
@@ -163,6 +165,7 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
         }}
         categories={categories}
         onAssignCategory={onAssignCategory}
+        onRequestCreateCategory={onRequestCreateCategory}
         onCancel={handleCancel}
       />
     );

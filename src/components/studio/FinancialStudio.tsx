@@ -33,12 +33,7 @@ export interface FinancialStudioProps {
 }
 
 export default function FinancialStudio({
-  categories = [
-    { id: "cat_groceries", name: "Groceries", monthlyCap: 400, color: "#10b981" },
-    { id: "cat_dining", name: "Dining", monthlyCap: 250, color: "#3b82f6" },
-    { id: "cat_entertainment", name: "Entertainment", monthlyCap: 150, color: "#8b5cf6" },
-    { id: "cat_shopping", name: "Shopping", monthlyCap: 200, color: "#ec4899" },
-  ],
+  categories = [],
   transactions = [],
   currentUser = null,
   splits = [],
@@ -184,7 +179,7 @@ export default function FinancialStudio({
         }
         entry.amount += item.amount;
         entry.count += 1;
-        entry.txs.push(split.description || "Shared Split Expense");
+        entry.txs.push(split.description || "");
         if (!isPaid && entry.status !== "disputed") {
           entry.status = "pending";
         }
@@ -198,7 +193,7 @@ export default function FinancialStudio({
         const d = t.debtor_name.toLowerCase().trim();
         if (d === "—" || d === "self" || d.includes("self") || d === "unassigned") return false;
         if (currentName && (d === currentName || d.includes(currentName))) return false;
-        return t.isOutgoingSplit || t.splitAllocation === "split" || (!d.includes("self") && d !== "shared split");
+        return Boolean(t.isOutgoingSplit);
       })
       .forEach((t) => {
         const name = t.debtor_name;

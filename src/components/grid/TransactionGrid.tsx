@@ -59,7 +59,6 @@ export interface TransactionRow {
   date: string;
   merchant: string;
   memo?: string;
-  splitAllocation?: "self" | "split" | "owed";
   category: string;
   debtor_name: string;
   amount: number;
@@ -82,7 +81,8 @@ interface TransactionGridProps {
     merchantName: string,
     targetCategory: string,
     scope: ReclassifyScope
-  ) => Promise<{ success: boolean; message: string; updatedTransactionIds: string[] }>;
+  ) => Promise<{ success: boolean; message: string; warning?: string; updatedTransactionIds: string[] }>;
+  onRequestCreateCategory?: (initialName: string) => Promise<string | null>;
   onOpenReviewModal?: () => void;
   onClearMutation?: () => void;
 }
@@ -94,6 +94,7 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
   categories = [],
   onSelectRow,
   onReclassifyTransaction,
+  onRequestCreateCategory,
   onOpenReviewModal,
   onClearMutation,
 }) => {
@@ -114,6 +115,9 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
   const [activeTxForEdit, setActiveTxForEdit] = useState<TransactionRow | null>(null);
   const [selectedNewCategory, setSelectedNewCategory] = useState<string>("");
   const [selectedScope, setSelectedScope] = useState<ReclassifyScope | null>(null); // No default!
+  const [isCustomCategory, setIsCustomCategory] = useState<boolean>(false);
+  const [customCategoryInput, setCustomCategoryInput] = useState<string>("");
+  const [isCreatingCategory, setIsCreatingCategory] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
   const mounted = useSyncExternalStore(() => () => {}, () => true, () => false);
@@ -122,33 +126,76 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
     setActiveTxForEdit(tx);
     setSelectedNewCategory(tx.category || "");
     setSelectedScope(null); // Explicitly require user choice
+    setIsCustomCategory(false);
+    setCustomCategoryInput("");
+    setIsCreatingCategory(false);
     setActionFeedback(null);
   };
 
   const handleCloseModal = () => {
-    if (isSubmitting) return;
+    if (isSubmitting || isCreatingCategory) return;
     setActiveTxForEdit(null);
     setSelectedNewCategory("");
     setSelectedScope(null);
+    setIsCustomCategory(false);
+    setCustomCategoryInput("");
     setActionFeedback(null);
+  };
+
+  const handleSetCustomCategory = async () => {
+    const trimmed = customCategoryInput.trim();
+    if (!trimmed) return;
+
+    if (!onRequestCreateCategory) {
+      setSelectedNewCategory(trimmed);
+      setCustomCategoryInput("");
+      setIsCustomCategory(false);
+      return;
+    }
+
+    setIsCreatingCategory(true);
+    try {
+      const createdName = await onRequestCreateCategory(trimmed);
+      if (createdName) {
+        setSelectedNewCategory(createdName);
+        setCustomCategoryInput("");
+        setIsCustomCategory(false);
+      } else {
+        setCustomCategoryInput("");
+        setIsCustomCategory(true);
+      }
+    } finally {
+      setIsCreatingCategory(false);
+    }
   };
 
   useEffect(() => {
     if (!activeTxForEdit) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !isSubmitting) {
+      if (e.key === "Escape" && !isSubmitting && !isCreatingCategory) {
         setActiveTxForEdit(null);
         setSelectedNewCategory("");
         setSelectedScope(null);
+        setIsCustomCategory(false);
+        setCustomCategoryInput("");
         setActionFeedback(null);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeTxForEdit, isSubmitting]);
+  }, [activeTxForEdit, isSubmitting, isCreatingCategory]);
 
   const handleConfirmReclassification = async () => {
-    if (!activeTxForEdit || !selectedNewCategory || !selectedScope || !onReclassifyTransaction) return;
+    if (
+      !activeTxForEdit ||
+      !selectedNewCategory ||
+      !selectedScope ||
+      isCustomCategory ||
+      isCreatingCategory ||
+      !onReclassifyTransaction
+    ) {
+      return;
+    }
 
     try {
       setIsSubmitting(true);
@@ -166,11 +213,11 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
         gridRef.current.api.refreshCells({ force: true });
       }
 
-      setActionFeedback(res.message || "Category updated successfully!");
+      setActionFeedback(res.warning ? `${res.message}` : res.message || "Category updated successfully!");
       setTimeout(() => {
         setIsSubmitting(false);
         setActiveTxForEdit(null);
-      }, 700);
+      }, res.warning ? 1400 : 700);
     } catch {
       setIsSubmitting(false);
       setActionFeedback("Failed to update category. Please try again.");
@@ -195,7 +242,7 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
       cellRenderer: (params: ICellRendererParams<TransactionRow, string>) => {
         const isDisputed = params.data?.status === "disputed";
         const memo = params.data?.memo;
-        const merchant = params.value || "PayPal Commercial Transfer";
+        const merchant = params.value || params.data?.memo || "—";
         const showMemo = memo && memo.toLowerCase() !== merchant.toLowerCase();
 
         return (
@@ -535,34 +582,95 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
                 >
                   Category
                 </label>
-                <select
-                  id="reclassify-category-select"
-                  name="reclassifyCategory"
-                  value={selectedNewCategory}
-                  onChange={(e) => setSelectedNewCategory(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[var(--surface-card)] border border-[var(--border-strong)] text-xs text-[var(--fg-primary)] font-medium focus:outline-none focus:border-[#0070ba] focus:ring-1 focus:ring-[#0070ba] transition-colors cursor-pointer"
-                >
-                  <option value="" disabled>Choose a category...</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.name}>
-                      {c.name} (${c.monthlyCap}/mo)
+                {!isCustomCategory ? (
+                  <select
+                    id="reclassify-category-select"
+                    name="reclassifyCategory"
+                    value={selectedNewCategory}
+                    onChange={(e) => {
+                      if (e.target.value === "__custom__") {
+                        setIsCustomCategory(true);
+                      } else {
+                        setSelectedNewCategory(e.target.value);
+                      }
+                    }}
+                    className="w-full px-3 py-2 rounded-xl bg-[var(--surface-card)] border border-[var(--border-strong)] text-xs text-[var(--fg-primary)] font-medium focus:outline-none focus:border-[#0070ba] focus:ring-1 focus:ring-[#0070ba] transition-colors cursor-pointer"
+                  >
+                    <option value="" disabled>Choose a category...</option>
+                    {selectedNewCategory &&
+                      selectedNewCategory !== "Uncategorized" &&
+                      !categories.some((c) => c.name.toLowerCase() === selectedNewCategory.toLowerCase()) && (
+                        <option value={selectedNewCategory}>{selectedNewCategory}</option>
+                      )}
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.name}>
+                        {c.name} (${c.monthlyCap}/mo)
+                      </option>
+                    ))}
+                    <option value="Uncategorized">Uncategorized</option>
+                    <option value="__custom__" className="font-semibold">
+                      + Custom...
                     </option>
-                  ))}
-                  <option value="Uncategorized">Uncategorized</option>
-                </select>
+                  </select>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      placeholder="Category name..."
+                      value={customCategoryInput}
+                      onChange={(e) => setCustomCategoryInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          void handleSetCustomCategory();
+                        }
+                      }}
+                      disabled={isCreatingCategory}
+                      className="flex-1 px-3 py-2 rounded-xl bg-[var(--surface-card)] border border-[var(--accent-border)] text-xs text-[var(--fg-primary)] focus:outline-none focus:border-[#0070ba] disabled:opacity-50"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      disabled={!customCategoryInput.trim() || isCreatingCategory}
+                      onClick={() => void handleSetCustomCategory()}
+                      className="px-3 py-2 text-xs theme-btn-primary font-bold rounded-xl cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0070ba]"
+                    >
+                      {isCreatingCategory ? "Creating..." : "Set"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isCreatingCategory}
+                      onClick={() => {
+                        setCustomCategoryInput("");
+                        setIsCustomCategory(false);
+                      }}
+                      className="px-2 py-2 text-xs text-[var(--fg-muted)] hover:text-[var(--fg-primary)] cursor-pointer disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0070ba]"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* 3 Scope Options */}
               <div>
-                <label className="text-xs font-semibold text-[var(--fg-secondary)] block mb-2">
-                  Apply Scope <span className="text-[var(--accent-text)]">*</span>
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-semibold text-[var(--fg-secondary)]">
+                    Apply Scope <span className="text-[var(--accent-text)]">*</span>
+                  </label>
+                  {isCustomCategory && (
+                    <span className="text-[10px] font-medium text-[var(--accent-text)]">
+                      Click Set to create category first
+                    </span>
+                  )}
+                </div>
                 <div className="space-y-2">
                   {/* Scope 1: Single */}
                   <button
                     type="button"
+                    disabled={isCustomCategory || isCreatingCategory}
                     onClick={() => setSelectedScope("single")}
-                    className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer flex items-center gap-3 ${
+                    className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-3 ${
                       selectedScope === "single"
                         ? "bg-[var(--accent-subtle)] border-[var(--accent-border)] ring-1 ring-[#0070ba]"
                         : "theme-card-inset hover:border-[var(--accent-border)]"
@@ -582,8 +690,9 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
                   {/* Scope 2: Merchant */}
                   <button
                     type="button"
+                    disabled={isCustomCategory || isCreatingCategory}
                     onClick={() => setSelectedScope("merchant")}
-                    className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer flex items-center gap-3 ${
+                    className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-3 ${
                       selectedScope === "merchant"
                         ? "bg-[var(--accent-subtle)] border-[var(--accent-border)] ring-1 ring-[#0070ba]"
                         : "theme-card-inset hover:border-[var(--accent-border)]"
@@ -605,8 +714,9 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
                   {/* Scope 3: Similar */}
                   <button
                     type="button"
+                    disabled={isCustomCategory || isCreatingCategory}
                     onClick={() => setSelectedScope("similar")}
-                    className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer flex items-center gap-3 ${
+                    className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-3 ${
                       selectedScope === "similar"
                         ? "bg-[var(--accent-subtle)] border-[var(--accent-border)] ring-1 ring-[#0070ba]"
                         : "theme-card-inset hover:border-[var(--accent-border)]"
@@ -637,13 +747,13 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
             {/* Modal Footer */}
             <div className="flex items-center justify-between px-5 py-3 border-t border-[var(--border-subtle)] bg-[var(--surface-elevated)]">
               <span className="text-[11px] text-[var(--fg-muted)]">
-                {!selectedScope ? "Select scope" : "Ready"}
+                {isCustomCategory ? "Set category first" : !selectedScope ? "Select scope" : "Ready"}
               </span>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={handleCloseModal}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || isCreatingCategory}
                   className="px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--fg-secondary)] hover:bg-[var(--surface-subtle)] cursor-pointer disabled:opacity-50"
                 >
                   Cancel
@@ -651,7 +761,13 @@ export const TransactionGrid: React.FC<TransactionGridProps> = ({
                 <button
                   type="button"
                   onClick={handleConfirmReclassification}
-                  disabled={!selectedNewCategory || !selectedScope || isSubmitting}
+                  disabled={
+                    !selectedNewCategory ||
+                    !selectedScope ||
+                    isCustomCategory ||
+                    isCreatingCategory ||
+                    isSubmitting
+                  }
                   className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg theme-btn-primary text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all"
                 >
                   {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
