@@ -5,6 +5,10 @@ import { prisma } from "@/lib/db";
 import { getAuthenticatedUser } from "@/lib/auth/session";
 import { paypalClient, type InvoiceDispatchResult } from "@/lib/paypal/client";
 import { syncLedgerAfterDispatch } from "@/lib/paypal/sync";
+import {
+  resolveSourceCategoryForSplit,
+  inheritCategoryForSplitInvoices,
+} from "@/lib/services/categorizer";
 
 const DeclinedSplitActionSchema = z.object({
   splitRecordId: z.string().trim().min(1),
@@ -250,6 +254,62 @@ export async function POST(req: NextRequest) {
         refreshedItems.reduce((sum, it) => sum + Number(it.amount || 0), 0) * 100
       ) / 100;
 
+    // Resolve inherited category: previous asked invoice -> participant metadata -> split category/sibling -> source transaction
+    const priorMeta = rawItems.find(
+      (r) =>
+        (resolvedInvoiceId &&
+          typeof r.invoiceId === "string" &&
+          r.invoiceId.trim() === resolvedInvoiceId) ||
+        (resolvedEmail &&
+          typeof r.participantEmail === "string" &&
+          r.participantEmail.toLowerCase().trim() === resolvedEmail.toLowerCase()) ||
+        (resolvedName &&
+          typeof r.participantName === "string" &&
+          r.participantName.toLowerCase().trim() === resolvedName.toLowerCase())
+    );
+    const metaCategory =
+      typeof priorMeta?.category === "string" && priorMeta.category.trim()
+        ? priorMeta.category.trim()
+        : undefined;
+
+    let siblingOverrideCategory: string | null = null;
+    if (!metaCategory && !splitRecord.category) {
+      const candidateInvIds = Array.from(
+        new Set(
+          [
+            resolvedInvoiceId,
+            ...splitRecord.items.map((it) => it.paypalInvoiceId || ""),
+          ]
+            .map((id) => id?.trim())
+            .filter((id): id is string => Boolean(id))
+        )
+      );
+      if (candidateInvIds.length > 0) {
+        const siblingOverride = await prisma.transactionCategoryOverride.findFirst({
+          where: {
+            userId: authUser.id,
+            transactionId: { in: candidateInvIds },
+          },
+          select: { categoryName: true },
+        });
+        if (
+          siblingOverride?.categoryName &&
+          siblingOverride.categoryName.toLowerCase() !== "uncategorized"
+        ) {
+          siblingOverrideCategory = siblingOverride.categoryName;
+        }
+      }
+    }
+
+    const categoryLookup = await resolveSourceCategoryForSplit({
+      userId: authUser.id,
+      explicitCategory: metaCategory || splitRecord.category || siblingOverrideCategory,
+      sourceTransactionId: resolvedInvoiceId || splitRecord.sourceTransactionId,
+      merchantName: splitRecord.description,
+      description: invoiceDescription,
+    });
+    const inheritedCategory = categoryLookup.category;
+
     const updatedItemsJson = upsertSplitMetaEntry(
       rawItems,
       {
@@ -270,6 +330,7 @@ export async function POST(req: NextRequest) {
         invoiceId: dispatched.invoiceId,
         previousDeclinedInvoiceId: resolvedInvoiceId || null,
         previousDeclinedAmount: targetItem?.amount ?? roundedAmount,
+        ...(inheritedCategory ? { category: inheritedCategory } : {}),
         actionRequiredDismissed: true,
         reaskedAt: new Date().toISOString(),
       }
@@ -280,8 +341,19 @@ export async function POST(req: NextRequest) {
       data: {
         totalAmount: nextTotal > 0 ? nextTotal : roundedAmount,
         status: "SENT",
+        ...(!splitRecord.category && inheritedCategory
+          ? { category: inheritedCategory }
+          : {}),
         itemsJson: updatedItemsJson as unknown as Prisma.InputJsonValue,
       },
+    });
+
+    await inheritCategoryForSplitInvoices({
+      organizerUserId: authUser.id,
+      categoryName: inheritedCategory,
+      invoiceIds: [dispatched.invoiceId],
+      participantEmails: [resolvedEmail],
+      previousInvoiceId: resolvedInvoiceId,
     });
 
     await syncLedgerAfterDispatch(authUser.id, authUser.email, [resolvedEmail]);

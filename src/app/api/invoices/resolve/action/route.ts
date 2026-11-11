@@ -3,6 +3,10 @@ import { getAuthenticatedUser, getUserIdFromRequest } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { paypalClient } from "@/lib/paypal/client";
 import { markChatActionCardsResolved } from "@/lib/agent/dbSync";
+import {
+  resolveSourceCategoryForSplit,
+  inheritCategoryForSplitInvoices,
+} from "@/lib/services/categorizer";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 
@@ -157,6 +161,20 @@ export async function POST(req: NextRequest) {
             paypalInvoiceId: newInvoiceId,
             status: "SENT",
           },
+        });
+
+        const catLookup = await resolveSourceCategoryForSplit({
+          userId,
+          explicitCategory: item.splitRecord.category,
+          sourceTransactionId: item.paypalInvoiceId || item.splitRecord.sourceTransactionId,
+          merchantName: item.splitRecord.description,
+        });
+        await inheritCategoryForSplitInvoices({
+          organizerUserId: userId,
+          categoryName: catLookup.category,
+          invoiceIds: [newInvoiceId],
+          participantEmails: [targetEmail],
+          previousInvoiceId: item.paypalInvoiceId,
         });
       }
 

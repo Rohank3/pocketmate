@@ -3,6 +3,10 @@ import { getAuthenticatedUser, getUserIdFromRequest } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { paypalClient } from "@/lib/paypal/client";
 import { markChatActionCardsResolved } from "@/lib/agent/dbSync";
+import {
+  resolveSourceCategoryForSplit,
+  inheritCategoryForSplitInvoices,
+} from "@/lib/services/categorizer";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 
@@ -173,14 +177,37 @@ export async function POST(req: NextRequest) {
     }
 
     // Update SplitRecord
+    const splitCatLookup = await resolveSourceCategoryForSplit({
+      userId,
+      explicitCategory: splitRecord.category,
+      sourceTransactionId: splitRecord.sourceTransactionId,
+      merchantName: memo || splitRecord.description,
+    });
+
     await prisma.splitRecord.update({
       where: { id: splitRecordId },
       data: {
         totalAmount: totalBill,
+        ...(!splitRecord.category && splitCatLookup.category
+          ? { category: splitCatLookup.category }
+          : {}),
         itemsJson: updatedItemsJson as unknown as Prisma.InputJsonValue,
         status: refundsQueue.length === 0 && supplementalDispatched.length === 0 && reissuedInvoices.length === 0 ? "SETTLED" : "SENT",
       },
     });
+
+    const newlyDispatched = [...reissuedInvoices, ...supplementalDispatched];
+    if (newlyDispatched.length > 0 && splitCatLookup.category) {
+      const priorInvoiceId =
+        splitRecord.items.find((it) => it.paypalInvoiceId)?.paypalInvoiceId || undefined;
+      await inheritCategoryForSplitInvoices({
+        organizerUserId: userId,
+        categoryName: splitCatLookup.category,
+        invoiceIds: newlyDispatched.map((inv) => inv.invoiceId),
+        participantEmails: newlyDispatched.map((inv) => inv.email),
+        previousInvoiceId: priorInvoiceId,
+      });
+    }
 
     const summaryMessage = `Successfully rebalanced split for ${memo || splitRecord.description}. ${
       supplementalDispatched.length > 0
