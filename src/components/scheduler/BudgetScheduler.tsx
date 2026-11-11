@@ -23,6 +23,7 @@ import {
   extractLifecycle,
   formatCounterpartyWithLifecycle,
   isEventActiveOnDate,
+  isEventCompletedForDate,
   cancelSubscriptionCounterparty,
 } from "@/lib/utils/subscriptionLifecycle";
 
@@ -38,6 +39,7 @@ export interface ScheduledEvent {
   status: "pending" | "scheduled" | "completed";
   startDate?: string;
   endDate?: string;
+  settledMonths?: string[];
 }
 
 export interface BudgetSchedulerProps {
@@ -226,21 +228,23 @@ export default function BudgetScheduler({
     return monthEvents
       .filter((e) => {
         if (e.type !== "outgoing") return false;
-        const dayOfMonth = e.dayOfMonth || (e.date ? parseInt(e.date.slice(8, 10)) : 15);
-        const isCurrentMonthViewed =
-          new Date().getFullYear() === viewYear && new Date().getMonth() === viewMonth;
-        const isFutureDay = isCurrentMonthViewed && dayOfMonth > new Date().getDate();
-        if (isFutureDay) return true;
-        return e.status !== "completed";
+        const occDay = Math.min(e.dayOfMonth || 15, daysInCurrentMonth);
+        const occDateStr = `${currentMonthPrefix}-${String(occDay).padStart(2, "0")}`;
+        return !isEventCompletedForDate(e, occDateStr, todayDateStr);
       })
       .reduce((sum, e) => sum + e.amount, 0);
-  }, [monthEvents, viewYear, viewMonth]);
+  }, [monthEvents, currentMonthPrefix, daysInCurrentMonth, todayDateStr]);
 
   const upcomingReceivables = useMemo(() => {
     return monthEvents
-      .filter((e) => e.type === "incoming" && e.status !== "completed")
+      .filter((e) => {
+        if (e.type !== "incoming") return false;
+        const occDay = Math.min(e.dayOfMonth || 15, daysInCurrentMonth);
+        const occDateStr = `${currentMonthPrefix}-${String(occDay).padStart(2, "0")}`;
+        return !isEventCompletedForDate(e, occDateStr, todayDateStr);
+      })
       .reduce((sum, e) => sum + e.amount, 0);
-  }, [monthEvents]);
+  }, [monthEvents, currentMonthPrefix, daysInCurrentMonth, todayDateStr]);
 
   // Calendar generation with dynamic day-of-week alignment and padding
   const calendarDays = useMemo(() => {
@@ -383,15 +387,23 @@ export default function BudgetScheduler({
 
   const selectedDayTotalBills = useMemo(() => {
     return selectedDayEvents
-      .filter((e) => e.type === "outgoing" && e.status !== "completed")
+      .filter(
+        (e) =>
+          e.type === "outgoing" &&
+          !isEventCompletedForDate(e, selectedDayModal?.dateStr || todayDateStr, todayDateStr)
+      )
       .reduce((sum, e) => sum + e.amount, 0);
-  }, [selectedDayEvents]);
+  }, [selectedDayEvents, selectedDayModal, todayDateStr]);
 
   const selectedDayTotalReceivables = useMemo(() => {
     return selectedDayEvents
-      .filter((e) => e.type === "incoming" && e.status !== "completed")
+      .filter(
+        (e) =>
+          e.type === "incoming" &&
+          !isEventCompletedForDate(e, selectedDayModal?.dateStr || todayDateStr, todayDateStr)
+      )
       .reduce((sum, e) => sum + e.amount, 0);
-  }, [selectedDayEvents]);
+  }, [selectedDayEvents, selectedDayModal, todayDateStr]);
 
   return (
     <div className="h-full w-full flex flex-col glass-panel rounded-2xl overflow-hidden shadow-md relative">
@@ -678,7 +690,7 @@ export default function BudgetScheduler({
                     {cell.events.map((evt) => {
                       const isIncoming = evt.type === "incoming";
                       const isOutgoing = evt.type === "outgoing";
-                      const isCompleted = evt.status === "completed" && cell.dateStr <= todayDateStr;
+                      const isCompleted = isEventCompletedForDate(evt, cell.dateStr, todayDateStr);
 
                       return (
                         <div
@@ -692,7 +704,9 @@ export default function BudgetScheduler({
                               ? "bg-[var(--status-info-bg)] border-[var(--status-info-border)] text-[var(--status-info-text)]"
                               : "bg-[var(--status-milestone-bg)] border-[var(--status-milestone-border)] text-[var(--status-milestone-text)]"
                           }`}
-                          title={`${evt.title} - $${evt.amount.toFixed(2)} (${evt.status})`}
+                          title={`${evt.title} - $${evt.amount.toFixed(2)} (${
+                            isCompleted ? "completed" : evt.status
+                          })`}
                         >
                           <span className="truncate flex items-center gap-1">
                             <span className="font-bold shrink-0 tabular-nums">
@@ -748,7 +762,11 @@ export default function BudgetScheduler({
             {displayedEvents.map((evt) => {
               const isIncoming = evt.type === "incoming";
               const isOutgoing = evt.type === "outgoing";
-              const isCompleted = evt.status === "completed";
+              const isCompleted = isEventCompletedForDate(
+                evt,
+                evt.date || todayDateStr,
+                todayDateStr
+              );
 
               return (
                 <div
@@ -981,7 +999,11 @@ export default function BudgetScheduler({
                     {selectedDayEvents.map((evt) => {
                       const isIncoming = evt.type === "incoming";
                       const isOutgoing = evt.type === "outgoing";
-                      const isCompleted = evt.status === "completed" && (selectedDayModal ? selectedDayModal.dateStr <= todayDateStr : true);
+                      const isCompleted = isEventCompletedForDate(
+                        evt,
+                        selectedDayModal?.dateStr || todayDateStr,
+                        todayDateStr
+                      );
                       const lifecycle = extractLifecycle(evt.counterparty, evt.date);
 
                       return (
