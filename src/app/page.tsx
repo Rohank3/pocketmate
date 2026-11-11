@@ -9,7 +9,7 @@ import { ActionCardData } from "@/components/cards/ActionConfirmCard";
 import { GridMutationState } from "@/types/agent";
 import { CategoryControlBar, CategoryItem } from "@/components/categories/CategoryControlBar";
 import { AddCategoryModal } from "@/components/categories/AddCategoryModal";
-import { PayPalLoginModal } from "@/components/auth/PayPalLoginModal";
+import { PayPalLoginModal, PendingPayPalProfile } from "@/components/auth/PayPalLoginModal";
 import { InvoiceActionModal } from "@/components/cards/InvoiceActionModal";
 import { UncategorizedReviewModal } from "@/components/modals/UncategorizedReviewModal";
 import { FunctionalMetricsRow } from "@/components/cards/FunctionalMetricsRow";
@@ -95,6 +95,7 @@ export default function Home() {
   const [activeScope, setActiveScope] = useState<"personal" | "all">("personal");
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [pendingPayPal, setPendingPayPal] = useState<PendingPayPalProfile | null>(null);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [activeInvoiceForAction, setActiveInvoiceForAction] = useState<InvoiceRecord | null>(null);
   const [, setInvoices] = useState<InvoiceRecord[]>([]);
@@ -247,9 +248,13 @@ export default function Home() {
           authedUser = userData.user;
           currentUserRef.current = userData.user;
           setCurrentUser(userData.user);
+          setPendingPayPal(null);
         } else if (isSubscribed) {
           currentUserRef.current = null;
           setCurrentUser(null);
+          if (userData.pendingPayPal) {
+            setPendingPayPal(userData.pendingPayPal);
+          }
           setIsLoginModalOpen(true);
         }
       } catch {
@@ -264,11 +269,25 @@ export default function Home() {
         }
       }
 
-      // Surface PayPal OAuth errors immediately even when unauthenticated
+      // Surface PayPal OAuth errors or pending email confirmation immediately even when unauthenticated
       if (typeof window !== "undefined") {
         const params = new URLSearchParams(window.location.search);
         const authErrorParam = params.get("auth_error");
-        if (authErrorParam) {
+        const authStepParam = params.get("auth_step");
+        if (authStepParam === "confirm_email" && !authedUser) {
+          const ppPayer = params.get("pp_payer");
+          if (isSubscribed) {
+            setPendingPayPal((prev) =>
+              prev || {
+                payerId: ppPayer || null,
+                userId: ppPayer || "verified",
+              }
+            );
+            setAuthError(null);
+            setIsLoginModalOpen(true);
+          }
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } else if (authErrorParam) {
           const rawDetail = params.get("auth_detail") || "";
           const safeDetail = rawDetail.replace(/[^+\w\s.,:;=()/\[\]-]/g, "").slice(0, 320);
           const authErrorMessages: Record<string, string> = {
@@ -708,6 +727,8 @@ export default function Home() {
     SandboxStore.setCurrentUser(null);
     currentUserRef.current = null;
     setCurrentUser(null);
+    setPendingPayPal(null);
+    setAuthError(null);
     setTransactions([]);
     setCategories([]);
     setSplits([]);
@@ -1623,11 +1644,22 @@ export default function Home() {
         isOpen={isLoginModalOpen || (isAuthChecked && !currentUser)}
         currentUser={currentUser}
         authError={authError}
+        pendingPayPal={pendingPayPal}
+        onCancelPendingPayPal={async () => {
+          try {
+            await fetch("/api/auth/logout", { method: "POST" });
+          } catch {
+            // ignore
+          }
+          setPendingPayPal(null);
+          setAuthError(null);
+        }}
         onClose={() => {
           if (currentUser) setIsLoginModalOpen(false);
         }}
         onLogin={(user) => {
           setAuthError(null);
+          setPendingPayPal(null);
           handleUserLogin(user);
         }}
         onLogout={handleUserLogout}

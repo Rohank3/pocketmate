@@ -9,6 +9,8 @@ import {
   Building2,
   ExternalLink,
   AlertCircle,
+  CheckCircle2,
+  Loader2,
 } from "lucide-react";
 import { UserAccount } from "@/types/sandboxUser";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
@@ -23,10 +25,18 @@ const INDUSTRY_OPTIONS = [
   { value: "HEALTHCARE", label: "Healthcare & Clinical Services" },
 ];
 
+export interface PendingPayPalProfile {
+  payerId: string | null;
+  userId: string;
+  suggestedName?: string;
+}
+
 interface PayPalLoginModalProps {
   isOpen: boolean;
   currentUser: UserAccount | null;
   authError?: string | null;
+  pendingPayPal?: PendingPayPalProfile | null;
+  onCancelPendingPayPal?: () => void;
   onClose: () => void;
   onLogin?: (user: UserAccount) => void;
   onLogout: () => void;
@@ -36,6 +46,8 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
   isOpen,
   currentUser,
   authError,
+  pendingPayPal,
+  onCancelPendingPayPal,
   onClose,
   onLogin,
   onLogout,
@@ -45,6 +57,12 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
     currentUser?.industry || "GENERAL_BUSINESS"
   );
   const [isUpdatingIndustry, setIsUpdatingIndustry] = useState(false);
+  const [emailInput, setEmailInput] = useState("");
+  const [nameOverride, setNameOverride] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [isSubmittingProfile, setIsSubmittingProfile] = useState(false);
+
+  const resolvedNameInput = nameOverride ?? pendingPayPal?.suggestedName ?? "";
 
   useEffect(() => {
     if (!isOpen || !currentUser) return;
@@ -73,6 +91,38 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
       console.warn("[Industry Update Error]", err);
     } finally {
       setIsUpdatingIndustry(false);
+    }
+  };
+
+  const handleCompletePayPalProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmedEmail = emailInput.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail) || trimmedEmail === "user@sandbox.paypal.com") {
+      setFormError("Enter the valid PayPal Sandbox email address you signed in with.");
+      return;
+    }
+
+    setFormError(null);
+    setIsSubmittingProfile(true);
+    try {
+      const res = await fetch("/api/auth/paypal/complete-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: trimmedEmail,
+          name: resolvedNameInput.trim() || undefined,
+        }),
+      });
+      const data = (await res.json()) as { user?: UserAccount; error?: string };
+      if (!res.ok || !data.user) {
+        setFormError(data.error || "Unable to verify email binding. Please try again.");
+        return;
+      }
+      onLogin?.(data.user);
+    } catch {
+      setFormError("Network error while completing PayPal profile setup.");
+    } finally {
+      setIsSubmittingProfile(false);
     }
   };
 
@@ -209,6 +259,106 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
                 </button>
               </div>
             </div>
+          ) : pendingPayPal ? (
+            /* One-time Email Binding when PayPal Platform App verifies ID but omits email claim */
+            <form onSubmit={handleCompletePayPalProfile} className="flex flex-col gap-3.5" noValidate>
+              <div className="p-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 flex items-start gap-2.5 text-xs text-emerald-700 dark:text-emerald-300">
+                <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+                <div className="min-w-0">
+                  <p className="font-semibold">PayPal Account Authenticated</p>
+                  <p className="text-[11px] opacity-90 mt-0.5 break-all">
+                    Verified PayPal ID:{" "}
+                    <span className="font-mono font-semibold">
+                      {pendingPayPal.payerId || pendingPayPal.userId.slice(-16)}
+                    </span>
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-xs text-[var(--fg-secondary)] leading-relaxed">
+                PayPal Sandbox verified your account, but this Platform app omitted your email from{" "}
+                <code className="text-[11px] font-mono">/userinfo</code>. Confirm your Sandbox email once so PocketMate remembers it for all future PayPal logins.
+              </p>
+
+              {(formError || authError) && (
+                <div
+                  role="alert"
+                  className="flex items-start gap-2 p-2.5 rounded-xl border border-rose-500/30 bg-rose-500/10 text-xs text-rose-600 dark:text-rose-300"
+                >
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-500 dark:text-rose-400" />
+                  <span>{formError || authError}</span>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-1.5">
+                <label
+                  htmlFor="paypal-confirm-email"
+                  className="text-xs font-semibold text-[var(--fg-primary)]"
+                >
+                  PayPal Sandbox Email
+                </label>
+                <input
+                  id="paypal-confirm-email"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  value={emailInput}
+                  onChange={(e) => {
+                    setEmailInput(e.target.value);
+                    if (formError) setFormError(null);
+                  }}
+                  placeholder="ethan.carter.pm@business.example.com"
+                  className="w-full rounded-xl px-3 py-2 text-xs border bg-[var(--surface-card)] border-[var(--border-strong)] text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0070ba]"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label
+                  htmlFor="paypal-confirm-name"
+                  className="text-xs font-semibold text-[var(--fg-primary)]"
+                >
+                  Display Name <span className="font-normal text-[var(--fg-muted)]">(optional)</span>
+                </label>
+                <input
+                  id="paypal-confirm-name"
+                  type="text"
+                  autoComplete="name"
+                  value={resolvedNameInput}
+                  onChange={(e) => setNameOverride(e.target.value)}
+                  placeholder="Ethan Carter"
+                  className="w-full rounded-xl px-3 py-2 text-xs border bg-[var(--surface-card)] border-[var(--border-strong)] text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0070ba]"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSubmittingProfile}
+                className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-xl text-xs font-bold transition-all cursor-pointer theme-btn-primary hover:brightness-105 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0070ba]"
+              >
+                {isSubmittingProfile ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Linking Account...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Confirm &amp; Continue</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </>
+                )}
+              </button>
+
+              {onCancelPendingPayPal && (
+                <button
+                  type="button"
+                  disabled={isSubmittingProfile}
+                  onClick={onCancelPendingPayPal}
+                  className="w-full py-2 px-3 rounded-xl text-xs font-medium border theme-btn-secondary hover:bg-[var(--surface-subtle)] active:scale-[0.99] disabled:opacity-50 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0070ba]"
+                >
+                  Start over with a different PayPal account
+                </button>
+              )}
+            </form>
           ) : (
             /* Minimal Unauthenticated View */
             <div className="flex flex-col gap-3.5">
