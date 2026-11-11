@@ -1423,6 +1423,9 @@ export default function Home() {
               void handleSendMessage(prompt);
             }}
             onOpenReviewModal={() => setIsReviewModalOpen(true)}
+            onSplitsUpdated={async () => {
+              await Promise.all([loadSplits(), loadTransactions()]);
+            }}
           />
         </div>
 

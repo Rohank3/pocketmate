@@ -19,6 +19,7 @@ import {
   Tag,
   RotateCcw,
   X,
+  Loader2,
 } from "lucide-react";
 import type { CategoryItem } from "@/components/categories/CategoryControlBar";
 import type { TransactionRow } from "@/components/grid/TransactionGrid";
@@ -54,6 +55,7 @@ export interface FunctionalMetricsRowProps {
   onFilterLedger: (debtorName?: string, categoryName?: string) => void;
   onSendChatMessage: (prompt: string) => void;
   onOpenReviewModal?: () => void;
+  onSplitsUpdated?: () => Promise<void> | void;
 }
 
 interface DebtorSummary {
@@ -77,17 +79,30 @@ export interface SettledSplitSummary {
   reason?: string;
   sampleMerchant: string;
   invoiceId?: string;
+  actionRequiredDismissed?: boolean;
+}
+
+interface DeclinedSplitMeta {
+  splitRecordId: string;
+  splitItemId: string;
+  invoiceId?: string;
+  participantName: string;
+  participantEmail: string;
+  originalAmount: number;
+  reason?: string;
+  description: string;
 }
 
 interface ActionQueueItem {
   id: string;
-  type: "dispute" | "uncategorized" | "debtor" | "budget_breach" | "debt_owed" | "bill_due";
+  type: "declined_split" | "dispute" | "uncategorized" | "debtor" | "budget_breach" | "debt_owed" | "bill_due";
   title: string;
   description: string;
   amount?: number;
   severity: "high" | "medium" | "low";
   prompt: string;
   buttonLabel: string;
+  declinedSplit?: DeclinedSplitMeta;
 }
 
 export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
@@ -101,14 +116,110 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
   onFilterLedger,
   onSendChatMessage,
   onOpenReviewModal,
+  onSplitsUpdated,
 }) => {
   const { isDark } = useTheme();
   const [activeFlyout, setActiveFlyout] = useState<number | null>(null);
   const [pinnedFlyout, setPinnedFlyout] = useState<number | null>(null);
   const [reminderModalDebtor, setReminderModalDebtor] = useState<DebtorSummary | null>(null);
   const [reminderToast, setReminderToast] = useState<string | null>(null);
+  const [reaskingItemId, setReaskingItemId] = useState<string | null>(null);
+  const [reaskAmount, setReaskAmount] = useState<string>("");
+  const [reaskNote, setReaskNote] = useState<string>("");
+  const [reaskValidationError, setReaskValidationError] = useState<string | null>(null);
+  const [declinedBusyId, setDeclinedBusyId] = useState<string | null>(null);
   const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const showToast = (msg: string) => {
+    setReminderToast(msg);
+    setTimeout(() => setReminderToast(null), 4000);
+  };
+
+  const handleDismissDeclinedSplit = async (
+    itemId: string,
+    declined: DeclinedSplitMeta
+  ) => {
+    setDeclinedBusyId(itemId);
+    setReaskValidationError(null);
+    try {
+      const res = await fetch("/api/splits/declined", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "dismiss",
+          splitRecordId: declined.splitRecordId,
+          splitItemId: declined.splitItemId,
+          invoiceId: declined.invoiceId,
+          participantEmail: declined.participantEmail,
+          participantName: declined.participantName,
+        }),
+      });
+      const data = (await res.json()) as { success?: boolean; error?: string; message?: string };
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to dismiss declined invoice alert.");
+      }
+      if (reaskingItemId === itemId) {
+        setReaskingItemId(null);
+      }
+      await onSplitsUpdated?.();
+      showToast(data.message || `Dismissed alert for ${declined.participantName}.`);
+    } catch (err: unknown) {
+      setReaskValidationError(
+        err instanceof Error ? err.message : "Failed to dismiss declined invoice."
+      );
+    } finally {
+      setDeclinedBusyId(null);
+    }
+  };
+
+  const handleAskAgainSubmit = async (
+    itemId: string,
+    declined: DeclinedSplitMeta
+  ) => {
+    const parsedAmount = Number(reaskAmount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0 || parsedAmount > 50000) {
+      setReaskValidationError("Enter a valid amount between $0.01 and $50,000.00.");
+      return;
+    }
+
+    const roundedAmount = Math.round(parsedAmount * 100) / 100;
+    setDeclinedBusyId(itemId);
+    setReaskValidationError(null);
+    try {
+      const res = await fetch("/api/splits/declined", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "ask_again",
+          splitRecordId: declined.splitRecordId,
+          splitItemId: declined.splitItemId,
+          invoiceId: declined.invoiceId,
+          participantEmail: declined.participantEmail,
+          participantName: declined.participantName,
+          adjustedAmount: roundedAmount,
+          note: reaskNote.trim() || undefined,
+        }),
+      });
+      const data = (await res.json()) as { success?: boolean; error?: string; message?: string };
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to send revised PayPal invoice.");
+      }
+      setReaskingItemId(null);
+      setReaskNote("");
+      await onSplitsUpdated?.();
+      showToast(
+        data.message ||
+          `Sent revised $${roundedAmount.toFixed(2)} PayPal invoice to ${declined.participantName}.`
+      );
+    } catch (err: unknown) {
+      setReaskValidationError(
+        err instanceof Error ? err.message : "Failed to send revised invoice."
+      );
+    } finally {
+      setDeclinedBusyId(null);
+    }
+  };
 
   const isClient = useSyncExternalStore(
     () => () => {},
@@ -346,23 +457,35 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
 
         // If item is PAID or CANCELLED, collect it into settledList
         if (item.status === "PAID" || item.status === "CANCELLED") {
-          const meta = rawItems.find(
-            (m) =>
-              (m.participantEmail &&
-                pEmailLower &&
-                (m.participantEmail as string).toLowerCase().trim() === pEmailLower) ||
-              (m.participantName &&
-                (m.participantName as string).toLowerCase().trim() === pNameLower)
-          );
+          const itemInvId = (item.paypalInvoiceId || "").trim();
+          const meta =
+            (itemInvId
+              ? rawItems.find(
+                  (m) => typeof m.invoiceId === "string" && m.invoiceId.trim() === itemInvId
+                )
+              : undefined) ||
+            rawItems.find(
+              (m) =>
+                (m.participantEmail &&
+                  pEmailLower &&
+                  (m.participantEmail as string).toLowerCase().trim() === pEmailLower) ||
+                (m.participantName &&
+                  (m.participantName as string).toLowerCase().trim() === pNameLower)
+            );
 
-          const amountPaid = typeof meta?.amountPaid === "number" ? meta.amountPaid : item.amount;
+          const amountPaid =
+            typeof meta?.amountPaid === "number"
+              ? meta.amountPaid
+              : item.status === "CANCELLED"
+              ? 0
+              : item.amount;
           const originalAmount =
             typeof meta?.originalAmount === "number" ? meta.originalAmount : item.amount;
           const difference =
             typeof meta?.difference === "number"
               ? meta.difference
               : Math.max(0, originalAmount - amountPaid);
-          const isAdjusted = meta?.isAdjusted === true || difference > 0.01;
+          const isAdjusted = meta?.isAdjusted === true || (item.status === "PAID" && difference > 0.01);
           const reason =
             typeof meta?.settledReason === "string" ? meta.settledReason : undefined;
 
@@ -381,6 +504,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
             invoiceId:
               item.paypalInvoiceId ||
               (typeof meta?.invoiceId === "string" ? meta.invoiceId : undefined),
+            actionRequiredDismissed: meta?.actionRequiredDismissed === true,
           });
           return;
         }
@@ -579,6 +703,34 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
 
     const queue: ActionQueueItem[] = [];
 
+    // 0. Declined split invoices needing Dismiss or Ask Again
+    settledList
+      .filter((s) => s.status === "CANCELLED" && !s.actionRequiredDismissed)
+      .forEach((declined) => {
+        queue.push({
+          id: `declined_split_${declined.id}`,
+          type: "declined_split",
+          title: `Declined Invoice: ${declined.name}`,
+          description: declined.reason
+            ? `${declined.sampleMerchant || "Split request"} — "${declined.reason}"`
+            : `${declined.sampleMerchant || "Split request"} ($${declined.originalAmount.toFixed(2)}) was declined.`,
+          amount: declined.originalAmount,
+          severity: "high",
+          prompt: `PocketMate, ${declined.name} declined the $${declined.originalAmount.toFixed(2)} invoice for "${declined.sampleMerchant}". Please help adjust and resend it.`,
+          buttonLabel: "Ask Again",
+          declinedSplit: {
+            splitRecordId: declined.splitRecordId,
+            splitItemId: declined.id,
+            invoiceId: declined.invoiceId,
+            participantName: declined.name,
+            participantEmail: declined.email,
+            originalAmount: declined.originalAmount,
+            reason: declined.reason,
+            description: declined.sampleMerchant,
+          },
+        });
+      });
+
     // A. Disputed transactions / split mismatches
     const disputed = transactions.filter((t) => t.status === "disputed");
     disputed.forEach((t) => {
@@ -691,7 +843,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
     });
 
     return queue;
-  }, [transactions, categoryBars, personalDebtBills, events, isClient]);
+  }, [transactions, categoryBars, personalDebtBills, events, settledList, isClient]);
 
   const isAnyFlyoutOpen = activeFlyout !== null || pinnedFlyout !== null;
 
@@ -1075,10 +1227,18 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                                 </div>
 
                                 <div className="text-right shrink-0">
-                                  <span className="text-xs font-bold font-mono tabular-nums text-[var(--status-success-text)]">
-                                    +${item.amountPaid.toFixed(2)}
+                                  <span
+                                    className={`text-xs font-bold font-mono tabular-nums ${
+                                      item.status === "CANCELLED"
+                                        ? "text-[var(--status-danger-text)] line-through"
+                                        : "text-[var(--status-success-text)]"
+                                    }`}
+                                  >
+                                    {item.status === "CANCELLED"
+                                      ? `$${item.originalAmount.toFixed(2)}`
+                                      : `+$${item.amountPaid.toFixed(2)}`}
                                   </span>
-                                  {item.isAdjusted && (
+                                  {item.isAdjusted && item.status !== "CANCELLED" && (
                                     <p className="text-[9px] font-mono text-[var(--fg-muted)] line-through">
                                       ${item.originalAmount.toFixed(2)}
                                     </p>
@@ -1426,7 +1586,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
               </div>
 
               {/* Action Items List */}
-              <div className="mt-3.5 flex flex-col gap-2.5 max-h-64 overflow-y-auto pr-1">
+              <div className="mt-3.5 flex flex-col gap-2.5 max-h-80 overflow-y-auto pr-1">
                 {actionItems.length === 0 ? (
                   <div className="py-6 text-center">
                     <CheckCircle2 className="w-8 h-8 text-[var(--status-success-text)] mx-auto mb-2 opacity-85" />
@@ -1451,13 +1611,13 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                                   : "bg-[var(--status-info-bg)] text-[var(--status-info-text)] border-[var(--status-info-border)]"
                               }`}
                             >
-                              {item.type.replace("_", " ")}
+                              {item.type === "declined_split" ? "Declined" : item.type.replace("_", " ")}
                             </span>
                             <span className="text-xs font-bold text-[var(--fg-primary)] truncate">
                               {item.title}
                             </span>
                           </div>
-                          <p className="text-[11px] text-[var(--fg-secondary)]">{item.description}</p>
+                          <p className="text-[11px] text-[var(--fg-secondary)] break-words">{item.description}</p>
                         </div>
                         {item.amount && (
                           <span className="text-xs font-mono tabular-nums font-bold text-[var(--status-danger-text)] shrink-0">
@@ -1467,35 +1627,162 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                       </div>
 
                       {/* Interactive Buttons */}
-                      <div className="flex items-center justify-end gap-2 pt-1.5 border-t border-[var(--border-subtle)]">
-                        {item.type === "uncategorized" && onOpenReviewModal && (
+                      {item.type === "declined_split" && item.declinedSplit ? (
+                        reaskingItemId === item.id ? (
+                          <form
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              void handleAskAgainSubmit(item.id, item.declinedSplit!);
+                            }}
+                            className="flex flex-col gap-2 pt-2 border-t border-[var(--border-subtle)]"
+                          >
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <div>
+                                <label
+                                  htmlFor={`reask-amount-${item.id}`}
+                                  className="block text-[10px] font-semibold text-[var(--fg-muted)] mb-1"
+                                >
+                                  Revised Amount (USD)
+                                </label>
+                                <input
+                                  id={`reask-amount-${item.id}`}
+                                  type="number"
+                                  step="0.01"
+                                  min="0.01"
+                                  max="50000"
+                                  value={reaskAmount}
+                                  onChange={(e) => {
+                                    setReaskAmount(e.target.value);
+                                    if (reaskValidationError) setReaskValidationError(null);
+                                  }}
+                                  disabled={declinedBusyId === item.id}
+                                  className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--surface-input)] border border-[var(--border-subtle)] text-xs font-mono text-[var(--fg-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] disabled:opacity-50"
+                                  placeholder="150.00"
+                                />
+                              </div>
+                              <div>
+                                <label
+                                  htmlFor={`reask-note-${item.id}`}
+                                  className="block text-[10px] font-semibold text-[var(--fg-muted)] mb-1"
+                                >
+                                  Note (optional)
+                                </label>
+                                <input
+                                  id={`reask-note-${item.id}`}
+                                  type="text"
+                                  maxLength={200}
+                                  value={reaskNote}
+                                  onChange={(e) => setReaskNote(e.target.value)}
+                                  disabled={declinedBusyId === item.id}
+                                  className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--surface-input)] border border-[var(--border-subtle)] text-xs text-[var(--fg-primary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] disabled:opacity-50"
+                                  placeholder="Adjusted split"
+                                />
+                              </div>
+                            </div>
+
+                            {reaskValidationError && (
+                              <p className="text-[11px] text-[var(--status-danger-text)] font-medium">
+                                {reaskValidationError}
+                              </p>
+                            )}
+
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                disabled={declinedBusyId === item.id}
+                                onClick={() => {
+                                  setReaskingItemId(null);
+                                  setReaskValidationError(null);
+                                }}
+                                className="px-2.5 py-1 rounded-lg theme-btn-secondary border text-xs font-semibold transition-all cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="submit"
+                                disabled={declinedBusyId === item.id}
+                                className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[var(--status-info-bg)] hover:bg-[var(--accent-subtle-hover)] active:scale-95 text-[var(--status-info-text)] border border-[var(--status-info-border)] text-xs font-semibold transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {declinedBusyId === item.id ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <Send className="w-3 h-3" />
+                                )}
+                                <span>Send Invoice</span>
+                              </button>
+                            </div>
+                          </form>
+                        ) : (
+                          <div className="flex flex-col gap-1.5 pt-1.5 border-t border-[var(--border-subtle)]">
+                            {reaskValidationError && declinedBusyId === null && (
+                              <p className="text-[11px] text-[var(--status-danger-text)] font-medium">
+                                {reaskValidationError}
+                              </p>
+                            )}
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                disabled={declinedBusyId === item.id}
+                                onClick={() =>
+                                  void handleDismissDeclinedSplit(item.id, item.declinedSplit!)
+                                }
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg theme-btn-secondary border text-xs font-semibold transition-all cursor-pointer hover:brightness-110 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {declinedBusyId === item.id ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <X className="w-3 h-3" />
+                                )}
+                                <span>Dismiss</span>
+                              </button>
+                              <button
+                                type="button"
+                                disabled={declinedBusyId === item.id}
+                                onClick={() => {
+                                  setReaskingItemId(item.id);
+                                  setReaskAmount(item.declinedSplit!.originalAmount.toFixed(2));
+                                  setReaskNote("");
+                                  setReaskValidationError(null);
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[var(--status-info-bg)] hover:bg-[var(--accent-subtle-hover)] active:scale-95 text-[var(--status-info-text)] border border-[var(--status-info-border)] text-xs font-semibold transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                <RotateCcw className="w-3 h-3" />
+                                <span>Ask Again</span>
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      ) : (
+                        <div className="flex items-center justify-end gap-2 pt-1.5 border-t border-[var(--border-subtle)]">
+                          {item.type === "uncategorized" && onOpenReviewModal && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onOpenReviewModal();
+                                setActiveFlyout(null);
+                                setPinnedFlyout(null);
+                              }}
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg theme-btn-secondary border text-xs font-semibold transition-all cursor-pointer"
+                              title="Open review popup"
+                            >
+                              <Tag className="w-3 h-3 text-[var(--accent-text)]" />
+                              <span>Review in Popup ↗</span>
+                            </button>
+                          )}
                           <button
-                            type="button"
                             onClick={() => {
-                              onOpenReviewModal();
+                              onSendChatMessage(item.prompt);
                               setActiveFlyout(null);
                               setPinnedFlyout(null);
                             }}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg theme-btn-secondary border text-xs font-semibold transition-all cursor-pointer"
-                            title="Open review popup"
+                            className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[var(--status-info-bg)] hover:bg-[var(--accent-subtle-hover)] text-[var(--status-info-text)] border border-[var(--status-info-border)] text-xs font-semibold transition-all cursor-pointer"
                           >
-                            <Tag className="w-3 h-3 text-[var(--accent-text)]" />
-                            <span>Review in Popup ↗</span>
+                            <Sparkles className="w-3 h-3" />
+                            <span>{item.buttonLabel}</span>
+                            <ArrowRight className="w-3 h-3" />
                           </button>
-                        )}
-                        <button
-                          onClick={() => {
-                            onSendChatMessage(item.prompt);
-                            setActiveFlyout(null);
-                            setPinnedFlyout(null);
-                          }}
-                          className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[var(--status-info-bg)] hover:bg-[var(--accent-subtle-hover)] text-[var(--status-info-text)] border border-[var(--status-info-border)] text-xs font-semibold transition-all cursor-pointer"
-                        >
-                          <Sparkles className="w-3 h-3" />
-                          <span>{item.buttonLabel}</span>
-                          <ArrowRight className="w-3 h-3" />
-                        </button>
-                      </div>
+                        </div>
+                      )}
                     </div>
                   ))
                 )}
