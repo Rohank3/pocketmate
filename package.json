@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate",
+    "csv:paypal": "npx tsx scripts/generate-sandbox-csv.ts",
     "seed:paypal": "npx tsx scripts/seed-sandbox-simulation.ts",
     "clean:paypal": "npx tsx scripts/seed-sandbox-simulation.ts --clean"
   },
