@@ -416,9 +416,25 @@ export default function Home() {
             const capData = await capRes.json();
             if (capRes.ok && capData.success) {
               const paidAmt = Number(capData.capture?.amount || capData.settlement?.amount || 0);
+              const settledInvId = orderInvoiceId || capData.settlement?.invoiceId;
               if (isSubscribed) {
                 setMessages((prev) => [
-                  ...prev,
+                  ...prev.map((m) =>
+                    m.actionCard &&
+                    (m.actionCard.action === "REVIEW_INCOMING_INVOICE" ||
+                      m.actionCard.type === "incoming_invoice_review") &&
+                    (!settledInvId || m.actionCard.invoiceId === settledInvId)
+                      ? {
+                          ...m,
+                          actionCard: {
+                            ...m.actionCard,
+                            resolvedStatus: "paid",
+                            resolvedAction: "pay",
+                            resolvedMessage: `Settled $${paidAmt.toFixed(2)} via PayPal.`,
+                          },
+                        }
+                      : m
+                  ),
                   {
                     id: `asst_captured_${Date.now()}`,
                     role: "assistant",
@@ -837,7 +853,8 @@ export default function Home() {
     transactionId: string,
     merchantName: string,
     targetCategory: string,
-    scope: "single" | "merchant" | "similar"
+    scope: "single" | "merchant" | "similar",
+    messageId?: string
   ) => {
     try {
       const currentTransactions: TransactionRow[] = transactionsRef.current;
@@ -849,6 +866,8 @@ export default function Home() {
           merchantName,
           targetCategory,
           scope,
+          messageId,
+          threadId: activeThreadId || undefined,
           allTransactions: currentTransactions.map((t) => ({
             id: t.id,
             merchantName: t.merchant,
@@ -861,7 +880,7 @@ export default function Home() {
 
       const data = await res.json();
       if (data.success && Array.isArray(data.updatedTransactionIds)) {
-        const idSet = new Set(data.updatedTransactionIds);
+        const idSet = new Set<string>(data.updatedTransactionIds);
         const updatedTxs = currentTransactions.map((t) =>
           idSet.has(t.id) ? { ...t, category: targetCategory } : t
         );
@@ -870,14 +889,46 @@ export default function Home() {
         void loadCategories();
 
         const warningNotice = data.warning ? `\n\n⚠️ ${data.warning}` : "";
+        const merchantLower = merchantName.toLowerCase().trim();
+
+        const markResolvedTriage = (prevMsgs: ChatMessageItem[]): ChatMessageItem[] =>
+          prevMsgs.map((m) => {
+            if (
+              m.actionCard &&
+              (m.actionCard.action === "CATEGORY_TRIAGE" ||
+                m.actionCard.type === "category_triage")
+            ) {
+              const cardTxId = m.actionCard.transactionId || "";
+              const cardMerchant = (m.actionCard.merchantName || m.actionCard.merchant || "")
+                .toLowerCase()
+                .trim();
+              const isMatch =
+                (messageId && m.id === messageId) ||
+                cardTxId === transactionId ||
+                idSet.has(cardTxId) ||
+                (scope !== "single" && cardMerchant === merchantLower);
+              if (isMatch) {
+                return {
+                  ...m,
+                  actionCard: {
+                    ...m.actionCard,
+                    resolvedStatus: "categorized",
+                    resolvedCategory: targetCategory,
+                    resolvedMessage: data.message || `Categorized as '${targetCategory}'.`,
+                  },
+                };
+              }
+            }
+            return m;
+          });
 
         // Check if there are remaining uncategorized items across the ledger via Gemini AI
         if (data.nextSuggestion) {
           const next = data.nextSuggestion;
           setMessages((prev) => [
-            ...prev,
+            ...markResolvedTriage(prev),
             {
-              id: `asst_triage_next_${Date.now()}`,
+              id: data.persistedFollowUpId || `asst_triage_next_${Date.now()}`,
               role: "assistant",
               content: `Reclassified **${merchantName}** as *${targetCategory}*.${warningNotice} **${next.remainingCount} unclassified transaction(s) remaining** in your ledger. Next up: **${next.merchantName}** ($${next.amount.toFixed(2)}).`,
               actionCard: {
@@ -894,9 +945,9 @@ export default function Home() {
           ]);
         } else {
           setMessages((prev) => [
-            ...prev,
+            ...markResolvedTriage(prev),
             {
-              id: `asst_triage_complete_${Date.now()}`,
+              id: data.persistedFollowUpId || `asst_triage_complete_${Date.now()}`,
               role: "assistant",
               content: `🎉 **All transactions classified!** Every item in your ledger has been categorized and your budget spending caps are up to date.${warningNotice}`,
             },
@@ -1122,6 +1173,13 @@ export default function Home() {
             } else if (event === "persona_update" && data.persona) {
               setActivePersona(data.persona);
             } else if (event === "done") {
+              if (data.messageId && typeof data.messageId === "string") {
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantMsgId ? { ...m, id: data.messageId } : m
+                  )
+                );
+              }
               if (calledMutatingTool) {
                 void loadTransactions(activeScope);
                 void loadCategories();
@@ -1224,7 +1282,7 @@ export default function Home() {
     }
   };
 
-  const handleConfirmAction = async (cardData: ActionCardData) => {
+  const handleConfirmAction = async (cardData: ActionCardData, messageId?: string) => {
     setIsLoading(true);
     try {
       const res = await fetch("/api/agent", {
@@ -1232,17 +1290,43 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           actionToConfirm: cardData,
+          messageId,
+          threadId: activeThreadId || undefined,
         }),
       });
 
       const data = await res.json();
+      const resolvedReply =
+        data.reply ||
+        (cardData.action === "DISPATCH_PAYOUT"
+          ? "Payout executed successfully via PayPal Sandbox."
+          : "Invoices dispatched successfully via PayPal Sandbox.");
+      const nextResolvedStatus =
+        cardData.action === "DISPATCH_PAYOUT"
+          ? "transferred"
+          : cardData.action === "pay_invoice" ||
+            cardData.action === "split_invoice" ||
+            cardData.action === "dispute_invoice"
+          ? cardData.action
+          : "dispatched";
 
       setMessages((prev) => [
-        ...prev,
+        ...prev.map((m) =>
+          messageId && m.id === messageId && m.actionCard
+            ? {
+                ...m,
+                actionCard: {
+                  ...m.actionCard,
+                  resolvedStatus: nextResolvedStatus,
+                  resolvedMessage: resolvedReply,
+                },
+              }
+            : m
+        ),
         {
-          id: `asst_confirm_${Date.now()}`,
+          id: data.persistedMessageId || `asst_confirm_${Date.now()}`,
           role: "assistant",
-          content: data.reply || (cardData.action === "DISPATCH_PAYOUT" ? "Payout executed successfully via PayPal Sandbox." : "Invoices dispatched successfully via PayPal Sandbox."),
+          content: resolvedReply,
         },
       ]);
 
@@ -1283,12 +1367,55 @@ export default function Home() {
     }
   };
 
+  const handleActionCardResolved = (
+    messageId: string,
+    patch: Partial<ActionCardData>
+  ) => {
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageId && m.actionCard
+          ? {
+              ...m,
+              actionCard: {
+                ...m.actionCard,
+                ...patch,
+              },
+            }
+          : m
+      )
+    );
+    if (patch.resolvedStatus === "paid" || patch.resolvedStatus === "declined") {
+      void Promise.all([loadTransactions(activeScope), loadSplits(), loadEvents()]);
+    }
+  };
+
   const handleCancelAction = (messageId: string) => {
     setMessages((prev) =>
       prev.map((m) =>
-        m.id === messageId ? { ...m, actionCard: undefined } : m
+        m.id === messageId && m.actionCard
+          ? {
+              ...m,
+              actionCard: {
+                ...m.actionCard,
+                resolvedStatus: "cancelled",
+              },
+            }
+          : m
       )
     );
+
+    if (!messageId.startsWith("asst_") && !messageId.startsWith("err_")) {
+      void fetch("/api/chat/messages", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messageId,
+          actionCardPatch: {
+            resolvedStatus: "cancelled",
+          },
+        }),
+      }).catch(() => {});
+    }
   };
 
   return (
@@ -1437,12 +1564,14 @@ export default function Home() {
               messages={messages}
               isLoading={isLoading}
               categories={categories}
+              transactions={transactions}
               threads={threads}
               activeThreadId={activeThreadId}
               onSendMessage={handleSendMessage}
               onUploadReceipt={handleUploadReceipt}
               onConfirmAction={handleConfirmAction}
               onCancelAction={handleCancelAction}
+              onActionCardResolved={handleActionCardResolved}
               onAssignCategory={handleReclassifyTransaction}
               onRequestCreateCategory={requestCreateCategory}
               onNewChat={handleNewChat}

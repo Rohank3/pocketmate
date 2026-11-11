@@ -26,10 +26,15 @@ export interface InvoiceReviewCardData {
   senderEmail?: string;
   memo?: string;
   paypalInvoiceUrl?: string;
+  resolvedStatus?: string;
+  resolvedAction?: string;
+  resolvedReason?: string;
+  resolvedMessage?: string;
 }
 
 interface InvoiceReviewCardProps {
   cardData: InvoiceReviewCardData;
+  liveStatus?: string;
   onCancel?: () => void;
   onResolved?: (resolution: {
     action: "pay" | "decline";
@@ -39,6 +44,7 @@ interface InvoiceReviewCardProps {
 
 export const InvoiceReviewCard: React.FC<InvoiceReviewCardProps> = ({
   cardData,
+  liveStatus,
   onCancel,
   onResolved,
 }) => {
@@ -120,8 +126,38 @@ export const InvoiceReviewCard: React.FC<InvoiceReviewCardProps> = ({
     }
   };
 
-  if (resolvedStatus) {
-    const isPaid = resolvedStatus.action === "pay";
+  const persistedPaid =
+    cardData.resolvedStatus === "paid" ||
+    cardData.resolvedAction === "pay" ||
+    liveStatus === "paid";
+  const persistedDeclined =
+    cardData.resolvedStatus === "declined" ||
+    cardData.resolvedAction === "decline" ||
+    liveStatus === "cancelled";
+
+  const effectiveResolved =
+    resolvedStatus ||
+    (persistedPaid
+      ? {
+          action: "pay" as const,
+          amount: originalAmount,
+          message:
+            cardData.resolvedMessage ||
+            `Settled $${originalAmount.toFixed(2)} via PayPal${senderName ? ` to ${senderName}` : ""}.`,
+        }
+      : persistedDeclined
+      ? {
+          action: "decline" as const,
+          amount: originalAmount,
+          reason: cardData.resolvedReason,
+          message:
+            cardData.resolvedMessage ||
+            `Invoice declined${cardData.resolvedReason ? `: "${cardData.resolvedReason}"` : "."}`,
+        }
+      : null);
+
+  if (effectiveResolved) {
+    const isPaid = effectiveResolved.action === "pay";
 
     return (
       <div
@@ -141,20 +177,20 @@ export const InvoiceReviewCard: React.FC<InvoiceReviewCardProps> = ({
             <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--fg-primary)]">
               {isPaid ? "Invoice Paid" : "Invoice Declined"}
             </h4>
-            <p className="text-xs mt-0.5 text-[var(--fg-secondary)]">{resolvedStatus.message}</p>
+            <p className="text-xs mt-0.5 text-[var(--fg-secondary)]">{effectiveResolved.message}</p>
           </div>
         </div>
 
         {isPaid && defaultPaypalUrl && (
           <div className="mt-1 flex items-center justify-between text-[11px] theme-card-inset px-3 py-1.5 rounded-lg border">
-            <span className="text-[var(--fg-muted)]">Checkout:</span>
+            <span className="text-[var(--fg-muted)]">Invoice Ref:</span>
             <a
               href={defaultPaypalUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="text-[var(--accent-text)] hover:underline inline-flex items-center gap-1 font-mono transition-colors font-medium"
             >
-              <span>sandbox.paypal.com/invoice/...</span>
+              <span>{invoiceId || "View in PayPal"}</span>
               <ExternalLink className="w-3 h-3" />
             </a>
           </div>

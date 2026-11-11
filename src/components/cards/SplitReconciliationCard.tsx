@@ -198,14 +198,20 @@ export const SplitReconciliationCard: React.FC<SplitReconciliationCardProps> = (
     }
   };
 
-  if (completedMessage) {
+  const effectiveCompletedMessage =
+    completedMessage ||
+    (cardData.resolvedStatus === "rebalanced"
+      ? cardData.resolvedMessage || `Split rebalanced for ${merchantName}.`
+      : null);
+
+  if (effectiveCompletedMessage) {
     return (
       <div className="my-3 p-4 rounded-xl border border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-xs text-[var(--status-success-text)] flex items-center justify-between animate-in fade-in">
         <div className="flex items-center gap-2.5">
           <CheckCircle2 className="w-5 h-5 shrink-0" />
           <div>
             <h4 className="font-semibold">Split Rebalanced</h4>
-            <p className="text-[11px] opacity-90 mt-0.5">{completedMessage}</p>
+            <p className="text-[11px] opacity-90 mt-0.5">{effectiveCompletedMessage}</p>
           </div>
         </div>
       </div>

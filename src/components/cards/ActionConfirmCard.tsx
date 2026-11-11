@@ -59,20 +59,29 @@ export interface ActionCardData {
     reason?: string;
     status?: string;
   }>;
+  resolvedStatus?: string;
+  resolvedAction?: string;
+  resolvedMessage?: string;
+  resolvedCategory?: string;
+  resolvedReason?: string;
 }
 
 interface ActionConfirmCardProps {
   cardData: ActionCardData;
+  messageId?: string;
   categories?: Array<{ id?: string; name: string; color?: string }>;
-  onConfirm: (cardData: ActionCardData) => Promise<void>;
+  transactions?: Array<{ id: string; status: string; category: string }>;
+  onConfirm: (cardData: ActionCardData, messageId?: string) => Promise<void>;
   onCancel: () => void;
   onAssignCategory?: (
     transactionId: string,
     merchantName: string,
     targetCategory: string,
-    scope: "single" | "merchant" | "similar"
+    scope: "single" | "merchant" | "similar",
+    messageId?: string
   ) => Promise<{ success: boolean; message: string; warning?: string; updatedTransactionIds?: string[] }>;
   onRequestCreateCategory?: (initialName: string) => Promise<string | null>;
+  onActionCardResolved?: (messageId: string, patch: Partial<ActionCardData>) => void;
 }
 
 const TRANSFER_PURPOSES = [
@@ -88,11 +97,14 @@ const TRANSFER_PURPOSES = [
 
 export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
   cardData,
+  messageId,
   categories = [],
+  transactions = [],
   onConfirm,
   onCancel,
   onAssignCategory,
   onRequestCreateCategory,
+  onActionCardResolved,
 }) => {
   const [loading, setLoading] = useState(false);
   const [completed, setCompleted] = useState<string | false>(false);
@@ -113,10 +125,13 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
   const handleConfirm = async () => {
     setLoading(true);
     try {
-      await onConfirm({
-        ...cardData,
-        category: isPayout ? selectedCategory : cardData.category,
-      });
+      await onConfirm(
+        {
+          ...cardData,
+          category: isPayout ? selectedCategory : cardData.category,
+        },
+        messageId
+      );
       setCompleted(isPayout ? "transferred" : "dispatched");
     } catch (err) {
       console.error(err);
@@ -125,7 +140,7 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
     }
   };
 
-  if (isCancelled) {
+  if (isCancelled || cardData.resolvedStatus === "cancelled") {
     return (
       <div className="my-3 p-3.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)] text-xs text-[var(--fg-secondary)] flex items-center justify-between">
         <div className="flex items-center gap-2.5">
@@ -141,7 +156,7 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
     return (
       <InteractiveSplitCard
         cardData={cardData}
-        onConfirm={onConfirm}
+        onConfirm={(data) => onConfirm(data, messageId)}
         onCancel={handleCancel}
       />
     );
@@ -162,11 +177,28 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
             (categories.length > 0 ? categories[0].name : "Uncategorized"),
           confidence: cardData.confidence,
           reasoning: cardData.reasoning || cardData.note,
+          resolvedStatus: cardData.resolvedStatus,
+          resolvedCategory: cardData.resolvedCategory,
+          resolvedMessage: cardData.resolvedMessage,
         }}
         categories={categories}
-        onAssignCategory={onAssignCategory}
+        onAssignCategory={
+          onAssignCategory
+            ? (txId, merchantName, targetCat, scope) =>
+                onAssignCategory(txId, merchantName, targetCat, scope, messageId)
+            : undefined
+        }
         onRequestCreateCategory={onRequestCreateCategory}
         onCancel={handleCancel}
+        onResolved={(resolvedCategory, resolvedMessage) => {
+          if (messageId) {
+            onActionCardResolved?.(messageId, {
+              resolvedStatus: "categorized",
+              resolvedCategory,
+              resolvedMessage,
+            });
+          }
+        }}
       />
     );
   }
@@ -177,13 +209,25 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
       <DisputeResolutionCard
         cardData={cardData}
         onAccept={async (data) => {
-          await onConfirm({ ...data, action: "ACCEPT_DISPUTE" });
+          await onConfirm({ ...data, action: "ACCEPT_DISPUTE" }, messageId);
+          if (messageId) {
+            onActionCardResolved?.(messageId, {
+              resolvedStatus: "accepted",
+              resolvedMessage: "Accepted adjusted payment.",
+            });
+          }
         }}
         onRequestDifference={async (data) => {
-          await onConfirm({ ...data, action: "REQUEST_DIFFERENCE" });
+          await onConfirm({ ...data, action: "REQUEST_DIFFERENCE" }, messageId);
+          if (messageId) {
+            onActionCardResolved?.(messageId, {
+              resolvedStatus: "requested_difference",
+              resolvedMessage: "Dispatched supplemental invoice.",
+            });
+          }
         }}
         onReinvokeSplit={async (data) => {
-          await onConfirm({ ...data, action: "REINVOKE_SPLIT" });
+          await onConfirm({ ...data, action: "REINVOKE_SPLIT" }, messageId);
         }}
         onCancel={handleCancel}
       />
@@ -195,28 +239,45 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
     return (
       <SplitReconciliationCard
         cardData={cardData}
-        onConfirm={onConfirm}
+        onConfirm={async (data) => {
+          await onConfirm(data, messageId);
+          if (messageId) {
+            onActionCardResolved?.(messageId, {
+              resolvedStatus: "rebalanced",
+              resolvedMessage: "Split rebalanced and invoices updated.",
+            });
+          }
+        }}
         onCancel={handleCancel}
       />
     );
   }
 
-  if (completed) {
+  const effectiveCompleted = completed || cardData.resolvedStatus || false;
+  if (effectiveCompleted) {
     let successTitle = "Action Executed Successfully";
-    let successDesc = `Completed action via PayPal Sandbox.`;
+    let successDesc = cardData.resolvedMessage || `Completed action via PayPal Sandbox.`;
 
-    if (completed === "transferred" || completed === "pay_invoice") {
+    if (effectiveCompleted === "transferred" || effectiveCompleted === "pay_invoice") {
       successTitle = "PayPal Payment Settled";
-      successDesc = `$${totalAmount.toFixed(2)} settled via PayPal Sandbox Wallet.`;
-    } else if (completed === "split_invoice") {
+      if (!cardData.resolvedMessage) {
+        successDesc = `$${totalAmount.toFixed(2)} settled via PayPal Sandbox Wallet.`;
+      }
+    } else if (effectiveCompleted === "split_invoice") {
       successTitle = "Split Prepared";
-      successDesc = `Ready to divide invoice across group participants.`;
-    } else if (completed === "dispute_invoice") {
+      if (!cardData.resolvedMessage) {
+        successDesc = `Ready to divide invoice across group participants.`;
+      }
+    } else if (effectiveCompleted === "dispute_invoice") {
       successTitle = "Dispute Initiated";
-      successDesc = `Invoice flagged under PayPal Buyer Protection.`;
-    } else if (completed === "dispatched") {
+      if (!cardData.resolvedMessage) {
+        successDesc = `Invoice flagged under PayPal Buyer Protection.`;
+      }
+    } else if (effectiveCompleted === "dispatched") {
       successTitle = "PayPal Invoices Dispatched";
-      successDesc = `${cardData.totalRecipients || 1} invoice(s) sent via PayPal Sandbox.`;
+      if (!cardData.resolvedMessage) {
+        successDesc = `${cardData.totalRecipients || cardData.recipients?.length || 1} invoice(s) sent via PayPal Sandbox.`;
+      }
     }
 
     return (
@@ -232,6 +293,10 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
 
   // Incoming Invoice Review Card Layout (2 Options: Pay in Full, Decline)
   if (isInvoiceReview || cardData.action === "REVIEW_INCOMING_INVOICE") {
+    const liveTx = cardData.invoiceId
+      ? transactions.find((t) => t.id === cardData.invoiceId)
+      : undefined;
+
     return (
       <InvoiceReviewCard
         cardData={{
@@ -248,8 +313,22 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
           senderEmail: cardData.senderEmail,
           memo: cardData.memo || cardData.note,
           paypalInvoiceUrl: cardData.paypalInvoiceUrl,
+          resolvedStatus: cardData.resolvedStatus,
+          resolvedAction: cardData.resolvedAction,
+          resolvedReason: cardData.resolvedReason,
+          resolvedMessage: cardData.resolvedMessage,
         }}
+        liveStatus={liveTx?.status}
         onCancel={handleCancel}
+        onResolved={({ action, reason }) => {
+          if (messageId) {
+            onActionCardResolved?.(messageId, {
+              resolvedStatus: action === "pay" ? "paid" : "declined",
+              resolvedAction: action,
+              resolvedReason: reason,
+            });
+          }
+        }}
       />
     );
   }

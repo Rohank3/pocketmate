@@ -21,6 +21,8 @@ export interface DisputeResolutionCardData {
   difference?: number;
   reason?: string;
   status?: "adjusted" | "declined" | string;
+  resolvedStatus?: string;
+  resolvedMessage?: string;
 }
 
 interface DisputeResolutionCardProps {
@@ -104,16 +106,22 @@ export const DisputeResolutionCard: React.FC<DisputeResolutionCardProps> = ({
     }
   };
 
-  if (isDismissed) {
+  if (isDismissed || cardData.resolvedStatus === "dismissed") {
     return null;
   }
 
-  if (resultMessage) {
+  const effectiveResultMessage =
+    resultMessage ||
+    (cardData.resolvedStatus && cardData.resolvedStatus !== "cancelled"
+      ? cardData.resolvedMessage || "Resolution recorded."
+      : null);
+
+  if (effectiveResultMessage) {
     return (
       <div className="my-3 p-3.5 rounded-xl border border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-xs text-[var(--status-success-text)] flex items-center justify-between animate-in fade-in">
         <div className="flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
-          <span className="font-semibold">{resultMessage}</span>
+          <span className="font-semibold">{effectiveResultMessage}</span>
         </div>
         <button
           type="button"

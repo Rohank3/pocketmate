@@ -37,17 +37,20 @@ interface ChatPanelProps {
   messages: ChatMessageItem[];
   isLoading: boolean;
   categories?: Array<{ id?: string; name: string; color?: string }>;
+  transactions?: Array<{ id: string; status: string; category: string }>;
   threads?: ChatThreadItem[];
   activeThreadId?: string | null;
   onSendMessage: (text: string) => void;
   onUploadReceipt: (file: File) => void;
-  onConfirmAction: (cardData: ActionCardData) => Promise<void>;
+  onConfirmAction: (cardData: ActionCardData, messageId?: string) => Promise<void>;
   onCancelAction?: (messageId: string) => void;
+  onActionCardResolved?: (messageId: string, patch: Partial<ActionCardData>) => void;
   onAssignCategory?: (
     transactionId: string,
     merchantName: string,
     targetCategory: string,
-    scope: "single" | "merchant" | "similar"
+    scope: "single" | "merchant" | "similar",
+    messageId?: string
   ) => Promise<{ success: boolean; message: string; warning?: string; updatedTransactionIds?: string[] }>;
   onRequestCreateCategory?: (initialName: string) => Promise<string | null>;
   onNewChat?: () => void;
@@ -60,12 +63,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   messages,
   isLoading,
   categories = [],
+  transactions = [],
   threads = [],
   activeThreadId = null,
   onSendMessage,
   onUploadReceipt,
   onConfirmAction,
   onCancelAction,
+  onActionCardResolved,
   onAssignCategory,
   onRequestCreateCategory,
   onNewChat,
@@ -607,11 +612,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               {m.actionCard && (
                 <ActionConfirmCard
                   cardData={m.actionCard}
+                  messageId={m.id}
                   categories={categories}
+                  transactions={transactions}
                   onConfirm={onConfirmAction}
                   onCancel={() => onCancelAction?.(m.id)}
                   onAssignCategory={onAssignCategory}
                   onRequestCreateCategory={onRequestCreateCategory}
+                  onActionCardResolved={onActionCardResolved}
                 />
               )}
             </ElasticChatBubble>

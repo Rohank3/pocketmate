@@ -216,15 +216,19 @@ export const InteractiveSplitCard: React.FC<InteractiveSplitCardProps> = ({
     }
   };
 
-  if (completed) {
-    const nonHostCount = participants.filter((p) => !p.isHost).length;
+  if (completed || cardData.resolvedStatus === "dispatched") {
+    const nonHostCount =
+      cardData.totalRecipients ??
+      (Array.isArray(cardData.recipients) && cardData.recipients.length > 0
+        ? cardData.recipients.length
+        : participants.filter((p) => !p.isHost).length);
     return (
       <div className="my-3 p-4 rounded-xl border flex items-center gap-3 bg-[var(--status-success-bg)] border-[var(--status-success-border)] text-[var(--status-success-text)]">
         <CheckCircle2 className="w-5 h-5 shrink-0" />
         <div className="text-sm">
           <p className="font-bold">Invoices Sent</p>
           <p className="text-xs opacity-90">
-            {nonHostCount} invoice(s) sent for {merchantName}.
+            {cardData.resolvedMessage || `${nonHostCount} invoice(s) sent for ${merchantName}.`}
           </p>
         </div>
       </div>

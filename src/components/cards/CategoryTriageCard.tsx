@@ -13,6 +13,9 @@ export interface CategoryTriageCardData {
   confidence?: number;
   reasoning?: string;
   similarCount?: number;
+  resolvedStatus?: string;
+  resolvedCategory?: string;
+  resolvedMessage?: string;
 }
 
 interface CategoryTriageCardProps {
@@ -26,6 +29,7 @@ interface CategoryTriageCardProps {
   ) => Promise<{ success: boolean; message: string; warning?: string; updatedTransactionIds?: string[] }>;
   onRequestCreateCategory?: (initialName: string) => Promise<string | null>;
   onCancel?: () => void;
+  onResolved?: (category: string, message: string) => void;
 }
 
 export const CategoryTriageCard: React.FC<CategoryTriageCardProps> = ({
@@ -34,6 +38,7 @@ export const CategoryTriageCard: React.FC<CategoryTriageCardProps> = ({
   onAssignCategory,
   onRequestCreateCategory,
   onCancel,
+  onResolved,
 }) => {
   const [loadingScope, setLoadingScope] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -91,7 +96,9 @@ export const CategoryTriageCard: React.FC<CategoryTriageCardProps> = ({
       if (res.warning) {
         setWarningMessage(res.warning);
       }
-      setSuccessMessage(res.message || `Categorized as '${effectiveCategory}'.`);
+      const msg = res.message || `Categorized as '${effectiveCategory}'.`;
+      setSuccessMessage(msg);
+      onResolved?.(effectiveCategory, msg);
     } catch (err) {
       console.error("[Category Triage Error]", err);
     } finally {
@@ -99,12 +106,19 @@ export const CategoryTriageCard: React.FC<CategoryTriageCardProps> = ({
     }
   };
 
-  if (successMessage) {
+  const effectiveSuccessMessage =
+    successMessage ||
+    (cardData.resolvedStatus === "categorized"
+      ? cardData.resolvedMessage ||
+        `Categorized ${cardData.merchantName} as '${cardData.resolvedCategory || targetCategory}'.`
+      : null);
+
+  if (effectiveSuccessMessage) {
     return (
       <div className="my-2 p-3.5 rounded-xl border flex flex-col gap-1.5 bg-[var(--status-success-bg)] border-[var(--status-success-border)] text-[var(--status-success-text)] text-xs">
         <div className="flex items-center gap-2.5">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
-          <span className="font-semibold">{successMessage}</span>
+          <span className="font-semibold">{effectiveSuccessMessage}</span>
         </div>
         {warningMessage && (
           <p className="text-[11px] opacity-85 pl-6">{warningMessage}</p>
