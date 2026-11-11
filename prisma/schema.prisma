@@ -100,14 +100,16 @@ model BudgetEntry {
 }
 
 model SplitRecord {
-  id           String        @id @default(cuid())
-  userId       String
-  totalAmount  Float
-  status       SplitStatus   @default(PENDING_CONFIRMATION)
-  description  String
-  itemsJson    Json?         // breakdown details
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id                  String        @id @default(cuid())
+  userId              String
+  totalAmount         Float
+  status              SplitStatus   @default(PENDING_CONFIRMATION)
+  description         String
+  category            String?
+  sourceTransactionId String?
+  itemsJson           Json?         // breakdown details
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
 
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   items        SplitItem[]

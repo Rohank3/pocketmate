@@ -672,3 +672,265 @@ export async function reinitializeCategory(
     overridesReset: delOverrides.count,
   };
 }
+
+/**
+ * Resolves the budget category of a split's source transaction so newly created
+ * split invoices inherit the originating expense's category rather than "Uncategorized".
+ */
+export async function resolveSourceCategoryForSplit(params: {
+  userId: string;
+  explicitCategory?: string | null;
+  sourceTransactionId?: string | null;
+  merchantName?: string | null;
+  description?: string | null;
+}): Promise<{ category: string | null; sourceTransactionId?: string }> {
+  const { userId, explicitCategory, sourceTransactionId, merchantName, description } = params;
+
+  const cleanExplicit = explicitCategory?.trim();
+  if (cleanExplicit && cleanExplicit.toLowerCase() !== "uncategorized") {
+    return {
+      category: cleanExplicit,
+      ...(sourceTransactionId?.trim() ? { sourceTransactionId: sourceTransactionId.trim() } : {}),
+    };
+  }
+
+  let effectiveTxId = sourceTransactionId?.trim() || undefined;
+  let effectiveMerchant = merchantName?.trim() || "";
+  let effectiveAmount = 0;
+
+  if (effectiveTxId) {
+    const directOverride = await prisma.transactionCategoryOverride.findUnique({
+      where: {
+        userId_transactionId: { userId, transactionId: effectiveTxId },
+      },
+      select: { categoryName: true },
+    });
+    if (
+      directOverride?.categoryName &&
+      directOverride.categoryName.toLowerCase() !== "uncategorized"
+    ) {
+      return { category: directOverride.categoryName, sourceTransactionId: effectiveTxId };
+    }
+
+    const ledgerRow = await prisma.ledgerTransaction.findUnique({
+      where: {
+        userId_paypalId: { userId, paypalId: effectiveTxId },
+      },
+      select: { merchantName: true, amount: true },
+    });
+    if (ledgerRow) {
+      if (!effectiveMerchant) effectiveMerchant = ledgerRow.merchantName;
+      effectiveAmount = ledgerRow.amount;
+    }
+  }
+
+  // Fallback: locate matching ledger transaction by merchantName when sourceTransactionId was omitted
+  if (!effectiveTxId && (effectiveMerchant || description)) {
+    const searchTerm = effectiveMerchant || description || "";
+    const normalizedSearch = normalizeMerchant(searchTerm);
+    const candidates = await prisma.ledgerTransaction.findMany({
+      where: {
+        userId,
+        isOutgoingSplit: false,
+        status: { not: "CANCELLED" },
+      },
+      orderBy: { timestamp: "desc" },
+      take: 40,
+      select: { paypalId: true, merchantName: true, amount: true, memo: true },
+    });
+
+    const matchedTx = candidates.find((c) => {
+      const cNorm = normalizeMerchant(c.merchantName);
+      return (
+        Boolean(normalizedSearch) &&
+        (cNorm === normalizedSearch ||
+          cNorm.includes(normalizedSearch) ||
+          normalizedSearch.includes(cNorm))
+      );
+    });
+
+    if (matchedTx) {
+      effectiveTxId = matchedTx.paypalId;
+      if (!effectiveMerchant) effectiveMerchant = matchedTx.merchantName;
+      effectiveAmount = matchedTx.amount;
+
+      const matchedOverride = await prisma.transactionCategoryOverride.findUnique({
+        where: {
+          userId_transactionId: { userId, transactionId: matchedTx.paypalId },
+        },
+        select: { categoryName: true },
+      });
+      if (
+        matchedOverride?.categoryName &&
+        matchedOverride.categoryName.toLowerCase() !== "uncategorized"
+      ) {
+        return { category: matchedOverride.categoryName, sourceTransactionId: effectiveTxId };
+      }
+    }
+  }
+
+  if (effectiveMerchant) {
+    const context = await loadUserCategorizationContext(userId);
+    const norm = normalizeMerchant(effectiveMerchant);
+    const matchedRule = context.merchantRules?.find((r) => {
+      const pat = r.merchantPattern.toLowerCase();
+      return norm === pat || norm.includes(pat) || pat.includes(norm);
+    });
+    if (matchedRule && matchedRule.categoryName.toLowerCase() !== "uncategorized") {
+      return {
+        category: matchedRule.categoryName,
+        ...(effectiveTxId ? { sourceTransactionId: effectiveTxId } : {}),
+      };
+    }
+
+    const batch = await categorizeTransactionsBatch(
+      [
+        {
+          id: effectiveTxId || "split_source_lookup",
+          merchantName: effectiveMerchant,
+          amount: effectiveAmount,
+          note: description || undefined,
+        },
+      ],
+      context
+    );
+    const inferred = batch.get(effectiveTxId || "split_source_lookup");
+    if (inferred?.category && inferred.category.toLowerCase() !== "uncategorized") {
+      return {
+        category: inferred.category,
+        ...(effectiveTxId ? { sourceTransactionId: effectiveTxId } : {}),
+      };
+    }
+  }
+
+  return {
+    category: null,
+    ...(effectiveTxId ? { sourceTransactionId: effectiveTxId } : {}),
+  };
+}
+
+/**
+ * Persists inherited `TransactionCategoryOverride` records for dispatched/re-asked
+ * split PayPal invoice IDs on the organizer's ledger (and registered recipients if
+ * they have a matching category in their budget).
+ */
+export async function inheritCategoryForSplitInvoices(params: {
+  organizerUserId: string;
+  categoryName?: string | null;
+  invoiceIds: string[];
+  participantEmails?: string[];
+  previousInvoiceId?: string | null;
+}): Promise<void> {
+  const {
+    organizerUserId,
+    categoryName,
+    invoiceIds,
+    participantEmails = [],
+    previousInvoiceId,
+  } = params;
+
+  const cleanInvoiceIds = invoiceIds.map((id) => id.trim()).filter(Boolean);
+  if (cleanInvoiceIds.length === 0) return;
+
+  let organizerCategory = categoryName?.trim() || "";
+  if (previousInvoiceId?.trim()) {
+    const prevOverride = await prisma.transactionCategoryOverride.findUnique({
+      where: {
+        userId_transactionId: {
+          userId: organizerUserId,
+          transactionId: previousInvoiceId.trim(),
+        },
+      },
+      select: { categoryName: true },
+    });
+    if (
+      prevOverride?.categoryName &&
+      prevOverride.categoryName.toLowerCase() !== "uncategorized"
+    ) {
+      organizerCategory = prevOverride.categoryName;
+    }
+  }
+
+  if (organizerCategory && organizerCategory.toLowerCase() !== "uncategorized") {
+    for (const invId of cleanInvoiceIds) {
+      await prisma.transactionCategoryOverride.upsert({
+        where: {
+          userId_transactionId: {
+            userId: organizerUserId,
+            transactionId: invId,
+          },
+        },
+        update: { categoryName: organizerCategory },
+        create: {
+          userId: organizerUserId,
+          transactionId: invId,
+          categoryName: organizerCategory,
+        },
+      });
+    }
+  }
+
+  const cleanEmails = Array.from(
+    new Set(participantEmails.map((e) => e.toLowerCase().trim()).filter((e) => e.includes("@")))
+  );
+  if (cleanEmails.length === 0) return;
+
+  const recipientUsers = await prisma.user.findMany({
+    where: { email: { in: cleanEmails } },
+    select: {
+      id: true,
+      email: true,
+      budgetCategories: { select: { name: true } },
+    },
+  });
+
+  for (const recUser of recipientUsers) {
+    let recCategory: string | null = null;
+
+    if (previousInvoiceId?.trim()) {
+      const prevRecOverride = await prisma.transactionCategoryOverride.findUnique({
+        where: {
+          userId_transactionId: {
+            userId: recUser.id,
+            transactionId: previousInvoiceId.trim(),
+          },
+        },
+        select: { categoryName: true },
+      });
+      if (
+        prevRecOverride?.categoryName &&
+        prevRecOverride.categoryName.toLowerCase() !== "uncategorized"
+      ) {
+        recCategory = prevRecOverride.categoryName;
+      }
+    }
+
+    if (!recCategory && organizerCategory && organizerCategory.toLowerCase() !== "uncategorized") {
+      const matchedBudgetCat = recUser.budgetCategories.find(
+        (bc) => bc.name.toLowerCase() === organizerCategory.toLowerCase()
+      );
+      if (matchedBudgetCat) {
+        recCategory = matchedBudgetCat.name;
+      }
+    }
+
+    if (!recCategory) continue;
+
+    for (const invId of cleanInvoiceIds) {
+      await prisma.transactionCategoryOverride.upsert({
+        where: {
+          userId_transactionId: {
+            userId: recUser.id,
+            transactionId: invId,
+          },
+        },
+        update: { categoryName: recCategory },
+        create: {
+          userId: recUser.id,
+          transactionId: invId,
+          categoryName: recCategory,
+        },
+      });
+    }
+  }
+}
