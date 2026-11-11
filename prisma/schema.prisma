@@ -49,6 +49,7 @@ model User {
   lastSyncedAt            DateTime?
   lastTransactionAt       DateTime?
   lastTransactionId       String?
+  paypalOAuthId           String?
   paypalMerchantId        String?
   paypalOnboardingStatus  String?
   paypalPartnerTrackingId String?
@@ -64,6 +65,8 @@ model User {
   merchantRules       MerchantCategoryRule[]
   categoryOverrides   TransactionCategoryOverride[]
   ledgerTransactions  LedgerTransaction[]
+
+  @@index([paypalOAuthId])
 }
 
 model BudgetCategory {
