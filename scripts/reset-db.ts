@@ -45,20 +45,20 @@ async function main() {
   });
   console.log(`• Reset ${updatedCategories.count} budget categories to $0.00 spent.`);
 
-  // 3. Ensure Dave Chen sandbox user exists with pristine baseline categories
-  const daveEmail = "dave.chen.pm@personal.example.com";
+  // 3. Ensure primary Ethan Carter sandbox user exists with pristine baseline categories
+  const primaryEmail = "ethan.carter.pm@business.example.com";
   const user = await prisma.user.upsert({
-    where: { email: daveEmail },
+    where: { email: primaryEmail },
     update: {
-      name: "Dave Chen",
+      name: "Ethan Carter",
       persona: "GENERAL",
       lastSyncedAt: null,
       lastTransactionAt: null,
       lastTransactionId: null,
     },
     create: {
-      email: daveEmail,
-      name: "Dave Chen",
+      email: primaryEmail,
+      name: "Ethan Carter",
       persona: "GENERAL",
     },
   });
