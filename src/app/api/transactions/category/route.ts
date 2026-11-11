@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getAuthenticatedUser, getUserIdFromRequest } from "@/lib/auth/session";
+import { getAuthenticatedUser } from "@/lib/auth/session";
 import { normalizeMerchant } from "@/lib/services/categorizer";
 import { z } from "zod";
 
@@ -14,10 +14,10 @@ const UpdateCategoryPayloadSchema = z.object({
 export async function POST(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
-    const userId = authUser ? authUser.id : await getUserIdFromRequest(req);
+    const userId = authUser?.id;
 
     if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "Unauthorized: Active PayPal session required." }, { status: 401 });
     }
 
     const rawBody = await req.json();

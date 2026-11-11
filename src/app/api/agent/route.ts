@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runAgentOrchestrator } from "@/lib/agent/orchestrator";
 import { executeAgentTool } from "@/lib/agent/tools";
-import { getAuthenticatedUser, getUserIdFromRequest } from "@/lib/auth/session";
+import { getAuthenticatedUser } from "@/lib/auth/session";
 import { z } from "zod";
 
 const ActionToConfirmSchema = z.discriminatedUnion("action", [
@@ -101,17 +101,16 @@ export async function POST(req: NextRequest) {
 
     const { messages, persona, actionToConfirm } = parseResult.data;
     const authenticatedUser = await getAuthenticatedUser(req);
-    const userId = (authenticatedUser ? authenticatedUser.id : await getUserIdFromRequest(req)) ?? undefined;
+    if (!authenticatedUser) {
+      return NextResponse.json(
+        { error: "Unauthorized: Active PayPal session required." },
+        { status: 401 }
+      );
+    }
+    const userId = authenticatedUser.id;
 
     // Handle single-tap confirmation of an action card (Layer D)
     if (actionToConfirm && (actionToConfirm.action === "DISPATCH_INVOICES" || actionToConfirm.action === "PROPOSE_SPLIT_BREAKDOWN")) {
-      if (!authenticatedUser) {
-        return NextResponse.json(
-          { error: "Unauthorized: Active authenticated session required to dispatch invoices." },
-          { status: 401 }
-        );
-      }
-
       const dispatchResult = await executeAgentTool(
         "dispatch_paypal_invoices",
         {
@@ -130,13 +129,6 @@ export async function POST(req: NextRequest) {
     }
 
     if (actionToConfirm && actionToConfirm.action === "DISPATCH_PAYOUT") {
-      if (!authenticatedUser && process.env.PAYPAL_ENVIRONMENT === "live") {
-        return NextResponse.json(
-          { error: "Unauthorized: Active authenticated session required to dispatch live payouts." },
-          { status: 401 }
-        );
-      }
-
       const recipientEmail = actionToConfirm.recipientEmail || actionToConfirm.recipients?.[0]?.email;
       const amount = actionToConfirm.amount || actionToConfirm.totalAmount;
       const note = actionToConfirm.note || actionToConfirm.recipients?.[0]?.description || "Direct Settlement via PocketMate";

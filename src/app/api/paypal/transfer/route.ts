@@ -45,12 +45,18 @@ export async function POST(req: NextRequest) {
 
     const { recipientEmail, amount, note, category, currency } = parseResult.data;
 
-    const result = await paypalClient.sendPayout({
-      recipientEmail,
-      amount,
-      note: note || "Direct P2P Settlement via PocketMate",
-      currency,
-    });
+    const result = await paypalClient.sendPayout(
+      {
+        recipientEmail,
+        amount,
+        note: note || "Direct P2P Settlement",
+        currency,
+      },
+      {
+        name: user.name || user.email.split("@")[0].replace(/[._]/g, " "),
+        email: user.email,
+      }
+    );
 
     if (category && user.id) {
       try {
@@ -77,7 +83,7 @@ export async function POST(req: NextRequest) {
       success: true,
       message: `Dispatched PayPal Sandbox payout of $${amount.toFixed(2)} to ${recipientEmail}${category ? ` [${category}]` : ""}`,
       payout: result,
-      category: category || "Personal Reimbursement",
+      category: category || null,
     });
   } catch (error: unknown) {
     console.error("[PayPal Transfer API Error]", error);

@@ -97,10 +97,16 @@ export async function POST(req: NextRequest) {
 
     // ACTION 2: Request Remaining Difference
     if (action === "request_difference") {
-      const diffToCharge = differenceAmount || item?.amount || 20;
-      const targetEmail = item?.participantEmail || "mark.spencer.pm@personal.example.com";
-      const targetName = item?.participantName || "Mark Spencer";
-      const desc = note || `Supplemental balance for ${item?.splitRecord.description || "Shared Split"}`;
+      if (!item?.participantEmail) {
+        return NextResponse.json(
+          { error: "Participant email is required to dispatch a supplemental invoice." },
+          { status: 400 }
+        );
+      }
+      const diffToCharge = differenceAmount || item.amount;
+      const targetEmail = item.participantEmail;
+      const targetName = item.participantName || targetEmail.split("@")[0].replace(/[._]/g, " ");
+      const desc = note || `Supplemental balance for ${item.splitRecord.description}`;
 
       const senderInfo = authUser?.email
         ? {

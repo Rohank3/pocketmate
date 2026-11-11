@@ -1,63 +1,48 @@
 import { NextRequest, NextResponse } from "next/server";
-import { paypalClient } from "@/lib/paypal/client";
-import { verifySessionCookie } from "@/lib/auth/session";
-import { prisma } from "@/lib/db";
+import { getAuthenticatedUser } from "@/lib/auth/session";
+import { getUserLedgerTransactions, syncUserPayPalLedger } from "@/lib/paypal/sync";
 import { reconcileAutopaySubscriptions } from "@/lib/services/autopayReconciliation";
 import { loadUserCategorizationContext, categorizeTransactionsBatch } from "@/lib/services/categorizer";
 
-let lastSeedTimestamp = 0;
+let lastSyncTimestamp = 0;
 
 export async function POST(req: NextRequest) {
   try {
-    if (process.env.PAYPAL_ENVIRONMENT === "live") {
+    const authUser = await getAuthenticatedUser(req);
+    if (!authUser) {
       return NextResponse.json(
-        { error: "Sandbox seeding is disabled in production live environment." },
-        { status: 403 }
+        { error: "Unauthorized: Active PayPal session required." },
+        { status: 401 }
       );
     }
 
     const now = Date.now();
-    if (now - lastSeedTimestamp < 10000) {
+    if (now - lastSyncTimestamp < 5000) {
       return NextResponse.json(
-        { error: "Please wait 10 seconds before reseeding sandbox data." },
+        { error: "Please wait a few seconds before resyncing PayPal data." },
         { status: 429 }
       );
     }
-    lastSeedTimestamp = now;
+    lastSyncTimestamp = now;
 
-    const userCookie = req.cookies.get("pocketmate_user")?.value;
-    const verified = verifySessionCookie(userCookie);
-    const userEmail = verified?.email;
+    // Run incremental sync from the user's private checkpoint (or full backfill on first sync)
+    await syncUserPayPalLedger(authUser.id, authUser.email);
+    await reconcileAutopaySubscriptions(authUser.id, authUser.email);
 
-    const rawTxs = userEmail
-      ? await paypalClient.syncUserTransactions(userEmail)
-      : await paypalClient.fetchRecentTransactions(720);
+    const rawTxs = await getUserLedgerTransactions(authUser.id, authUser.email, { sync: false });
+    const catContext = await loadUserCategorizationContext(authUser.id);
+    const categoryMap = await categorizeTransactionsBatch(
+      rawTxs.map((t) => ({ id: t.id, merchantName: t.merchantName, amount: t.amount, note: t.memo })),
+      catContext
+    );
 
-    // Reconcile and auto-detect recurring bills from fresh transaction activity
-    const user = userEmail ? await prisma.user.findUnique({ where: { email: userEmail } }) : null;
-    if (user && userEmail) {
-      await reconcileAutopaySubscriptions(user.id, userEmail);
-    }
-
-    let categoryMap = new Map<string, { category: string }>();
-    if (user) {
-      try {
-        const catContext = await loadUserCategorizationContext(user.id);
-        categoryMap = await categorizeTransactionsBatch(
-          rawTxs.map((t) => ({ id: t.id, merchantName: t.merchantName, amount: t.amount })),
-          catContext
-        );
-      } catch (err) {
-        console.warn("[PayPal Seed Categorizer Warning]", err);
-      }
-    }
-
-    // Map to TransactionRow format expected by the frontend
     const formatted = rawTxs.map((t) => {
       const dateObj = new Date(t.timestamp);
       const isToday = new Date().toDateString() === dateObj.toDateString();
       const timeStr = dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-      const displayDate = isToday ? `Today, ${timeStr}` : `${dateObj.toLocaleDateString([], { month: "short", day: "numeric" })}, ${timeStr}`;
+      const displayDate = isToday
+        ? `Today, ${timeStr}`
+        : `${dateObj.toLocaleDateString([], { month: "short", day: "numeric" })}, ${timeStr}`;
 
       const catEntry = categoryMap.get(t.id);
       const category = catEntry?.category || "Uncategorized";
@@ -65,27 +50,31 @@ export async function POST(req: NextRequest) {
       let rowStatus: "settled" | "pending" | "disputed" | "unresolved" = "pending";
       if (t.status === "COMPLETED") rowStatus = "settled";
       else if (t.status === "PENDING" || t.status === "DRAFT") rowStatus = "pending";
+      else if (t.status === "DISPUTED") rowStatus = "disputed";
 
       return {
         id: t.id,
         date: displayDate,
         merchant: t.merchantName,
+        memo: t.memo,
         category,
-        debtor_name: t.debtorName || "Self",
+        debtor_name: t.debtorName || "",
         amount: t.amount,
         status: rowStatus,
+        direction: t.direction,
+        isOutgoingSplit: t.isOutgoingSplit,
       };
     });
 
     return NextResponse.json({
       success: true,
-      message: "Successfully synchronized live PayPal Sandbox transactions.",
+      message: "Synchronized your PayPal transactions.",
       transactions: formatted,
     });
   } catch (error) {
-    console.error("[PayPal Seed Error]", error);
+    console.error("[PayPal Sync Error]", error);
     return NextResponse.json(
-      { success: false, error: "Failed to seed PayPal sandbox transactions" },
+      { success: false, error: "Failed to synchronize PayPal transactions" },
       { status: 500 }
     );
   }

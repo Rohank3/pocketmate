@@ -64,8 +64,16 @@ export async function POST(req: NextRequest) {
     }
 
     const { messages, persona, threadId } = parseResult.data;
-    const rawUserId = await getUserIdFromRequest(req);
-    const userId = rawUserId ?? undefined;
+    const userId = await getUserIdFromRequest(req);
+    if (!userId) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized: Active PayPal session required." }),
+        {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
 
     const apiKeys = getGeminiApiKeys();
     const encoder = new TextEncoder();

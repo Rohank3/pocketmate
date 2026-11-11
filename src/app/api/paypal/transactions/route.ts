@@ -1,161 +1,97 @@
 import { NextRequest, NextResponse } from "next/server";
 import { paypalClient } from "@/lib/paypal/client";
-import { verifySessionCookie } from "@/lib/auth/session";
+import { getUserLedgerTransactions } from "@/lib/paypal/sync";
+import { getAuthenticatedUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { loadUserCategorizationContext, categorizeTransactionsBatch } from "@/lib/services/categorizer";
 import type { TransactionRow } from "@/components/grid/TransactionGrid";
 import { z } from "zod";
 
 const TransactionsQuerySchema = z.object({
-  hoursBack: z.coerce.number().finite().min(0.5).max(720).default(720),
+  hoursBack: z.coerce.number().finite().min(0.5).max(26280).optional(),
   scope: z.enum(["personal", "all"]).optional(),
+  sync: z.enum(["true", "false"]).optional(),
 });
+
+function formatDisplayDate(timestamp: string): string {
+  const dateObj = new Date(timestamp);
+  const isToday = new Date().toDateString() === dateObj.toDateString();
+  const timeStr = dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return isToday
+    ? `Today, ${timeStr}`
+    : `${dateObj.toLocaleDateString([], { month: "short", day: "numeric" })}, ${timeStr}`;
+}
 
 export async function GET(req: NextRequest) {
   try {
+    const authUser = await getAuthenticatedUser(req);
+    if (!authUser) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized: Active PayPal session required.", transactions: [] },
+        { status: 401 }
+      );
+    }
+
     const rawHours = req.nextUrl.searchParams.get("hoursBack");
     const rawScope = req.nextUrl.searchParams.get("scope");
+    const rawSync = req.nextUrl.searchParams.get("sync");
 
     const queryParse = TransactionsQuerySchema.safeParse({
       hoursBack: rawHours ?? undefined,
       scope: rawScope ?? undefined,
+      sync: rawSync ?? undefined,
     });
 
-    const hoursBack = queryParse.success ? queryParse.data.hoursBack : 720;
+    const hoursBack = queryParse.success ? queryParse.data.hoursBack : undefined;
     const scopeParam = queryParse.success ? queryParse.data.scope : undefined;
+    const shouldSync = queryParse.success ? queryParse.data.sync !== "false" : true;
 
-    // Inspect logged-in user from session cookie
-    const userCookie = req.cookies.get("pocketmate_user")?.value;
-    const verified = verifySessionCookie(userCookie);
-    const userEmail = verified?.email || "";
+    const userRecord = await prisma.user.findUnique({
+      where: { id: authUser.id },
+      select: { id: true, email: true, name: true, persona: true, industry: true },
+    });
 
-    if (!userEmail) {
-      // Query recent platform sandbox transactions for guest exploration & live preview
-      const allTxs = await paypalClient.fetchRecentTransactions(hoursBack);
-      const scopedTxs = allTxs.filter((t) => t.status !== "CANCELLED");
-
-      const formatted: TransactionRow[] = scopedTxs.map((t) => {
-        const dateObj = new Date(t.timestamp);
-        const isToday = new Date().toDateString() === dateObj.toDateString();
-        const timeStr = dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-        const displayDate = isToday ? `Today, ${timeStr}` : `${dateObj.toLocaleDateString([], { month: "short", day: "numeric" })}, ${timeStr}`;
-
-        let rowStatus: "settled" | "pending" | "disputed" | "unresolved" = "pending";
-        if (t.status === "COMPLETED") rowStatus = "settled";
-        else if (t.status === "PENDING" || t.status === "DRAFT") rowStatus = "pending";
-        else if (t.status === "DISPUTED") rowStatus = "disputed";
-
-        const isSplit =
-          t.splitAllocation === "split" ||
-          Boolean(t.memo && (t.memo.toLowerCase().includes("split") || t.memo.toLowerCase().includes("share"))) ||
-          t.merchantName.toLowerCase().includes("split");
-
-        const debtorDisplay = isSplit
-          ? t.debtorName && !t.debtorName.toLowerCase().includes("self") && t.debtorName !== "Shared Split"
-            ? t.debtorName
-            : "Shared Split"
-          : t.debtorName || "Self";
-
-        const lowerMerchant = (t.merchantName || "").toLowerCase();
-        let category = "General";
-        if (/hotel|airline|uber|transit|flight|travel|suites/i.test(lowerMerchant)) category = "Travel";
-        else if (/whole foods|trader joe|market|grocer|food/i.test(lowerMerchant)) category = "Groceries";
-        else if (/bistro|cafe|coffee|chipotle|starbucks|restaurant|dining|taco/i.test(lowerMerchant)) category = "Dining";
-        else if (/netflix|spotify|amc|theatre|cinema|entertainment/i.test(lowerMerchant)) category = "Entertainment";
-        else if (/amazon|target|shopping|store|retail/i.test(lowerMerchant)) category = "Shopping";
-        else if (/shell|oil|chevron|gas|electric/i.test(lowerMerchant)) category = "Utilities";
-
-        return {
-          id: t.id,
-          date: displayDate,
-          merchant: t.merchantName,
-          category,
-          debtor_name: debtorDisplay,
-          amount: t.amount,
-          status: rowStatus,
-        };
-      });
-
-      return NextResponse.json({
-        success: true,
-        count: formatted.length,
-        totalPlatformCount: formatted.length,
-        activeScope: "all",
-        userRole: "GUEST",
-        currentUser: null,
-        transactions: formatted,
-      });
+    if (!userRecord) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized: User account not found.", transactions: [] },
+        { status: 401 }
+      );
     }
 
-    // Determine account role strictly via database persona and registered industry (no email sniffing)
-    const userRecord = await prisma.user.findUnique({
-      where: { email: userEmail },
-      select: { id: true, persona: true, industry: true },
-    });
-    const isBusiness = userRecord?.persona === "BUSINESS" || Boolean(userRecord?.industry);
-
-    // Scope enforcement: personal accounts are strictly restricted to their own transactions
+    const isBusiness = userRecord.persona === "BUSINESS" || Boolean(userRecord.industry);
     const activeScope = isBusiness && scopeParam === "all" ? "all" : "personal";
 
-    // Query PayPal live APIs - if personal scope, query strictly for this user
-    const queryEmail = activeScope === "personal" ? userEmail : undefined;
-    const txs = await paypalClient.fetchRecentTransactions(hoursBack, queryEmail);
-
-    // Also get total platform count if in personal mode
-    let totalPlatformCount = txs.length;
-    if (activeScope === "personal") {
-      try {
-        const allTxs = await paypalClient.fetchRecentTransactions(hoursBack);
-        totalPlatformCount = allTxs.length;
-      } catch {
-        // fallback
-      }
-    }
+    const txs =
+      activeScope === "all"
+        ? await paypalClient.fetchRecentTransactions(hoursBack ?? 720)
+        : await getUserLedgerTransactions(userRecord.id, userRecord.email, {
+            sync: shouldSync,
+            hoursBack,
+          });
 
     const scopedTxs = txs.filter((t) => t.status !== "CANCELLED");
 
-    // Load dynamic categorization context (user categories, merchant rules, overrides)
-    const userId = userRecord?.id || verified?.id;
-
-    let categoryMap = new Map<string, { category: string }>();
+    const catContext = await loadUserCategorizationContext(userRecord.id);
     const overrideLookupMap = new Map<string, string>();
-    if (userId) {
-      try {
-        const catContext = await loadUserCategorizationContext(userId);
-        for (const o of catContext.overrides ?? []) {
-          overrideLookupMap.set(o.transactionId, o.categoryName);
-        }
-        categoryMap = await categorizeTransactionsBatch(
-          scopedTxs.map((t) => ({ id: t.id, merchantName: t.merchantName, amount: t.amount })),
-          catContext
-        );
-      } catch (catErr) {
-        console.warn("[Transactions Route Categorizer Warning]", catErr);
-      }
+    for (const o of catContext.overrides ?? []) {
+      overrideLookupMap.set(o.transactionId, o.categoryName);
     }
 
-    // Map to TransactionRow format expected by the frontend
-    const formatted: TransactionRow[] = scopedTxs.map((t) => {
-      const dateObj = new Date(t.timestamp);
-      const isToday = new Date().toDateString() === dateObj.toDateString();
-      const timeStr = dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-      const displayDate = isToday ? `Today, ${timeStr}` : `${dateObj.toLocaleDateString([], { month: "short", day: "numeric" })}, ${timeStr}`;
+    const categoryMap = await categorizeTransactionsBatch(
+      scopedTxs.map((t) => ({
+        id: t.id,
+        merchantName: t.merchantName,
+        amount: t.amount,
+        note: t.memo,
+      })),
+      catContext
+    );
 
+    const formatted: TransactionRow[] = scopedTxs.map((t) => {
       let rowStatus: "settled" | "pending" | "disputed" | "unresolved" = "pending";
       if (t.status === "COMPLETED") rowStatus = "settled";
       else if (t.status === "PENDING" || t.status === "DRAFT") rowStatus = "pending";
       else if (t.status === "DISPUTED") rowStatus = "disputed";
-
-      const isSplit =
-        t.splitAllocation === "split" ||
-        Boolean(t.memo && (t.memo.toLowerCase().includes("split") || t.memo.toLowerCase().includes("share"))) ||
-        t.merchantName.toLowerCase().includes("split");
-
-      const debtorDisplay = isSplit
-        ? t.debtorName && !t.debtorName.toLowerCase().includes("self") && t.debtorName !== "Shared Split"
-          ? t.debtorName
-          : "Shared Split"
-        : "100% Self";
 
       const direction =
         t.direction ||
@@ -167,19 +103,17 @@ export async function GET(req: NextRequest) {
 
       const catEntry = categoryMap.get(t.id);
       let category = catEntry?.category || "Uncategorized";
-      // If general incoming money has no explicit category, classify as Income
-      if (direction === "incoming" && (!catEntry || category === "Uncategorized") && !isSplit) {
+      if (direction === "incoming" && (!catEntry || category === "Uncategorized") && !t.isOutgoingSplit) {
         category = "Income";
       }
 
       return {
         id: t.id,
-        date: displayDate,
+        date: formatDisplayDate(t.timestamp),
         merchant: t.merchantName,
         memo: t.memo,
-        splitAllocation: isSplit ? "split" : "self",
         category,
-        debtor_name: debtorDisplay,
+        debtor_name: t.debtorName || "",
         amount: t.amount,
         status: rowStatus,
         direction,
@@ -187,91 +121,73 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    // Query settled split reimbursements received by this organizer and prepend to ledger
-    if (userId) {
-      try {
-        const settledItems = await prisma.splitItem.findMany({
-          where: {
-            status: "PAID",
-            splitRecord: { userId },
-          },
-          include: {
-            splitRecord: true,
-          },
-          orderBy: { createdAt: "desc" },
-        });
+    const existingInvoiceIds = new Set(formatted.map((r) => r.id));
 
-        for (const item of settledItems) {
-          const rawItems = (item.splitRecord.itemsJson as Array<Record<string, unknown>>) || [];
-          const meta = rawItems.find(
-            (r) =>
-              r.participantEmail === item.participantEmail ||
-              r.participantName === item.participantName
-          );
+    // Include settled SplitItem records that aren't already represented by a synced PayPal invoice
+    const settledItems = await prisma.splitItem.findMany({
+      where: {
+        status: "PAID",
+        splitRecord: { userId: userRecord.id },
+      },
+      include: {
+        splitRecord: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
 
-          const settledReason =
-            (meta?.settledReason as string) ||
-            (item.splitRecord.description ? `${item.splitRecord.description} split share` : "");
-          const isAdjusted = Boolean(meta?.isAdjusted);
-          const origAmt = Number(meta?.originalAmount) || item.amount;
-
-          let reasonMemo = `${item.splitRecord.description} split settlement`;
-          if (settledReason && !settledReason.toLowerCase().includes("paid in full")) {
-            reasonMemo += ` — Reason: "${settledReason}"`;
-          }
-          if (isAdjusted) {
-            reasonMemo += ` (Adjusted from $${origAmt.toFixed(2)})`;
-          }
-
-          const dateObj = new Date(meta?.settledAt ? String(meta.settledAt) : item.createdAt);
-          const isToday = new Date().toDateString() === dateObj.toDateString();
-          const timeStr = dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-          const displayDate = isToday ? `Today, ${timeStr}` : `${dateObj.toLocaleDateString([], { month: "short", day: "numeric" })}, ${timeStr}`;
-
-          // Check if user explicitly overridden category for this settled transaction
-          const explicitOverride =
-            overrideLookupMap.get(`stl_${item.id}`) ||
-            overrideLookupMap.get(item.id) ||
-            (item.paypalInvoiceId ? overrideLookupMap.get(item.paypalInvoiceId) : undefined);
-
-          let category = explicitOverride || "Personal Reimbursement";
-          if (!explicitOverride) {
-            // Inherit parent category (Travel, Dining, etc.) to offset category expense
-            const desc = item.splitRecord.description.toLowerCase();
-            if (desc.includes("hotel") || desc.includes("flight") || desc.includes("travel") || desc.includes("vista")) {
-              category = "Travel";
-            } else if (desc.includes("dinner") || desc.includes("bistro") || desc.includes("food") || desc.includes("dining")) {
-              category = "Dining";
-            } else if (desc.includes("grocer")) {
-              category = "Groceries";
-            }
-          }
-
-          formatted.unshift({
-            id: `stl_${item.id}`,
-            date: displayDate,
-            merchant: `${item.participantName} • ${item.splitRecord.description}`,
-            memo: reasonMemo,
-            splitAllocation: "split",
-            category,
-            debtor_name: `Split (${item.participantName})`,
-            amount: item.amount,
-            status: "settled",
-            direction: "incoming",
-          });
-        }
-      } catch (stlErr) {
-        console.warn("[Settled Splits Query Warning]", stlErr);
+    for (const item of settledItems) {
+      if (item.paypalInvoiceId && existingInvoiceIds.has(item.paypalInvoiceId)) {
+        continue;
       }
+
+      const rawItems = (item.splitRecord.itemsJson as Array<Record<string, unknown>>) || [];
+      const meta = rawItems.find(
+        (r) =>
+          r.participantEmail === item.participantEmail ||
+          r.participantName === item.participantName
+      );
+
+      const settledReason =
+        (meta?.settledReason as string) ||
+        (item.splitRecord.description ? `${item.splitRecord.description} split share` : "");
+
+      let reasonMemo = `${item.splitRecord.description} split settlement`;
+      if (settledReason && !settledReason.toLowerCase().includes("paid in full")) {
+        reasonMemo += ` — ${settledReason}`;
+      }
+
+      const timestampIso = meta?.settledAt
+        ? String(meta.settledAt)
+        : item.createdAt.toISOString();
+
+      const explicitOverride =
+        overrideLookupMap.get(`stl_${item.id}`) ||
+        overrideLookupMap.get(item.id) ||
+        (item.paypalInvoiceId ? overrideLookupMap.get(item.paypalInvoiceId) : undefined);
+
+      const category = explicitOverride || "Income";
+
+      formatted.unshift({
+        id: `stl_${item.id}`,
+        date: formatDisplayDate(timestampIso),
+        merchant: `${item.participantName} • ${item.splitRecord.description}`,
+        memo: reasonMemo,
+        category,
+        debtor_name: item.participantName,
+        amount: item.amount,
+        status: "settled",
+        direction: "incoming",
+        isOutgoingSplit: true,
+      });
     }
 
     return NextResponse.json({
       success: true,
       count: formatted.length,
-      totalPlatformCount,
+      totalPlatformCount: formatted.length,
       activeScope,
       userRole: isBusiness ? "BUSINESS" : "PERSONAL",
-      currentUser: verified ? { name: verified.name, email: verified.email } : null,
+      currentUser: { name: userRecord.name, email: userRecord.email },
       transactions: formatted,
     });
   } catch (error: unknown) {

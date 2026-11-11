@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { paypalClient, PayPalTransaction } from "@/lib/paypal/client";
+import { PayPalTransaction } from "@/lib/paypal/client";
+import { getUserLedgerTransactions } from "@/lib/paypal/sync";
 import { prisma } from "@/lib/db";
 import { loadUserCategorizationContext, categorizeTransactionsBatch } from "@/lib/services/categorizer";
 import { reconcileAutopaySubscriptions } from "@/lib/services/autopayReconciliation";
@@ -58,10 +59,10 @@ export async function GET(req: NextRequest) {
       });
 
       // 3. Scan user's transactions for ambiguous/uncategorized items
-      const userTransactions = await paypalClient.fetchRecentTransactions(24, user.email).catch(() => []);
+      const userTransactions = await getUserLedgerTransactions(user.id, user.email, { hoursBack: 24 }).catch(() => []);
       const catContext = await loadUserCategorizationContext(user.id);
       const categoryMap = await categorizeTransactionsBatch(
-        userTransactions.map((t) => ({ id: t.id, merchantName: t.merchantName, amount: t.amount })),
+        userTransactions.map((t) => ({ id: t.id, merchantName: t.merchantName, amount: t.amount, note: t.memo })),
         catContext
       );
 

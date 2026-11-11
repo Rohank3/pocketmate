@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAuthenticatedUser, getUserIdFromRequest } from "@/lib/auth/session";
+import { getAuthenticatedUser } from "@/lib/auth/session";
 import {
   reclassifyTransactionWithScope,
   loadUserCategorizationContext,
@@ -19,6 +19,7 @@ const ReclassifyRequestSchema = z.object({
       z.object({
         id: z.string(),
         merchantName: z.string(),
+        memo: z.string().optional(),
         amount: z.number(),
         category: z.string().optional(),
       })
@@ -29,7 +30,7 @@ const ReclassifyRequestSchema = z.object({
 export async function POST(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
-    const userId = authUser ? authUser.id : await getUserIdFromRequest(req);
+    const userId = authUser?.id;
 
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
@@ -93,7 +94,7 @@ export async function POST(req: NextRequest) {
       const nextTx = remaining[0];
       try {
         const aiResults = await categorizeTransactionsBatch(
-          [{ id: nextTx.id, merchantName: nextTx.merchantName, amount: nextTx.amount }],
+          [{ id: nextTx.id, merchantName: nextTx.merchantName, amount: nextTx.amount, note: nextTx.memo }],
           catContext
         );
         const aiItem = aiResults.get(nextTx.id);

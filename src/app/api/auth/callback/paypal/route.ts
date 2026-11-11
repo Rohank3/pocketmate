@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    // Ensure default budget categories exist for this user in DB
+    // Ensure starter budget categories exist for this user in DB
     const catCount = await prisma.budgetCategory.count({ where: { userId: user.id } });
     if (catCount === 0) {
       await prisma.budgetCategory.createMany({
@@ -53,6 +53,7 @@ export async function GET(req: NextRequest) {
           { userId: user.id, name: "Dining", monthlyCap: 250.0, currentSpent: 0.0, color: "#3b82f6", alertThreshold: 0.80, softCap: 200.0 },
           { userId: user.id, name: "Shopping", monthlyCap: 300.0, currentSpent: 0.0, color: "#ec4899", alertThreshold: 0.80, softCap: 240.0 },
           { userId: user.id, name: "Entertainment", monthlyCap: 200.0, currentSpent: 0.0, color: "#8b5cf6", alertThreshold: 0.80, softCap: 160.0 },
+          { userId: user.id, name: "Travel", monthlyCap: 600.0, currentSpent: 0.0, color: "#f59e0b", alertThreshold: 0.80, softCap: 480.0 },
         ],
       });
     }

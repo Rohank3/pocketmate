@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getAuthenticatedUser, getUserIdFromRequest } from "@/lib/auth/session";
+import { getAuthenticatedUser } from "@/lib/auth/session";
 import { saveOrUpdateContact } from "@/lib/contacts/contactResolver";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
@@ -26,11 +26,13 @@ const UpdateSplitItemSchema = z.object({
 export async function GET(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
-    const userId = authUser ? authUser.id : await getUserIdFromRequest(req);
-
-    if (!userId) {
-      return NextResponse.json({ success: true, splits: [] });
+    if (!authUser) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized: Active PayPal session required." },
+        { status: 401 }
+      );
     }
+    const userId = authUser.id;
 
     const splits = await prisma.splitRecord.findMany({
       where: { userId },
@@ -50,14 +52,13 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
-    const userId = authUser ? authUser.id : await getUserIdFromRequest(req);
-
-    if (!userId) {
+    if (!authUser) {
       return NextResponse.json(
-        { success: false, error: "Unauthorized: Active session required." },
+        { success: false, error: "Unauthorized: Active PayPal session required." },
         { status: 401 }
       );
     }
+    const userId = authUser.id;
 
     const body = await req.json();
     const parseResult = CreateSplitApiSchema.safeParse(body);
@@ -81,7 +82,7 @@ export async function POST(req: NextRequest) {
         items: {
           create: items.map((item) => ({
             participantName: item.participantName,
-            participantEmail: item.participantEmail || `${item.participantName.toLowerCase().replace(/\s+/g, ".")}@personal.example.com`,
+            participantEmail: item.participantEmail || "",
             amount: item.amount,
             status: "DRAFT",
           })),
@@ -113,14 +114,13 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
-    const userId = authUser ? authUser.id : await getUserIdFromRequest(req);
-
-    if (!userId) {
+    if (!authUser) {
       return NextResponse.json(
-        { success: false, error: "Unauthorized: Active session required." },
+        { success: false, error: "Unauthorized: Active PayPal session required." },
         { status: 401 }
       );
     }
+    const userId = authUser.id;
 
     const body = await req.json();
     const parseResult = UpdateSplitItemSchema.safeParse(body);

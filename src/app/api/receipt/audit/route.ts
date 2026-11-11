@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseReceiptWithGeminiVision } from "@/lib/vision/receiptParser";
-import { paypalClient } from "@/lib/paypal/client";
+import { getUserLedgerTransactions } from "@/lib/paypal/sync";
 import { getAuthenticatedUser } from "@/lib/auth/session";
 
 const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic"]);
@@ -8,6 +8,13 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 export async function POST(req: NextRequest) {
   try {
+    const user = await getAuthenticatedUser(req);
+    if (!user) {
+      return NextResponse.json(
+        { error: "Unauthorized: Active PayPal session required." },
+        { status: 401 }
+      );
+    }
     const contentType = req.headers.get("content-type") || "";
     let base64Image = "";
     let mimeType = "image/jpeg";
@@ -63,11 +70,8 @@ export async function POST(req: NextRequest) {
     // Parse receipt with Gemini 2.5 Pro Vision
     const parsedReceipt = await parseReceiptWithGeminiVision(base64Image, mimeType);
 
-    // Cross-check against user's PayPal transactions
-    const user = await getAuthenticatedUser(req);
-    const recentTxs = user?.email
-      ? await paypalClient.fetchRecentTransactions(168, user.email)
-      : [];
+    // Cross-check against user's persisted PayPal transactions
+    const recentTxs = await getUserLedgerTransactions(user.id, user.email, { hoursBack: 168 });
     const parsedMerchantLower = (parsedReceipt.merchantName || "").toLowerCase();
 
     const matchedTx =

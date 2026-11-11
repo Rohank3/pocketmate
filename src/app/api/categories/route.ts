@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getAuthenticatedUser, getUserIdFromRequest } from "@/lib/auth/session";
+import { getAuthenticatedUser } from "@/lib/auth/session";
 import { reinitializeCategory } from "@/lib/services/categorizer";
 import { getDistinctColorForCategory, ensureUniqueCategoryColors } from "@/lib/utils/categoryColors";
 import { z } from "zod";
@@ -25,17 +25,11 @@ const UpdateCategorySchema = z.object({
 
 export async function GET(req: NextRequest) {
   try {
-    const userId = await getUserIdFromRequest(req);
-    if (!userId) {
-      const defaultCategories = [
-        { id: "cat_default_groceries", name: "Groceries", monthlyCap: 400.0, currentSpent: 120.55, color: "#10b981", alertThreshold: 0.80, softCap: 320.0 },
-        { id: "cat_default_dining", name: "Dining", monthlyCap: 250.0, currentSpent: 130.00, color: "#3b82f6", alertThreshold: 0.80, softCap: 200.0 },
-        { id: "cat_default_travel", name: "Travel", monthlyCap: 600.0, currentSpent: 480.00, color: "#f59e0b", alertThreshold: 0.80, softCap: 480.0 },
-        { id: "cat_default_shopping", name: "Shopping", monthlyCap: 300.0, currentSpent: 87.29, color: "#ec4899", alertThreshold: 0.80, softCap: 240.0 },
-        { id: "cat_default_entertainment", name: "Entertainment", monthlyCap: 200.0, currentSpent: 51.99, color: "#8b5cf6", alertThreshold: 0.80, softCap: 160.0 },
-      ];
-      return NextResponse.json({ success: true, categories: ensureUniqueCategoryColors(defaultCategories) });
+    const authUser = await getAuthenticatedUser(req);
+    if (!authUser) {
+      return NextResponse.json({ error: "Unauthorized: Active PayPal session required." }, { status: 401 });
     }
+    const userId = authUser.id;
     let categories = await prisma.budgetCategory.findMany({
       where: { userId },
       orderBy: { createdAt: "asc" },
@@ -48,6 +42,7 @@ export async function GET(req: NextRequest) {
           { userId, name: "Dining", monthlyCap: 250.0, currentSpent: 0.0, color: "#3b82f6", alertThreshold: 0.80, softCap: 200.0 },
           { userId, name: "Shopping", monthlyCap: 300.0, currentSpent: 0.0, color: "#ec4899", alertThreshold: 0.80, softCap: 240.0 },
           { userId, name: "Entertainment", monthlyCap: 200.0, currentSpent: 0.0, color: "#8b5cf6", alertThreshold: 0.80, softCap: 160.0 },
+          { userId, name: "Travel", monthlyCap: 600.0, currentSpent: 0.0, color: "#f59e0b", alertThreshold: 0.80, softCap: 480.0 },
         ],
       });
       categories = await prisma.budgetCategory.findMany({
@@ -66,13 +61,10 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
-    if (!authUser && process.env.PAYPAL_ENVIRONMENT === "live") {
-      return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
+    if (!authUser) {
+      return NextResponse.json({ error: "Unauthorized: Active PayPal session required." }, { status: 401 });
     }
-    const userId = authUser ? authUser.id : await getUserIdFromRequest(req);
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
-    }
+    const userId = authUser.id;
     const rawBody = await req.json();
     const parseResult = CreateCategorySchema.safeParse(rawBody);
 
@@ -121,13 +113,10 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
-    if (!authUser && process.env.PAYPAL_ENVIRONMENT === "live") {
-      return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
+    if (!authUser) {
+      return NextResponse.json({ error: "Unauthorized: Active PayPal session required." }, { status: 401 });
     }
-    const userId = authUser ? authUser.id : await getUserIdFromRequest(req);
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
-    }
+    const userId = authUser.id;
     const rawBody = await req.json();
     const parseResult = UpdateCategorySchema.safeParse(rawBody);
 
@@ -193,13 +182,10 @@ export async function PATCH(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
-    if (!authUser && process.env.PAYPAL_ENVIRONMENT === "live") {
-      return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
+    if (!authUser) {
+      return NextResponse.json({ error: "Unauthorized: Active PayPal session required." }, { status: 401 });
     }
-    const userId = authUser ? authUser.id : await getUserIdFromRequest(req);
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
-    }
+    const userId = authUser.id;
     const id = req.nextUrl.searchParams.get("id");
     if (!id || typeof id !== "string") {
       return NextResponse.json({ error: "Valid Category ID is required" }, { status: 400 });

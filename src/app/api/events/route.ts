@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getAuthenticatedUser, getUserIdFromRequest } from "@/lib/auth/session";
+import { getAuthenticatedUser } from "@/lib/auth/session";
 import { reconcileAutopaySubscriptions } from "@/lib/services/autopayReconciliation";
 import { z } from "zod";
 
@@ -18,28 +18,11 @@ const CreateEventSchema = z.object({
 export async function GET(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
-    const userId = authUser ? authUser.id : await getUserIdFromRequest(req);
-    if (!userId) {
-      // Return seeded scheduled events for preview/guest
-      const existingEvents = await prisma.scheduledEvent.findMany({
-        take: 10,
-        orderBy: { date: "asc" },
-      });
-      return NextResponse.json({
-        success: true,
-        events: existingEvents,
-        reconciliation: { reconciledCount: existingEvents.length, newSubscriptionsCount: 0, reconciledEventTitles: existingEvents.map((e) => e.title) },
-      });
+    if (!authUser) {
+      return NextResponse.json({ error: "Unauthorized: Active PayPal session required." }, { status: 401 });
     }
-    const userEmail = authUser?.email;
-
-    if (!userId) {
-      return NextResponse.json({
-        success: true,
-        events: [],
-        reconciliation: { reconciledCount: 0, newSubscriptionsCount: 0, reconciledEventTitles: [] },
-      });
-    }
+    const userId = authUser.id;
+    const userEmail = authUser.email;
 
     // Autonomous autopay subscription detection & transaction reconciliation
     const reconciliation = await reconcileAutopaySubscriptions(userId, userEmail);
@@ -59,13 +42,10 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
-    if (!authUser && process.env.PAYPAL_ENVIRONMENT === "live") {
-      return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
+    if (!authUser) {
+      return NextResponse.json({ error: "Unauthorized: Active PayPal session required." }, { status: 401 });
     }
-    const userId = authUser ? authUser.id : await getUserIdFromRequest(req);
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
-    }
+    const userId = authUser.id;
     const rawBody = await req.json();
     const parseResult = CreateEventSchema.safeParse(rawBody);
 
@@ -117,13 +97,10 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
-    if (!authUser && process.env.PAYPAL_ENVIRONMENT === "live") {
-      return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
+    if (!authUser) {
+      return NextResponse.json({ error: "Unauthorized: Active PayPal session required." }, { status: 401 });
     }
-    const userId = authUser ? authUser.id : await getUserIdFromRequest(req);
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
-    }
+    const userId = authUser.id;
     const id = req.nextUrl.searchParams.get("id");
     if (!id || typeof id !== "string") {
       return NextResponse.json({ error: "Valid Event ID is required" }, { status: 400 });
@@ -148,13 +125,10 @@ export async function DELETE(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const authUser = await getAuthenticatedUser(req);
-    if (!authUser && process.env.PAYPAL_ENVIRONMENT === "live") {
-      return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
+    if (!authUser) {
+      return NextResponse.json({ error: "Unauthorized: Active PayPal session required." }, { status: 401 });
     }
-    const userId = authUser ? authUser.id : await getUserIdFromRequest(req);
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized: Active session required." }, { status: 401 });
-    }
+    const userId = authUser.id;
     const body = await req.json();
     const { id, status, counterparty } = body;
 
