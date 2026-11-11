@@ -10,7 +10,7 @@ import {
 } from "../math/split";
 import { syncBudgetExpenseToDB } from "./dbSync";
 import { prisma } from "../db";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, InvoiceStatus } from "@prisma/client";
 import {
   loadUserCategorizationContext,
   categorizeTransactionsBatch,
@@ -627,7 +627,7 @@ export const agentToolDeclarations = [
   },
   {
     name: "review_incoming_invoice",
-    description: "Initiates an interactive review card for an incoming debt or PayPal invoice where the authenticated user is the recipient/debtor. Prompts with 3 one-tap resolution options: (1) Pay in Full via PayPal, (2) Pay with Different Value (with custom amount & reason), and (3) Decline (with reason). Never suggest sending reminders when the user is the debtor.",
+    description: "Initiates an interactive review card for an incoming debt or PayPal invoice where the authenticated user is the recipient/debtor. Presents 2 one-tap resolution options: (1) Pay in Full via PayPal, or (2) Decline (with mandatory explanation reason). Always pass the real INV2-... invoiceId from fetch_recent_transactions and never suggest reminders when the user is the debtor.",
     parameters: {
       type: "OBJECT",
       properties: {
@@ -889,7 +889,7 @@ export async function executeAgentTool(
       }
 
       const recipients = calculated.allocations.map((a) => ({
-        email: a.emailOrHandle.includes("@") ? a.emailOrHandle : `${a.name.toLowerCase().replace(/\s+/g, ".")}@personal.example.com`,
+        email: a.emailOrHandle.includes("@") ? a.emailOrHandle : `${a.name.toLowerCase().replace(/\s+/g, ".")}@business.example.com`,
         name: a.name,
         amount: a.amount,
         description: `Split: ${title} (${a.name}'s share)`,
@@ -957,7 +957,7 @@ export async function executeAgentTool(
               items: {
                 create: calculated.allocations.map((a, idx) => ({
                   participantName: a.name,
-                  participantEmail: a.emailOrHandle.includes("@") ? a.emailOrHandle : `${a.name.toLowerCase().replace(/\s+/g, ".")}@personal.example.com`,
+                  participantEmail: a.emailOrHandle.includes("@") ? a.emailOrHandle : `${a.name.toLowerCase().replace(/\s+/g, ".")}@business.example.com`,
                   amount: a.amount,
                   paypalInvoiceId: invoiceResults[idx]?.invoiceId ?? null,
                   status: dispatchInvoices ? "SENT" : "DRAFT",
@@ -1553,16 +1553,18 @@ export async function executeAgentTool(
 
     case "review_incoming_invoice": {
       const parsed = ReviewIncomingInvoiceSchema.parse(safeArgs);
-      let senderName = parsed.senderName;
-      let senderEmail = parsed.senderEmail;
+      let resolvedInvoiceId = parsed.invoiceId.trim();
+      let senderName = parsed.senderName?.trim() || "";
+      let senderEmail = parsed.senderEmail?.trim() || "";
       let memo = parsed.memo || parsed.merchantName || "Split share invoice";
       let splitItemId: string | undefined = undefined;
+      let resolvedAmount = parsed.amount;
 
-      const splitItem = await prisma.splitItem.findFirst({
+      let splitItem = await prisma.splitItem.findFirst({
         where: {
           OR: [
-            { paypalInvoiceId: parsed.invoiceId },
-            { id: parsed.invoiceId },
+            { paypalInvoiceId: resolvedInvoiceId },
+            { id: resolvedInvoiceId },
           ],
         },
         include: {
@@ -1574,35 +1576,112 @@ export async function executeAgentTool(
         },
       });
 
+      // Resolve real PayPal invoice ID and organizer email from the authenticated user's ledger
+      if (userId) {
+        const currentUser = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { email: true },
+        });
+
+        const candidateTxs = await prisma.ledgerTransaction.findMany({
+          where: {
+            userId,
+            status: { in: ["PENDING", "SENT", "DISPUTED"] },
+            isOutgoingSplit: false,
+          },
+          orderBy: { timestamp: "desc" },
+        });
+
+        const cleanNeedle = (parsed.merchantName || parsed.senderName || "").toLowerCase();
+        const matchedTx =
+          candidateTxs.find((t) => t.paypalId === resolvedInvoiceId) ||
+          candidateTxs.find(
+            (t) =>
+              Math.abs(t.amount - parsed.amount) < 0.05 &&
+              (!cleanNeedle ||
+                t.merchantName.toLowerCase().includes(cleanNeedle.split("•")[0].trim()) ||
+                cleanNeedle.includes(t.merchantName.toLowerCase().split("•")[0].trim()))
+          ) ||
+          candidateTxs.find((t) => Math.abs(t.amount - parsed.amount) < 0.05);
+
+        if (matchedTx) {
+          resolvedInvoiceId = matchedTx.paypalId;
+          resolvedAmount = matchedTx.amount;
+          senderEmail = senderEmail || matchedTx.invoicerEmail || "";
+          if (!senderName || senderName === "Organizer") {
+            senderName = matchedTx.merchantName.split("•")[0].trim() || senderName;
+          }
+          memo = matchedTx.memo || matchedTx.merchantName || memo;
+        }
+
+        if (!splitItem) {
+          splitItem = await prisma.splitItem.findFirst({
+            where: {
+              OR: [
+                { paypalInvoiceId: resolvedInvoiceId },
+                ...(currentUser?.email
+                  ? [
+                      {
+                        participantEmail: currentUser.email.toLowerCase().trim(),
+                        status: { in: ["DRAFT", "SENT"] as InvoiceStatus[] },
+                        amount: resolvedAmount,
+                      },
+                    ]
+                  : []),
+              ],
+            },
+            orderBy: { createdAt: "desc" },
+            include: {
+              splitRecord: {
+                include: {
+                  user: true,
+                },
+              },
+            },
+          });
+        }
+      }
+
       if (splitItem) {
         splitItemId = splitItem.id;
+        resolvedInvoiceId = splitItem.paypalInvoiceId || resolvedInvoiceId;
         senderName = senderName || splitItem.splitRecord.user.name || "Organizer";
-        senderEmail = senderEmail || splitItem.splitRecord.user.email;
+        senderEmail = senderEmail || splitItem.splitRecord.user.email || "";
         memo = splitItem.splitRecord.description || memo;
       }
 
+      if (!senderName && senderEmail) {
+        const orgUser = await prisma.user.findUnique({
+          where: { email: senderEmail.toLowerCase().trim() },
+          select: { name: true },
+        });
+        if (orgUser?.name) senderName = orgUser.name;
+      }
+
+      const isLive = process.env.PAYPAL_ENVIRONMENT === "live";
+      const baseHost = isLive ? "https://www.paypal.com" : "https://www.sandbox.paypal.com";
       const invoiceUrl =
-        parsed.paypalInvoiceUrl || `https://www.sandbox.paypal.com/invoice/p/#${parsed.invoiceId}`;
+        parsed.paypalInvoiceUrl || `${baseHost}/invoice/p/#${resolvedInvoiceId}`;
 
       return {
         action: "REVIEW_INCOMING_INVOICE",
         type: "incoming_invoice_review",
-        invoiceId: parsed.invoiceId,
+        invoiceId: resolvedInvoiceId,
         splitItemId,
-        amount: parsed.amount,
-        totalAmount: parsed.amount,
+        amount: resolvedAmount,
+        totalAmount: resolvedAmount,
         currency: parsed.currency || "USD",
         merchant: parsed.merchantName || memo,
         merchantName: parsed.merchantName || memo,
         senderName: senderName || "Organizer",
-        senderEmail: senderEmail || "",
+        senderEmail: senderEmail || undefined,
         recipientName: "You",
         memo,
         paypalInvoiceUrl: invoiceUrl,
         requiresConfirmation: true,
-        message: `I've opened the payment review for your pending debt of $${parsed.amount.toFixed(
+        message: `I've opened the payment review for your pending debt of $${resolvedAmount.toFixed(
           2
-        )} (${parsed.merchantName || memo}). Please select one of the three options below: Pay in Full, Pay with Different Value, or Decline.`,
+        )} (${parsed.merchantName || memo}). Please select **Pay in Full** to settle via PayPal or **Decline** with a brief reason.`,
       };
     }
 

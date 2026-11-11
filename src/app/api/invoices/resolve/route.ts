@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedUser } from "@/lib/auth/session";
-import { prisma } from "@/lib/db";
-import type { Prisma } from "@prisma/client";
+import { paypalClient } from "@/lib/paypal/client";
+import { resolvePublicOrigin } from "@/lib/paypal/auth";
+import { finalizeInvoiceResolution, resolveInvoiceParties } from "@/lib/paypal/settlement";
 import { z } from "zod";
 
 const InvoiceResolutionSchema = z.object({
@@ -12,7 +13,12 @@ const InvoiceResolutionSchema = z.object({
   originalAmount: z.number().finite().positive().max(500000).optional(),
   memo: z.string().trim().max(255).optional(),
   senderName: z.string().trim().max(100).optional(),
-  senderEmail: z.string().trim().email().max(255).optional(),
+  senderEmail: z
+    .string()
+    .trim()
+    .max(255)
+    .optional()
+    .transform((v) => (v && v.includes("@") ? v : undefined)),
 });
 
 export async function POST(req: NextRequest) {
@@ -51,199 +57,88 @@ export async function POST(req: NextRequest) {
     const payerName = authUser.name || authUser.email.split("@")[0];
     const payerEmail = authUser.email;
 
-    // 1. Locate SplitItem in PostgreSQL if linked
-    let splitItem = null;
-    if (splitItemId) {
-      splitItem = await prisma.splitItem.findUnique({
-        where: { id: splitItemId },
-        include: {
-          splitRecord: {
-            include: {
-              user: true,
-            },
-          },
-        },
+    const parties = await resolveInvoiceParties({
+      invoiceId,
+      splitItemId,
+      payerUserId: userId,
+      payerEmail,
+      senderEmail,
+      senderName,
+    });
+
+    const resolvedInvoiceId = parties.resolvedInvoiceId;
+    const effectiveOriginal =
+      parties.splitItem?.amount || parties.payerLedgerTx?.amount || originalAmount;
+    const effectiveDescription =
+      parties.splitItem?.splitRecord?.description ||
+      parties.payerLedgerTx?.memo ||
+      parties.payerLedgerTx?.merchantName ||
+      memo;
+
+    // When paying and the organizer has completed Partner onboarding (`CONNECTED`),
+    // create an Orders v2 direct-payee checkout routing funds straight into the organizer's PayPal balance.
+    if (
+      action === "pay" &&
+      parties.organizerUser?.paypalOnboardingStatus === "CONNECTED" &&
+      parties.organizerUser.paypalMerchantId &&
+      effectiveOriginal > 0
+    ) {
+      const origin = resolvePublicOrigin(req);
+      const order = await paypalClient.createOrder({
+        amount: effectiveOriginal,
+        description: effectiveDescription,
+        customId: resolvedInvoiceId,
+        payeeMerchantId: parties.organizerUser.paypalMerchantId,
+        returnUrl: `${origin}/?order_status=approved&invoice_id=${encodeURIComponent(
+          resolvedInvoiceId
+        )}`,
+        cancelUrl: `${origin}/?order_status=cancelled&invoice_id=${encodeURIComponent(
+          resolvedInvoiceId
+        )}`,
+      });
+
+      return NextResponse.json({
+        success: true,
+        action,
+        requiresCheckoutRedirect: true,
+        orderId: order.orderId,
+        invoiceId: resolvedInvoiceId,
+        paypalInvoiceUrl:
+          order.approveUrl ||
+          `https://www.sandbox.paypal.com/invoice/p/#${resolvedInvoiceId}`,
+        message: `Created PayPal direct settlement checkout to ${parties.resolvedSenderName}.`,
       });
     }
 
-    if (!splitItem) {
-      splitItem = await prisma.splitItem.findFirst({
-        where: {
-          OR: [
-            { paypalInvoiceId: invoiceId },
-            { id: invoiceId },
-            { participantEmail: payerEmail },
-          ],
-        },
-        include: {
-          splitRecord: {
-            include: {
-              user: true,
-            },
-          },
-        },
-      });
-    }
+    const settled = await finalizeInvoiceResolution({
+      invoiceId: resolvedInvoiceId,
+      splitItemId: parties.splitItem?.id || splitItemId,
+      payerUserId: userId,
+      payerName,
+      payerEmail,
+      action,
+      reason,
+      originalAmount: effectiveOriginal,
+      memo: effectiveDescription,
+      senderName: parties.resolvedSenderName,
+      senderEmail: parties.resolvedSenderEmail,
+    });
 
-    // 2. Update SplitItem status and record resolution info in DB
-    const effectivePaid = action === "pay" ? (splitItem?.amount || originalAmount) : 0;
-
-    if (splitItem) {
-      const newStatus: "PAID" | "CANCELLED" = action === "decline" ? "CANCELLED" : "PAID";
-
-      await prisma.splitItem.update({
-        where: { id: splitItem.id },
-        data: {
-          status: newStatus,
-          amount: effectivePaid > 0 ? effectivePaid : splitItem.amount,
-        },
-      });
-
-      // Update SplitRecord.itemsJson with structured resolution metadata
-      const rawItems = (splitItem.splitRecord.itemsJson as Array<Record<string, unknown>>) || [];
-      const updatedItems = rawItems.map((item) => {
-        const matchesEmail =
-          item.participantEmail &&
-          ((item.participantEmail as string).toLowerCase() === payerEmail.toLowerCase() ||
-           (item.participantEmail as string).toLowerCase() === (splitItem.participantEmail || "").toLowerCase());
-        const matchesName =
-          item.participantName &&
-          (item.participantName as string).toLowerCase() === splitItem.participantName.toLowerCase();
-
-        if (matchesEmail || matchesName) {
-          return {
-            ...item,
-            amountPaid: effectivePaid,
-            settledReason: reason || (action === "pay" ? "Paid in full" : "Declined"),
-            status: newStatus,
-            isAdjusted: false,
-            originalAmount: item.amount || splitItem.amount,
-            difference: (Number(item.amount) || splitItem.amount) - effectivePaid,
-            invoiceId,
-            settledAt: new Date().toISOString(),
-          };
-        }
-        return item;
-      });
-
-      const remainingUnpaid = await prisma.splitItem.count({
-        where: {
-          splitRecordId: splitItem.splitRecordId,
-          status: { in: ["DRAFT", "SENT"] },
-        },
-      });
-
-      await prisma.splitRecord.update({
-        where: { id: splitItem.splitRecordId },
-        data: {
-          itemsJson: updatedItems as unknown as Prisma.InputJsonValue,
-          status: remainingUnpaid === 0 ? "SETTLED" : "SENT",
-        },
-      });
-    }
-
-    // 3. Construct high-visibility resolution notification message for the organizer
-    const effectiveDescription = splitItem?.splitRecord?.description || memo;
-    const effectiveOriginal = splitItem?.amount || originalAmount || 0;
-    let notificationContent = "";
-
-    if (action === "pay") {
-      notificationContent = `🎉 **${payerName}** settled their **$${effectiveOriginal.toFixed(
-        2
-      )}** invoice for **"${effectiveDescription}"** in full via PayPal Sandbox.\n\n• **Invoice ID**: \`${invoiceId}\`\n• **Settlement**: $${effectiveOriginal.toFixed(
-        2
-      )} USD\n• **Status**: Settled`;
-    } else {
-      notificationContent = `❌ **${payerName}** declined the invoice of **$${effectiveOriginal.toFixed(
-        2
-      )}** for **"${effectiveDescription}"**.\n\n• **Invoice ID**: \`${invoiceId}\`\n• **Reason Provided**: "${reason || "No explanation provided"}"\n• **Status**: Declined`;
-    }
-
-    // 5. Send notification message to Organizer's Chat Thread
-    let organizerUserId: string | null = splitItem?.splitRecord?.userId || null;
-
-    if (!organizerUserId && senderEmail) {
-      const orgUser = await prisma.user.findUnique({
-        where: { email: senderEmail },
-      });
-      if (orgUser) organizerUserId = orgUser.id;
-    }
-
-    // If no organizer found by email, attempt lookup by senderName if provided
-    if (!organizerUserId && senderName && senderName !== "Organizer") {
-      const org = await prisma.user.findFirst({
-        where: {
-          name: { contains: senderName },
-        },
-      });
-      if (org) organizerUserId = org.id;
-    }
-
-    if (organizerUserId && organizerUserId !== userId) {
-      // Find or create active thread for organizer
-      let targetThread = await prisma.chatThread.findFirst({
-        where: { userId: organizerUserId },
-        orderBy: { updatedAt: "desc" },
-      });
-
-      if (!targetThread) {
-        targetThread = await prisma.chatThread.create({
-          data: {
-            userId: organizerUserId,
-            title: "Financial Activity & Invoicing",
-          },
-        });
-      }
-
-      // Construct action card metadata for dispute resolution / reinvocation
-      const resolutionCardData =
-        action === "decline"
-          ? {
-              action: "DISPUTE_RESOLUTION",
-              type: "dispute_resolution",
-              invoiceId,
-              splitItemId: splitItem?.id,
-              splitRecordId: splitItem?.splitRecordId,
-              splitDescription: effectiveDescription,
-              payerName,
-              payerEmail,
-              originalAmount: effectiveOriginal,
-              adjustedAmount: 0,
-              difference: effectiveOriginal,
-              reason: reason || "Declined invoice",
-              status: "declined",
-            }
-          : null;
-
-      // Insert resolution notification message directly into organizer's thread
-      await prisma.chatMessage.create({
-        data: {
-          userId: organizerUserId,
-          threadId: targetThread.id,
-          role: "assistant",
-          content: notificationContent,
-          toolCallsJson: resolutionCardData ? (resolutionCardData as unknown as Prisma.InputJsonValue) : undefined,
-          persona: "GENERAL",
-        },
-      });
-
-      await prisma.chatThread.update({
-        where: { id: targetThread.id },
-        data: { updatedAt: new Date() },
-      });
-    }
-
-    const paypalInvoiceUrl = `https://www.sandbox.paypal.com/invoice/p/#${invoiceId}`;
+    const isLive = process.env.PAYPAL_ENVIRONMENT === "live";
+    const paypalInvoiceUrl = isLive
+      ? `https://www.paypal.com/invoice/p/#${settled.invoiceId}`
+      : `https://www.sandbox.paypal.com/invoice/p/#${settled.invoiceId}`;
 
     return NextResponse.json({
       success: true,
       action,
-      invoiceId,
+      requiresCheckoutRedirect: false,
+      invoiceId: settled.invoiceId,
       paypalInvoiceUrl,
       message:
         action === "pay"
-          ? `Settled invoice for $${effectiveOriginal.toFixed(2)}.`
-          : `Declined invoice ${invoiceId}.`,
+          ? `Settled invoice for $${settled.amount.toFixed(2)}.`
+          : `Declined invoice ${settled.invoiceId}.`,
     });
   } catch (error) {
     console.error("[Invoice Resolution API Error]", error);

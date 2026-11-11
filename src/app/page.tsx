@@ -29,6 +29,9 @@ import {
   RefreshCw,
   Table2,
   BarChart3,
+  Link2,
+  CheckCircle2,
+  Loader2,
 } from "lucide-react";
 
 // Dynamically import Financial Insights component
@@ -76,6 +79,7 @@ export default function Home() {
   }, [transactions]);
   const [isLoadingTransactions, setIsLoadingTransactions] = useState(true);
   const [isSeedingTransactions, setIsSeedingTransactions] = useState(false);
+  const [isStartingOnboard, setIsStartingOnboard] = useState(false);
   const [gridMutation, setGridMutation] = useState<GridMutationState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -287,10 +291,16 @@ export default function Home() {
         setInvoices(SandboxStore.getInvoices());
       }
 
-      // Check if redirected from PayPal OAuth callback
+      // Check if redirected from PayPal OAuth callback, Partner Onboarding, or Orders Checkout
       if (typeof window !== "undefined") {
         const params = new URLSearchParams(window.location.search);
-        if (params.get("connected") === "paypal") {
+        const connectedParam = params.get("connected");
+        const onboardedParam = params.get("paypal_onboarded");
+        const orderStatusParam = params.get("order_status");
+        const orderToken = params.get("token");
+        const orderInvoiceId = params.get("invoice_id") || undefined;
+
+        if (connectedParam === "paypal") {
           const rawUserName = params.get("userName") || "PayPal User";
           const userName = rawUserName.replace(/[<>[\]()]/g, "").slice(0, 50);
           const firstName = userName.split(" ")[0] || userName;
@@ -305,6 +315,86 @@ export default function Home() {
             ]);
           }
           window.history.replaceState({}, document.title, window.location.pathname);
+        } else if (onboardedParam) {
+          window.history.replaceState({}, document.title, window.location.pathname);
+          if (onboardedParam === "true") {
+            if (isSubscribed) {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: `asst_onboarded_${Date.now()}`,
+                  role: "assistant",
+                  content:
+                    "Your PayPal Business account is now connected via Partner Referrals. Peers can pay split invoices directly into your PayPal balance.",
+                },
+              ]);
+            }
+            await loadTransactions();
+          } else if (onboardedParam === "declined") {
+            if (isSubscribed) {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: `asst_onboard_dec_${Date.now()}`,
+                  role: "assistant",
+                  content:
+                    "PayPal Business Partner authorization was cancelled before completion. You can connect it anytime from the header.",
+                },
+              ]);
+            }
+          }
+        } else if (orderStatusParam === "approved" && orderToken) {
+          window.history.replaceState({}, document.title, window.location.pathname);
+          try {
+            const capRes = await fetch(
+              `/api/paypal/orders/${encodeURIComponent(orderToken)}/capture`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ invoiceId: orderInvoiceId }),
+              }
+            );
+            const capData = await capRes.json();
+            if (capRes.ok && capData.success) {
+              const paidAmt = Number(capData.capture?.amount || capData.settlement?.amount || 0);
+              if (isSubscribed) {
+                setMessages((prev) => [
+                  ...prev,
+                  {
+                    id: `asst_captured_${Date.now()}`,
+                    role: "assistant",
+                    content: `PayPal payment of **$${paidAmt.toFixed(2)} USD** (${
+                      orderInvoiceId || capData.capture?.orderId
+                    }) captured directly to the organizer's PayPal Business account and settled on your ledger.`,
+                  },
+                ]);
+              }
+              await Promise.all([loadTransactions(), loadSplits(), loadEvents()]);
+            } else if (isSubscribed) {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: `asst_cap_err_${Date.now()}`,
+                  role: "assistant",
+                  content: `Could not finalize PayPal checkout capture: ${capData.error || "Unknown error"}`,
+                },
+              ]);
+            }
+          } catch (capErr) {
+            console.error("[PayPal Order Capture Redirect Error]", capErr);
+          }
+        } else if (orderStatusParam === "cancelled") {
+          window.history.replaceState({}, document.title, window.location.pathname);
+          if (isSubscribed) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: `asst_ord_cancel_${Date.now()}`,
+                role: "assistant",
+                content: "PayPal checkout was cancelled. No payment was captured.",
+              },
+            ]);
+          }
         }
       }
     };
@@ -1106,6 +1196,32 @@ export default function Home() {
     }
   };
 
+  const handleStartPartnerOnboarding = async () => {
+    setIsStartingOnboard(true);
+    try {
+      const res = await fetch("/api/auth/paypal/onboard", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok || !data.actionUrl) {
+        throw new Error(data.error || "Failed to generate PayPal Partner onboarding URL.");
+      }
+      window.location.assign(data.actionUrl);
+    } catch (err: unknown) {
+      console.error("[Partner Onboarding Init Error]", err);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `asst_onboard_err_${Date.now()}`,
+          role: "assistant",
+          content:
+            err instanceof Error
+              ? `Could not launch PayPal Partner onboarding: ${err.message}`
+              : "Could not launch PayPal Partner onboarding.",
+        },
+      ]);
+      setIsStartingOnboard(false);
+    }
+  };
+
   const handleCancelAction = (messageId: string) => {
     setMessages((prev) =>
       prev.map((m) =>
@@ -1154,6 +1270,33 @@ export default function Home() {
                 {currentUser ? "Sandbox Connected" : "PayPal Required"}
               </span>
             </div>
+
+            {/* Partner Direct-Payee Onboarding Status / Trigger */}
+            {currentUser &&
+              (currentUser.paypalOnboardingStatus === "CONNECTED" ? (
+                <div
+                  title="Connected via PayPal Partner Referrals for direct peer payments"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--status-success-bg)] border border-[var(--status-success-border)] text-[var(--status-success-text)] text-xs font-semibold shadow-2xs"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                  <span>Direct PayPal Ready</span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void handleStartPartnerOnboarding()}
+                  disabled={isStartingOnboard}
+                  title="Authorize PayPal Business direct payments via Partner Referrals"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--accent-subtle)] hover:bg-[var(--accent-subtle-hover)] active:scale-[0.98] border border-[var(--accent-border)] text-[var(--accent-text)] text-xs font-semibold transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0070ba]"
+                >
+                  {isStartingOnboard ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                  ) : (
+                    <Link2 className="w-3.5 h-3.5 shrink-0" />
+                  )}
+                  <span>Connect PayPal Direct</span>
+                </button>
+              ))}
 
             {/* User Account / PayPal Login Button */}
             {currentUser ? (

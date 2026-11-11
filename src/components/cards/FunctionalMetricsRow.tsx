@@ -644,6 +644,9 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
     // E. Pending personal debts
     if (personalDebtBills.length > 0) {
       const urgentDebt = personalDebtBills[0];
+      const rawInvoiceId = urgentDebt.id.startsWith("tx_owed_")
+        ? urgentDebt.id.slice(8)
+        : "";
       queue.push({
         id: `debt_urgent_${urgentDebt.id}`,
         type: "debt_owed",
@@ -651,7 +654,7 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
         description: `$${urgentDebt.amount.toFixed(2)} due to ${urgentDebt.counterparty || "peer"}.`,
         amount: urgentDebt.amount,
         severity: "high",
-        prompt: `PocketMate, please initiate payment review for the pending debt of $${urgentDebt.amount.toFixed(2)} to ${urgentDebt.counterparty || urgentDebt.title}.`,
+        prompt: `PocketMate, please initiate payment review for the pending debt of $${urgentDebt.amount.toFixed(2)} to ${urgentDebt.counterparty || urgentDebt.title}${rawInvoiceId ? ` (Invoice ID: ${rawInvoiceId})` : ""}.`,
         buttonLabel: "Settle via PayPal",
       });
     }
@@ -1297,8 +1300,11 @@ export const FunctionalMetricsRow: React.FC<FunctionalMetricsRowProps> = ({
                             </span>
                             <button
                               onClick={() => {
+                                const rawInvoiceId = debt.id.startsWith("tx_owed_")
+                                  ? debt.id.slice(8)
+                                  : "";
                                 onSendChatMessage(
-                                  `PocketMate, please help settle my pending payment of $${debt.amount.toFixed(2)} for ${debt.title}.`
+                                  `PocketMate, please help settle my pending payment of $${debt.amount.toFixed(2)} for ${debt.title}${rawInvoiceId ? ` (Invoice ID: ${rawInvoiceId})` : ""}.`
                                 );
                                 setActiveFlyout(null);
                                 setPinnedFlyout(null);

@@ -88,6 +88,10 @@ export const InvoiceReviewCard: React.FC<InvoiceReviewCardProps> = ({
       const checkoutUrl = data.paypalInvoiceUrl || defaultPaypalUrl;
 
       if (action === "pay") {
+        if (data.requiresCheckoutRedirect && checkoutUrl) {
+          window.location.assign(checkoutUrl);
+          return;
+        }
         if (checkoutUrl) {
           window.open(checkoutUrl, "_blank", "noopener,noreferrer");
         }

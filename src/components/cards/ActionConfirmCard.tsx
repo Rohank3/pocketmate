@@ -230,7 +230,7 @@ export const ActionConfirmCard: React.FC<ActionConfirmCardProps> = ({
     );
   }
 
-  // Incoming Invoice Review Card Layout (3 Options: Pay in Full, Pay Different Value, Decline)
+  // Incoming Invoice Review Card Layout (2 Options: Pay in Full, Decline)
   if (isInvoiceReview || cardData.action === "REVIEW_INCOMING_INVOICE") {
     return (
       <InvoiceReviewCard
