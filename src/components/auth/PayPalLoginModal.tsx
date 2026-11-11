@@ -307,7 +307,7 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
                     setEmailInput(e.target.value);
                     if (formError) setFormError(null);
                   }}
-                  placeholder="ethan.carter.pm@business.example.com"
+                  placeholder="Enter your email"
                   className="w-full rounded-xl px-3 py-2 text-xs border bg-[var(--surface-card)] border-[var(--border-strong)] text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0070ba]"
                 />
               </div>
@@ -325,7 +325,7 @@ export const PayPalLoginModal: React.FC<PayPalLoginModalProps> = ({
                   autoComplete="name"
                   value={resolvedNameInput}
                   onChange={(e) => setNameOverride(e.target.value)}
-                  placeholder="Ethan Carter"
+                  placeholder="Enter your name"
                   className="w-full rounded-xl px-3 py-2 text-xs border bg-[var(--surface-card)] border-[var(--border-strong)] text-[var(--fg-primary)] placeholder:text-[var(--fg-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0070ba]"
                 />
               </div>
