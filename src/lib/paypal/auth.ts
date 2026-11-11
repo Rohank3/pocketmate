@@ -46,17 +46,44 @@ export function getPayPalOAuthUrl(redirectUri?: string, state?: string): string 
   const appUrl = process.env.RENDER_EXTERNAL_URL || process.env.NEXTAUTH_URL || "http://localhost:3000";
   const targetRedirect = redirectUri || `${appUrl}/api/auth/callback/paypal`;
 
-  const scopes = encodeURIComponent("openid profile email");
+  const scopes = encodeURIComponent(
+    "openid profile email https://uri.paypal.com/services/paypalattributes"
+  );
   const stateQuery = state ? `&state=${encodeURIComponent(state)}` : "";
-  return `${baseUrl}/connect?flowEntry=static&client_id=${encodeURIComponent(clientId)}&response_type=code&scope=${scopes}&redirect_uri=${encodeURIComponent(
+  return `${baseUrl}/signin/authorize?client_id=${encodeURIComponent(clientId)}&response_type=code&scope=${scopes}&redirect_uri=${encodeURIComponent(
     targetRedirect
   )}${stateQuery}`;
+}
+
+async function postTokenExchange(
+  url: string,
+  authHeader: string,
+  code: string,
+  redirectUri: string
+): Promise<Response> {
+  return fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${authHeader}`,
+      Accept: "application/json",
+      "Accept-Language": "en_US",
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: `grant_type=authorization_code&code=${encodeURIComponent(
+      code
+    )}&redirect_uri=${encodeURIComponent(redirectUri)}`,
+  });
 }
 
 export async function exchangePayPalCodeForTokens(
   code: string,
   redirectUri?: string
-): Promise<{ accessToken: string; idToken?: string; grantedScope?: string }> {
+): Promise<{
+  accessToken: string;
+  idToken?: string;
+  grantedScope?: string;
+  tokenSource?: "tokenservice" | "oauth2";
+}> {
   const clientId = process.env.PAYPAL_CLIENT_ID || "";
   const clientSecret = process.env.PAYPAL_CLIENT_SECRET || "";
   const baseUrl =
@@ -69,16 +96,18 @@ export async function exchangePayPalCodeForTokens(
 
   const auth = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
 
-  const res = await fetch(`${baseUrl}/v1/oauth2/token`, {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${auth}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: `grant_type=authorization_code&code=${encodeURIComponent(
-      code
-    )}&redirect_uri=${encodeURIComponent(targetRedirect)}`,
-  });
+  let tokenSource: "tokenservice" | "oauth2" = "tokenservice";
+  let res = await postTokenExchange(
+    `${baseUrl}/v1/identity/openidconnect/tokenservice`,
+    auth,
+    code,
+    targetRedirect
+  );
+
+  if (!res.ok) {
+    tokenSource = "oauth2";
+    res = await postTokenExchange(`${baseUrl}/v1/oauth2/token`, auth, code, targetRedirect);
+  }
 
   if (!res.ok) {
     const errorText = await res.text();
@@ -94,6 +123,7 @@ export async function exchangePayPalCodeForTokens(
     accessToken: data.access_token,
     idToken: data.id_token,
     grantedScope: data.scope,
+    tokenSource,
   };
 }
 
@@ -232,7 +262,8 @@ function extractEmailFromSource(source?: {
 export async function fetchPayPalUserInfo(
   accessToken: string,
   idToken?: string,
-  grantedScope?: string
+  grantedScope?: string,
+  tokenSource?: "tokenservice" | "oauth2"
 ): Promise<PayPalUserProfile> {
   const baseUrl =
     process.env.PAYPAL_ENVIRONMENT === "live"
@@ -326,9 +357,11 @@ export async function fetchPayPalUserInfo(
     const uriCount = scopeList.length - oidcScopes.length;
     const keySummary = (obj: object | null | undefined) =>
       obj ? Object.keys(obj).join(",") || "empty" : "null";
-    const detail = `oidc=[${oidcScopes.join(",") || "none"}](+${uriCount}uri); openid=${
-      openidRes.status
-    }(${keySummary(openid)}); o2id=${oauth2OpenidRes.status}(${keySummary(
+    const detail = `tok=${tokenSource || "unknown"}; oidc=[${
+      oidcScopes.join(",") || "none"
+    }](+${uriCount}uri); openid=${openidRes.status}(${keySummary(
+      openid
+    )}); o2id=${oauth2OpenidRes.status}(${keySummary(
       oauth2Openid
     )}); v11=${v11Res.status}(${keySummary(v11)}); pp11=${pp11Res.status}(${keySummary(
       pp11

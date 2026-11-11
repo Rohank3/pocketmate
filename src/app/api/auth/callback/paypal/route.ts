@@ -43,13 +43,13 @@ export async function GET(req: NextRequest) {
 
     // Exchange auth code for user access token using the exact request origin callback URI
     const redirectUri = `${appUrl}/api/auth/callback/paypal`;
-    const { accessToken, idToken, grantedScope } = await exchangePayPalCodeForTokens(
+    const { accessToken, idToken, grantedScope, tokenSource } = await exchangePayPalCodeForTokens(
       code,
       redirectUri
     );
 
     // Fetch user profile from PayPal OpenID Connect / oauth2 / v1.1 / id_token claims
-    const profile = await fetchPayPalUserInfo(accessToken, idToken, grantedScope);
+    const profile = await fetchPayPalUserInfo(accessToken, idToken, grantedScope, tokenSource);
 
     // Upsert user into live Neon PostgreSQL database
     const user = await prisma.user.upsert({
