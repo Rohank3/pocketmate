@@ -364,7 +364,7 @@ export interface ReclassifyTransactionParams {
   merchantName: string;
   targetCategory: string;
   scope: ReclassifyScope;
-  allTransactions?: Array<{ id: string; merchantName: string; amount: number }>;
+  allTransactions?: Array<{ id: string; merchantName: string; memo?: string; amount: number }>;
 }
 
 export interface ReclassificationResult {
@@ -372,6 +372,7 @@ export interface ReclassificationResult {
   updatedTransactionIds: string[];
   ruleCreated?: { pattern: string; category: string };
   similarCount?: number;
+  warning?: string;
   message: string;
 }
 
@@ -499,17 +500,22 @@ export async function reclassifyTransactionWithScope(
 
   const updatedIdsSet = new Set<string>([transactionId, ...sameMerchantTxIds]);
 
-  // 2. Identify candidate transactions from the ledger that might be semantically similar
+  // 2. Identify candidate transactions from the ledger that might be semantically similar (AI-only, zero fallback)
   const otherTxs = allTransactions.filter((t) => !updatedIdsSet.has(t.id));
+  let similarityWarning: string | undefined = undefined;
 
   if (otherTxs.length > 0) {
-    const similarTxIds = await findSemanticallySimilarTransactionsWithGemini(
+    const similarResult = await findSemanticallySimilarTransactionsWithGemini(
       merchantName,
       targetCategory,
       otherTxs
     );
 
-    for (const simId of similarTxIds) {
+    if (similarResult.warning) {
+      similarityWarning = similarResult.warning;
+    }
+
+    for (const simId of similarResult.ids) {
       updatedIdsSet.add(simId);
     }
   }
@@ -539,46 +545,31 @@ export async function reclassifyTransactionWithScope(
     updatedTransactionIds: updatedIds,
     similarCount: updatedIds.length - 1,
     ruleCreated: { pattern: normMerchant, category: targetCategory },
-    message: `Applied '${targetCategory}' to '${merchantName}' and reclassified ${
-      updatedIds.length
-    } matching & semantically similar transactions across your ledger.`,
+    warning: similarityWarning,
+    message: similarityWarning
+      ? `Applied '${targetCategory}' to '${merchantName}' (${updatedIds.length} item${updatedIds.length === 1 ? "" : "s"}). ${similarityWarning}`
+      : `Applied '${targetCategory}' to '${merchantName}' and reclassified ${updatedIds.length} matching & semantically similar transactions across your ledger.`,
   };
 }
 
 /**
- * Algorithmic token-stem fallback if AI service is offline.
- * Zero hardcoded merchant or brand names.
- */
-function getAlgorithmicStemFallback(
-  anchorMerchant: string,
-  candidateTransactions: Array<{ id: string; merchantName: string; amount: number }>
-): string[] {
-  const normAnchor = normalizeMerchant(anchorMerchant);
-  const anchorWords = normAnchor.split(" ").filter((w) => w.length >= 4);
-  if (anchorWords.length === 0) return [];
-
-  return candidateTransactions
-    .filter((t) => {
-      const normCandidate = normalizeMerchant(t.merchantName);
-      return anchorWords.some((word) => normCandidate.includes(word));
-    })
-    .map((t) => t.id);
-}
-
-/**
  * Prompts Gemini AI to dynamically find semantically similar vendor transactions in the active ledger.
+ * Strictly AI-only with zero heuristic/stem fallback.
  */
 async function findSemanticallySimilarTransactionsWithGemini(
   anchorMerchant: string,
   targetCategory: string,
-  candidateTransactions: Array<{ id: string; merchantName: string; amount: number }>
-): Promise<string[]> {
-  const stemFallback = getAlgorithmicStemFallback(anchorMerchant, candidateTransactions);
-
+  candidateTransactions: Array<{ id: string; merchantName: string; memo?: string; amount: number }>
+): Promise<{ ids: string[]; warning?: string }> {
   const apiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY_SECONDARY;
   if (!apiKey || apiKey === "your-gemini-api-key") {
-    return stemFallback;
+    return {
+      ids: [],
+      warning: "AI similarity matching is unconfigured (missing Gemini API key); only the selected merchant was updated.",
+    };
   }
+
+  const validCandidateIds = new Set(candidateTransactions.map((t) => t.id));
 
   const prompt = `
 You are PocketMate's Financial Classification Engine.
@@ -586,13 +577,19 @@ The user just categorized merchant "${anchorMerchant}" into category "${targetCa
 Review the following candidate transactions from their ledger:
 
 ${JSON.stringify(
-  candidateTransactions.map((t) => ({ id: t.id, merchant: t.merchantName })),
+  candidateTransactions.map((t) => ({
+    id: t.id,
+    merchant: t.merchantName,
+    memo: t.memo || null,
+    amount: t.amount,
+  })),
   null,
   2
 )}
 
 TASK:
-Identify which of these candidate transactions are SEMANTICALLY SIMILAR in vendor nature (e.g., other coffee shops, other food delivery/dining, other streaming services, other retail stores, or branches of the same brand) and should ALSO belong to "${targetCategory}".
+Identify ONLY transactions that are genuinely SEMANTICALLY SIMILAR in vendor nature to "${anchorMerchant}" (e.g., other coffee shops, other restaurants, other hotels/airlines, other gyms/fitness studios, other streaming services) and truly belong in "${targetCategory}".
+Do NOT match unrelated businesses or P2P transfers simply because of generic words.
 
 OUTPUT SCHEMA:
 Return ONLY valid JSON with an array of matching transaction IDs:
@@ -611,18 +608,36 @@ Return ONLY valid JSON with an array of matching transaction IDs:
       timeoutMs: 12000,
     });
 
-    if (!res.ok) return stemFallback;
+    if (!res.ok) {
+      return {
+        ids: [],
+        warning: `AI similarity service returned HTTP ${res.status}; only the selected merchant was updated.`,
+      };
+    }
     const data = await res.json();
     const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!rawText) return stemFallback;
+    if (!rawText) {
+      return {
+        ids: [],
+        warning: "AI similarity service returned an empty response; only the selected merchant was updated.",
+      };
+    }
 
     const parsed = JSON.parse(rawText) as { similarTransactionIds?: string[] };
-    if (Array.isArray(parsed.similarTransactionIds) && parsed.similarTransactionIds.length > 0) {
-      return parsed.similarTransactionIds;
+    if (Array.isArray(parsed.similarTransactionIds)) {
+      return {
+        ids: parsed.similarTransactionIds.filter((id) => validCandidateIds.has(id)),
+      };
     }
-    return stemFallback;
+    return {
+      ids: [],
+      warning: "AI similarity response was invalid; only the selected merchant was updated.",
+    };
   } catch {
-    return stemFallback;
+    return {
+      ids: [],
+      warning: "AI similarity check failed or timed out; only the selected merchant was updated.",
+    };
   }
 }
 

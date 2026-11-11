@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/db";
-import { paypalClient } from "@/lib/paypal/client";
 
 export interface ResolvedContact {
   name: string;
@@ -69,40 +68,48 @@ export async function resolveContact(
     }
   }
 
-  // 3. Check recent live PayPal transactions (last 30 days)
-  try {
-    const txs = await paypalClient.fetchRecentTransactions(720);
-    for (const tx of txs) {
-      const debtor = (tx.debtorName || "").toLowerCase().trim();
-      const email = (tx.recipientEmail || "").toLowerCase().trim();
-
-      // Skip generic placeholder labels or self references
-      if (
-        !debtor ||
-        debtor === "100% self" ||
-        debtor === "self" ||
-        debtor === "shared split" ||
-        debtor.includes("self")
-      ) {
-        continue;
+  // 3. Check persisted user ledger history strictly scoped to this user
+  if (userId) {
+    try {
+      let resolvedUserId = userId;
+      if (userId.includes("@")) {
+        const u = await prisma.user.findUnique({ where: { email: userId } });
+        if (u) resolvedUserId = u.id;
       }
 
-      if (
-        debtor === q ||
-        debtor.split(/\s+/).includes(q) ||
-        (email && email.split("@")[0].split(/[._]/).includes(q))
-      ) {
-        if (tx.recipientEmail) {
+      const txs = await prisma.ledgerTransaction.findMany({
+        where: { userId: resolvedUserId, status: { not: "CANCELLED" } },
+        orderBy: { timestamp: "desc" },
+        take: 100,
+      });
+
+      for (const tx of txs) {
+        const debtor = (tx.debtorName || "").toLowerCase().trim();
+        const email = (tx.recipientEmail || tx.invoicerEmail || "").toLowerCase().trim();
+
+        if (
+          debtor &&
+          (debtor === q || debtor.split(/\s+/).includes(q)) &&
+          email
+        ) {
           return {
             name: tx.debtorName || query,
-            email: tx.recipientEmail,
+            email,
+            source: "transaction_history",
+          };
+        }
+
+        if (email && email.split("@")[0].split(/[._]/).includes(q)) {
+          return {
+            name: tx.debtorName || tx.merchantName || query,
+            email,
             source: "transaction_history",
           };
         }
       }
+    } catch (err) {
+      console.warn("[ContactResolver Ledger Warning]", err);
     }
-  } catch (err) {
-    console.warn("[ContactResolver PayPal Warning]", err);
   }
 
   return null;
@@ -126,13 +133,12 @@ export async function saveOrUpdateContact(
     let resolvedUserId = userId;
     if (userId.includes("@")) {
       const u = await prisma.user.findUnique({ where: { email: userId } });
-      if (u) resolvedUserId = u.id;
+      if (!u) return null;
+      resolvedUserId = u.id;
     } else {
       const u = await prisma.user.findUnique({ where: { id: userId } });
-      if (!u) {
-        const firstUser = await prisma.user.findFirst();
-        if (firstUser) resolvedUserId = firstUser.id;
-      }
+      if (!u) return null;
+      resolvedUserId = u.id;
     }
 
     const contact = await prisma.contact.upsert({

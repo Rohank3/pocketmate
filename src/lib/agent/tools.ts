@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { paypalClient } from "../paypal/client";
+import { getUserLedgerTransactions } from "../paypal/sync";
 import {
   calculateEqualSplit,
   calculateUnequalSplit,
@@ -251,16 +252,6 @@ export const ReviewIncomingInvoiceSchema = z.object({
   memo: z.string().trim().max(255).optional(),
   paypalInvoiceUrl: z.string().url().optional(),
 });
-
-// ============================================================================
-// In-Memory Fallback State (Simulating DB when Neon is not connected)
-// ============================================================================
-
-export interface MockBudgetStore {
-  [category: string]: { monthlyCap: number; currentSpent: number };
-}
-
-export const inMemoryBudgets: MockBudgetStore = Object.assign(Object.create(null), {});
 
 // ============================================================================
 // Tool Declarations for Gemini Function Calling
@@ -640,18 +631,17 @@ export async function executeAgentTool(
   switch (name) {
     case "fetch_recent_transactions": {
       const { hoursBack } = FetchTransactionsSchema.parse(safeArgs);
-      let queryEmail: string | undefined = undefined;
-      if (userId) {
-        try {
-          const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
-          if (user?.email && !user.email.includes("business") && !user.email.includes("merchant")) {
-            queryEmail = user.email;
-          }
-        } catch {
-          // ignore
-        }
+      if (!userId) {
+        return { success: false, error: "Unauthorized: Active PayPal session required." };
       }
-      const txs = await paypalClient.fetchRecentTransactions(hoursBack, queryEmail);
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, email: true },
+      });
+      if (!user) {
+        return { success: false, error: "Unauthorized: User account not found." };
+      }
+      const txs = await getUserLedgerTransactions(user.id, user.email, { hoursBack });
       return {
         success: true,
         hoursLookedBack: hoursBack,
@@ -776,11 +766,28 @@ export async function executeAgentTool(
         };
       }
 
-      const payoutRes = await paypalClient.sendPayout({
-        recipientEmail,
-        amount,
-        note: note || "Direct P2P Settlement via PocketMate",
-      });
+      let senderInfo: { name?: string; email?: string } | undefined = undefined;
+      if (userId) {
+        const userRec = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { name: true, email: true },
+        });
+        if (userRec) {
+          senderInfo = {
+            name: userRec.name || userRec.email.split("@")[0].replace(/[._]/g, " "),
+            email: userRec.email,
+          };
+        }
+      }
+
+      const payoutRes = await paypalClient.sendPayout(
+        {
+          recipientEmail,
+          amount,
+          note: note || "Direct P2P Settlement",
+        },
+        senderInfo
+      );
 
       if (category && userId) {
         try {
@@ -1001,52 +1008,39 @@ export async function executeAgentTool(
 
     case "log_category_expense": {
       const { category, amount, merchant, description } = LogCategoryExpenseSchema.parse(safeArgs);
+      if (!userId) {
+        return { success: false, error: "Unauthorized: Active PayPal session required." };
+      }
 
       let prevSpent = 0;
       let cap = 350.0;
       let targetCat = category;
 
-      try {
-        const dbCat = userId
-          ? await prisma.budgetCategory.findFirst({
-              where: {
-                userId,
-                name: { equals: category, mode: "insensitive" },
-              },
-            })
-          : null;
+      const dbCat = await prisma.budgetCategory.findFirst({
+        where: {
+          userId,
+          name: { equals: category, mode: "insensitive" },
+        },
+      });
 
-        if (dbCat) {
-          targetCat = dbCat.name;
-          prevSpent = dbCat.currentSpent;
-          cap = dbCat.monthlyCap;
-          await prisma.budgetCategory.update({
-            where: { id: dbCat.id },
-            data: { currentSpent: dbCat.currentSpent + amount },
-          });
-          await prisma.budgetEntry.create({
-            data: {
-              categoryId: dbCat.id,
-              amount,
-              description: description || "Logged via PocketMate Assistant",
-              merchant: merchant || null,
-            },
-          });
-          prevSpent = dbCat.currentSpent;
-        } else {
-          if (userId) {
-            syncBudgetExpenseToDB(category, amount, merchant, description, userId);
-          }
-          if (Object.prototype.hasOwnProperty.call(inMemoryBudgets, category)) {
-            prevSpent = inMemoryBudgets[category].currentSpent;
-            cap = inMemoryBudgets[category].monthlyCap;
-            inMemoryBudgets[category].currentSpent += amount;
-          }
-        }
-      } catch {
-        if (userId) {
-          syncBudgetExpenseToDB(category, amount, merchant, description, userId);
-        }
+      if (dbCat) {
+        targetCat = dbCat.name;
+        prevSpent = dbCat.currentSpent;
+        cap = dbCat.monthlyCap;
+        await prisma.budgetCategory.update({
+          where: { id: dbCat.id },
+          data: { currentSpent: dbCat.currentSpent + amount },
+        });
+        await prisma.budgetEntry.create({
+          data: {
+            categoryId: dbCat.id,
+            amount,
+            description: description || "Logged via PocketMate Assistant",
+            merchant: merchant || null,
+          },
+        });
+      } else {
+        await syncBudgetExpenseToDB(category, amount, merchant, description, userId);
       }
 
       const newSpent = prevSpent + amount;
@@ -1074,51 +1068,32 @@ export async function executeAgentTool(
 
     case "check_budget_status": {
       const { category } = CheckBudgetStatusSchema.parse(safeArgs);
-
-      try {
-        const dbCat = userId
-          ? await prisma.budgetCategory.findFirst({
-              where: {
-                userId,
-                name: { equals: category, mode: "insensitive" },
-              },
-            })
-          : null;
-
-        if (dbCat) {
-          return {
-            category: dbCat.name,
-            monthlyCap: dbCat.monthlyCap,
-            currentSpent: dbCat.currentSpent,
-            remaining: Math.max(0, dbCat.monthlyCap - dbCat.currentSpent),
-            percentUsed: dbCat.monthlyCap > 0 ? Math.round((dbCat.currentSpent / dbCat.monthlyCap) * 100) : 0,
-          };
-        }
-      } catch {
-        // fallback
+      if (!userId) {
+        return { success: false, error: "Unauthorized: Active PayPal session required." };
       }
 
-      if (Object.prototype.hasOwnProperty.call(inMemoryBudgets, category)) {
-        const item = inMemoryBudgets[category];
+      const dbCat = await prisma.budgetCategory.findFirst({
+        where: {
+          userId,
+          name: { equals: category, mode: "insensitive" },
+        },
+      });
+
+      if (!dbCat) {
         return {
+          found: false,
           category,
-          monthlyCap: item.monthlyCap,
-          currentSpent: item.currentSpent,
-          remaining: Math.max(0, item.monthlyCap - item.currentSpent),
-          percentUsed: item.monthlyCap > 0 ? Math.round((item.currentSpent / item.monthlyCap) * 100) : 0,
+          message: `Budget category '${category}' does not exist in your account.`,
         };
       }
 
-      const target = Object.keys(inMemoryBudgets).find(
-        (c) => c.toLowerCase() === category.toLowerCase()
-      ) || "Dining";
-      const budget = inMemoryBudgets[target] || { monthlyCap: 300, currentSpent: 100 };
       return {
-        category: target,
-        monthlyCap: budget.monthlyCap,
-        currentSpent: budget.currentSpent,
-        remaining: Math.max(0, budget.monthlyCap - budget.currentSpent),
-        percentUsed: Math.round((budget.currentSpent / budget.monthlyCap) * 100),
+        found: true,
+        category: dbCat.name,
+        monthlyCap: dbCat.monthlyCap,
+        currentSpent: dbCat.currentSpent,
+        remaining: Math.max(0, dbCat.monthlyCap - dbCat.currentSpent),
+        percentUsed: dbCat.monthlyCap > 0 ? Math.round((dbCat.currentSpent / dbCat.monthlyCap) * 100) : 0,
       };
     }
 
@@ -1184,15 +1159,18 @@ export async function executeAgentTool(
       const { receiptTotal, tax, tip, transactionId } = AuditReceiptSchema.parse(rawArgs);
       let chargedAmount = receiptTotal + (tax || 0) + (tip || 0);
 
-      if (transactionId) {
+      if (transactionId && userId) {
         try {
-          const recentTxs = await paypalClient.fetchRecentTransactions(168);
-          const foundTx = recentTxs.find((t) => t.id === transactionId);
-          if (foundTx) {
-            chargedAmount = foundTx.amount;
+          const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+          if (user?.email) {
+            const recentTxs = await getUserLedgerTransactions(userId, user.email, { hoursBack: 168 });
+            const foundTx = recentTxs.find((t) => t.id === transactionId);
+            if (foundTx) {
+              chargedAmount = foundTx.amount;
+            }
           }
         } catch (err) {
-          console.warn("[AuditReceipt PayPal Warning]", err);
+          console.warn("[AuditReceipt Ledger Warning]", err);
         }
       }
 
@@ -1255,20 +1233,19 @@ export async function executeAgentTool(
 
     case "auto_categorize_transactions": {
       const { hoursBack } = AutoCategorizeTransactionsSchema.parse(safeArgs);
-      const effectiveUserId = userId || "demo_user";
-
-      let filterEmail: string | undefined = undefined;
-      if (effectiveUserId.includes("@")) {
-        filterEmail = effectiveUserId;
-      } else {
-        const u = await prisma.user.findUnique({ where: { id: effectiveUserId } });
-        if (u?.email) filterEmail = u.email;
+      if (!userId) {
+        return { success: false, error: "Unauthorized: Active PayPal session required." };
       }
 
-      const txs = await paypalClient.fetchRecentTransactions(hoursBack || 720, filterEmail);
-      const catContext = await loadUserCategorizationContext(effectiveUserId);
+      const u = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, email: true } });
+      if (!u?.email) {
+        return { success: false, error: "Unauthorized: User account not found." };
+      }
+
+      const txs = await getUserLedgerTransactions(u.id, u.email, { hoursBack: hoursBack || 720 });
+      const catContext = await loadUserCategorizationContext(u.id);
       const categoryMap = await categorizeTransactionsBatch(
-        txs.map((t) => ({ id: t.id, merchantName: t.merchantName, amount: t.amount })),
+        txs.map((t) => ({ id: t.id, merchantName: t.merchantName, amount: t.amount, note: t.memo })),
         catContext
       );
 
@@ -1302,13 +1279,13 @@ export async function executeAgentTool(
             await prisma.transactionCategoryOverride.upsert({
               where: {
                 userId_transactionId: {
-                  userId: effectiveUserId,
+                  userId: u.id,
                   transactionId: t.id,
                 },
               },
               update: { categoryName: cat },
               create: {
-                userId: effectiveUserId,
+                userId: u.id,
                 transactionId: t.id,
                 categoryName: cat,
               },
@@ -1364,13 +1341,15 @@ export async function executeAgentTool(
 
     case "set_merchant_category_rule": {
       const { merchantPattern, category } = SetMerchantCategoryRuleSchema.parse(safeArgs);
-      const effectiveUserId = userId || "demo_user";
+      if (!userId) {
+        return { success: false, error: "Unauthorized: Active PayPal session required." };
+      }
       const normalizedPattern = normalizeMerchant(merchantPattern);
 
       const rule = await prisma.merchantCategoryRule.upsert({
         where: {
           userId_merchantPattern: {
-            userId: effectiveUserId,
+            userId,
             merchantPattern: normalizedPattern,
           },
         },
@@ -1379,7 +1358,7 @@ export async function executeAgentTool(
           isAutoLearned: false,
         },
         create: {
-          userId: effectiveUserId,
+          userId,
           merchantPattern: normalizedPattern,
           categoryName: category,
           isAutoLearned: false,
@@ -1397,20 +1376,22 @@ export async function executeAgentTool(
 
     case "propose_split_breakdown": {
       const parsed = ProposeSplitBreakdownSchema.parse(safeArgs);
-      const effectiveUserId = userId || "demo_user";
+      if (!userId) {
+        return { success: false, error: "Unauthorized: Active PayPal session required." };
+      }
 
       // Auto-resolve known emails from Prisma contacts / transaction history
       const resolvedParticipants = await Promise.all(
         parsed.participants.map(async (p) => {
           if (p.email && p.email.includes("@")) {
             // User provided an email - persist it immediately so it's remembered!
-            await saveOrUpdateContact(effectiveUserId, p.name, p.email);
+            await saveOrUpdateContact(userId, p.name, p.email);
             return p;
           }
           if (p.isHost || p.name.toLowerCase() === "you" || p.name.toLowerCase() === "me") {
             return { ...p, isHost: true };
           }
-          const contact = await resolveContact(p.name, effectiveUserId);
+          const contact = await resolveContact(p.name, userId);
           return {
             ...p,
             email: contact?.email || p.email || "",
@@ -1445,12 +1426,14 @@ export async function executeAgentTool(
     case "set_transaction_category": {
       const { transactionId, category, scope, rememberForMerchant, merchantName } =
         SetTransactionCategorySchema.parse(safeArgs);
-      const effectiveUserId = userId || "demo_user";
+      if (!userId) {
+        return { success: false, error: "Unauthorized: Active PayPal session required." };
+      }
 
       const effectiveScope = scope || (rememberForMerchant ? "merchant" : "single");
 
       const reclassResult = await reclassifyTransactionWithScope({
-        userId: effectiveUserId,
+        userId,
         transactionId,
         merchantName: merchantName || "Merchant",
         targetCategory: category,
@@ -1469,16 +1452,21 @@ export async function executeAgentTool(
 
     case "remember_contact": {
       const { name, emailOrHandle } = RememberContactSchema.parse(safeArgs);
-      const effectiveUserId = userId || "demo_user";
-      const cleanEmail = emailOrHandle.includes("@")
-        ? emailOrHandle.trim().toLowerCase()
-        : `${name.toLowerCase().replace(/\s+/g, ".")}@personal.example.com`;
+      if (!userId) {
+        return { success: false, error: "Unauthorized: Active PayPal session required." };
+      }
+      if (!emailOrHandle.includes("@")) {
+        return {
+          success: false,
+          error: "A valid PayPal email address is required to save a contact.",
+        };
+      }
+      const cleanEmail = emailOrHandle.trim().toLowerCase();
 
       const saved = await saveOrUpdateContact(
-        effectiveUserId,
+        userId,
         name.trim(),
-        cleanEmail,
-        !emailOrHandle.includes("@") ? emailOrHandle.trim() : undefined
+        cleanEmail
       );
 
       return {

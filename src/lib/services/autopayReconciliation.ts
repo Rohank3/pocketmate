@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { paypalClient } from "@/lib/paypal/client";
+import { getUserLedgerTransactions } from "@/lib/paypal/sync";
 import { formatCounterpartyWithLifecycle } from "@/lib/utils/subscriptionLifecycle";
 import { normalizeMerchant } from "./categorizer";
 
@@ -136,8 +136,10 @@ export async function reconcileAutopaySubscriptions(
   if (!userId) return report;
 
   try {
-    // 1. Fetch recent transactions for this user account (up to 30 days)
-    const transactions = await paypalClient.fetchRecentTransactions(720, userEmail);
+    // 1. Fetch user's synced ledger transactions (up to 90 days for cadence analysis)
+    const transactions = userEmail
+      ? await getUserLedgerTransactions(userId, userEmail, { sync: false, hoursBack: 2160 })
+      : [];
     if (!transactions || transactions.length === 0) return report;
 
     // 2. Fetch all scheduled events for this user
