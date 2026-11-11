@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { getUserLedgerTransactions } from "@/lib/paypal/sync";
-import { formatCounterpartyWithLifecycle } from "@/lib/utils/subscriptionLifecycle";
+import { extractLifecycle, formatCounterpartyWithLifecycle } from "@/lib/utils/subscriptionLifecycle";
 import { normalizeMerchant } from "./categorizer";
 
 export interface ReconciliationReport {
@@ -16,8 +16,75 @@ interface DynamicSubscription {
   amount: number;
   dayOfMonth: number;
   timestamp: string;
+  earliestTimestamp: string;
   confidence: number;
   source: "cadence_analysis" | "gemini_inference" | "heuristic_indicator";
+}
+
+function computeBillingStartDate(earliestIso: string, dayOfMonth: number): string {
+  const earliestStr = new Date(earliestIso).toISOString().slice(0, 10);
+  const ym = earliestStr.slice(0, 7);
+  const earliestDay = parseInt(earliestStr.slice(8, 10), 10) || dayOfMonth;
+  const clampedDay = Math.min(earliestDay, dayOfMonth);
+  return `${ym}-${String(Math.max(1, clampedDay)).padStart(2, "0")}`;
+}
+
+function doesTxMatchEvent(
+  tx: { merchantName: string; amount: number; status: string },
+  evt: { title: string; amount: number; counterparty?: string | null }
+): boolean {
+  if (tx.status !== "COMPLETED" || tx.amount <= 0) return false;
+  if (Math.abs(tx.amount - evt.amount) >= 0.05) return false;
+
+  const mNorm = normalizeMerchant(tx.merchantName);
+  const titleNorm = normalizeMerchant(evt.title);
+  const cpClean = extractLifecycle(evt.counterparty).cleanName;
+  const cpNorm = normalizeMerchant(cpClean);
+
+  return Boolean(
+    (cpNorm && (mNorm.includes(cpNorm) || cpNorm.includes(mNorm))) ||
+      (titleNorm && (titleNorm.includes(mNorm) || mNorm.includes(titleNorm)))
+  );
+}
+
+/**
+ * Enriches scheduled events with distinct `YYYY-MM` months that have matching
+ * settled PayPal ledger transactions so historical months retain paid status.
+ */
+export async function enrichEventsWithSettledMonths<
+  T extends { title: string; amount: number; counterparty?: string | null; type: string }
+>(
+  userId: string,
+  userEmail: string | undefined,
+  events: T[]
+): Promise<Array<T & { settledMonths: string[] }>> {
+  if (!userId || !userEmail || events.length === 0) {
+    return events.map((e) => ({ ...e, settledMonths: [] }));
+  }
+
+  try {
+    const transactions = await getUserLedgerTransactions(userId, userEmail, {
+      sync: false,
+      hoursBack: 2160,
+    });
+    const completedTxs = transactions.filter((tx) => tx.status === "COMPLETED" && tx.amount > 0);
+
+    return events.map((evt) => {
+      if (evt.type !== "outgoing") {
+        return { ...evt, settledMonths: [] };
+      }
+      const months = new Set<string>();
+      for (const tx of completedTxs) {
+        if (doesTxMatchEvent(tx, evt)) {
+          months.add(new Date(tx.timestamp).toISOString().slice(0, 7));
+        }
+      }
+      return { ...evt, settledMonths: Array.from(months).sort() };
+    });
+  } catch (err) {
+    console.warn("[Event Settled Months Enrichment Warning]", err);
+    return events.map((e) => ({ ...e, settledMonths: [] }));
+  }
 }
 
 // Session-level classification cache to minimize repeated AI inferences
@@ -249,21 +316,24 @@ export async function reconcileAutopaySubscriptions(
 
           // Natural monthly cadence occurs within 25 to 35 calendar days
           if (amountMatches && daysDiff >= 25 && daysDiff <= 35) {
-            const txDate = new Date(t2.timestamp);
+            const earliestTx = sorted[0];
+            const latestTx = sorted[sorted.length - 1];
+            const txDate = new Date(latestTx.timestamp);
             dynamicallyDetected.push({
-              merchantName: t2.merchantName,
-              canonicalName: t2.merchantName,
+              merchantName: latestTx.merchantName,
+              canonicalName: latestTx.merchantName,
               category: "Services",
-              amount: t2.amount,
-              dayOfMonth: txDate.getDate() || 15,
-              timestamp: t2.timestamp,
+              amount: latestTx.amount,
+              dayOfMonth: txDate.getUTCDate() || txDate.getDate() || 15,
+              timestamp: latestTx.timestamp,
+              earliestTimestamp: earliestTx.timestamp,
               confidence: 0.98,
               source: "cadence_analysis",
             });
             classifiedNorms.add(normMerchant);
             subscriptionClassificationCache.set(normMerchant, {
               isRecurring: true,
-              canonicalName: t2.merchantName,
+              canonicalName: latestTx.merchantName,
               category: "Services",
             });
             break;
@@ -281,14 +351,20 @@ export async function reconcileAutopaySubscriptions(
       if (subscriptionClassificationCache.has(norm)) {
         const cached = subscriptionClassificationCache.get(norm)!;
         if (cached.isRecurring) {
-          const txDate = new Date(tx.timestamp);
+          const sameNormSorted = (txsByMerchant.get(norm) || [tx]).sort(
+            (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+          );
+          const earliestTx = sameNormSorted[0] || tx;
+          const latestTx = sameNormSorted[sameNormSorted.length - 1] || tx;
+          const txDate = new Date(latestTx.timestamp);
           dynamicallyDetected.push({
-            merchantName: tx.merchantName,
+            merchantName: latestTx.merchantName,
             canonicalName: cached.canonicalName,
             category: cached.category,
-            amount: tx.amount,
-            dayOfMonth: txDate.getDate() || 15,
-            timestamp: tx.timestamp,
+            amount: latestTx.amount,
+            dayOfMonth: txDate.getUTCDate() || txDate.getDate() || 15,
+            timestamp: latestTx.timestamp,
+            earliestTimestamp: earliestTx.timestamp,
             confidence: 0.92,
             source: "gemini_inference",
           });
@@ -310,16 +386,21 @@ export async function reconcileAutopaySubscriptions(
         subscriptionClassificationCache.set(norm, classification);
 
         if (classification.isRecurring) {
-          const matchedTx = completedTxs.find((t) => normalizeMerchant(t.merchantName) === norm);
-          if (matchedTx) {
-            const txDate = new Date(matchedTx.timestamp);
+          const matchedTxs = (txsByMerchant.get(norm) || []).sort(
+            (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+          );
+          const earliestTx = matchedTxs[0];
+          const latestTx = matchedTxs[matchedTxs.length - 1];
+          if (latestTx && earliestTx) {
+            const txDate = new Date(latestTx.timestamp);
             dynamicallyDetected.push({
-              merchantName: matchedTx.merchantName,
+              merchantName: latestTx.merchantName,
               canonicalName: classification.canonicalName,
               category: classification.category,
-              amount: matchedTx.amount,
-              dayOfMonth: txDate.getDate() || 15,
-              timestamp: matchedTx.timestamp,
+              amount: latestTx.amount,
+              dayOfMonth: txDate.getUTCDate() || txDate.getDate() || 15,
+              timestamp: latestTx.timestamp,
+              earliestTimestamp: earliestTx.timestamp,
               confidence: 0.92,
               source: "gemini_inference",
             });
@@ -339,14 +420,20 @@ export async function reconcileAutopaySubscriptions(
         (tx.memo && RECURRING_SEMANTIC_INDICATORS.test(tx.memo));
 
       if (isSemanticMatch) {
-        const txDate = new Date(tx.timestamp);
+        const matchedTxs = (txsByMerchant.get(norm) || [tx]).sort(
+          (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        );
+        const earliestTx = matchedTxs[0] || tx;
+        const latestTx = matchedTxs[matchedTxs.length - 1] || tx;
+        const txDate = new Date(latestTx.timestamp);
         dynamicallyDetected.push({
-          merchantName: tx.merchantName,
-          canonicalName: tx.merchantName,
+          merchantName: latestTx.merchantName,
+          canonicalName: latestTx.merchantName,
           category: "Services",
-          amount: tx.amount,
-          dayOfMonth: txDate.getDate() || 15,
-          timestamp: tx.timestamp,
+          amount: latestTx.amount,
+          dayOfMonth: txDate.getUTCDate() || txDate.getDate() || 15,
+          timestamp: latestTx.timestamp,
+          earliestTimestamp: earliestTx.timestamp,
           confidence: 0.85,
           source: "heuristic_indicator",
         });
@@ -368,10 +455,10 @@ export async function reconcileAutopaySubscriptions(
         dayOfMonth
       ).padStart(2, "0")}`;
       const isFutureInCurrentMonth = dayOfMonth > todayDay;
+      const billingStartStr = computeBillingStartDate(sub.earliestTimestamp, dayOfMonth);
 
       if (!existingForSub) {
-        const startDateStr = new Date(sub.timestamp).toISOString().slice(0, 10);
-        const formattedCp = formatCounterpartyWithLifecycle(sub.canonicalName, startDateStr);
+        const formattedCp = formatCounterpartyWithLifecycle(sub.canonicalName, billingStartStr);
         const initialStatus = isFutureInCurrentMonth ? "scheduled" : "completed";
 
         await prisma.scheduledEvent.create({
@@ -410,8 +497,11 @@ export async function reconcileAutopaySubscriptions(
         const isPastMonth =
           evtDate.getFullYear() < currentYear ||
           (evtDate.getFullYear() === currentYear && evtDate.getMonth() < currentMonth);
+        const currentLifecycle = extractLifecycle(existingForSub.counterparty, existingForSub.date);
+        const needsStartBackfill =
+          !currentLifecycle.startDate || billingStartStr < currentLifecycle.startDate;
 
-        if (isPastMonth || isFutureInCurrentMonth) {
+        if (isPastMonth || isFutureInCurrentMonth || needsStartBackfill) {
           const hasTxInCurrentMonth = completedTxs.some((t) => {
             const d = new Date(t.timestamp);
             return (
@@ -423,16 +513,28 @@ export async function reconcileAutopaySubscriptions(
           });
 
           const updatedStatus = isFutureInCurrentMonth && !hasTxInCurrentMonth ? "scheduled" : "completed";
+          const nextCounterparty = needsStartBackfill
+            ? formatCounterpartyWithLifecycle(
+                currentLifecycle.cleanName || sub.canonicalName,
+                billingStartStr,
+                currentLifecycle.endDate || undefined
+              )
+            : existingForSub.counterparty;
+
           await prisma.scheduledEvent.update({
             where: { id: existingForSub.id },
             data: {
               date: eventDateStr,
               dayOfMonth,
               status: updatedStatus,
+              ...(nextCounterparty !== existingForSub.counterparty
+                ? { counterparty: nextCounterparty }
+                : {}),
             },
           });
           existingForSub.date = eventDateStr;
           existingForSub.status = updatedStatus;
+          if (nextCounterparty) existingForSub.counterparty = nextCounterparty;
         }
       }
     }

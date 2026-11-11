@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthenticatedUser } from "@/lib/auth/session";
-import { reconcileAutopaySubscriptions } from "@/lib/services/autopayReconciliation";
+import {
+  enrichEventsWithSettledMonths,
+  reconcileAutopaySubscriptions,
+} from "@/lib/services/autopayReconciliation";
 import { z } from "zod";
 
 const CreateEventSchema = z.object({
@@ -32,7 +35,9 @@ export async function GET(req: NextRequest) {
       orderBy: { date: "asc" },
     });
 
-    return NextResponse.json({ success: true, events, reconciliation });
+    const enrichedEvents = await enrichEventsWithSettledMonths(userId, userEmail, events);
+
+    return NextResponse.json({ success: true, events: enrichedEvents, reconciliation });
   } catch (error) {
     console.error("[Events GET Error]", error);
     return NextResponse.json({ success: false, error: "Failed to fetch events" }, { status: 500 });

@@ -167,3 +167,28 @@ export function isEventActiveOnDate(
 
   return false;
 }
+
+/**
+ * Resolves completion status for a recurring event on a specific calendar date (`YYYY-MM-DD`):
+ * - Uses month-scoped settled transaction history (`YYYY-MM` in `settledMonths`) so historical
+ *   months accurately show completed bills even when the subscription row advances to future months.
+ * - Falls back to the event row's `status` strictly for its own active `YYYY-MM` cycle.
+ */
+export function isEventCompletedForDate(
+  event: {
+    date: string;
+    status: string;
+    settledMonths?: string[];
+  },
+  cellDateStr: string,
+  todayDateStr: string
+): boolean {
+  const cellYm = cellDateStr.slice(0, 7);
+  if (Array.isArray(event.settledMonths) && event.settledMonths.includes(cellYm)) {
+    return true;
+  }
+  if (event.date && event.date.slice(0, 7) === cellYm) {
+    return event.status === "completed" && cellDateStr <= todayDateStr;
+  }
+  return false;
+}
