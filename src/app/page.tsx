@@ -264,6 +264,44 @@ export default function Home() {
         }
       }
 
+      // Surface PayPal OAuth errors immediately even when unauthenticated
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const authErrorParam = params.get("auth_error");
+        if (authErrorParam) {
+          const rawDetail = params.get("auth_detail") || "";
+          const safeDetail = rawDetail.replace(/[^\w\s.,:;=()/\[\]-]/g, "").slice(0, 180);
+          const authErrorMessages: Record<string, string> = {
+            missing_email:
+              "PayPal did not return an email address for your account. In PayPal Developer Dashboard -> App Settings, ensure the 'Log in with PayPal' checkbox itself is checked (not just inside Manage), click Save in Manage (with Full name, Email, and Unconfirmed email checked), click Save Changes on the App page, and allow PayPal settings propagation.",
+            missing_credentials:
+              "PayPal OAuth credentials are missing in the server environment.",
+            invalid_state:
+              "PayPal sign-in state expired or did not match. Please try logging in again.",
+            missing_code:
+              "PayPal did not return an authorization code. Verify your Return URL matches this domain.",
+            access_denied:
+              "PayPal sign-in was cancelled before authorization was granted.",
+            invalid_scope:
+              "PayPal rejected the requested profile scope. Enable 'Log in with PayPal' (Full name + Email) in App Settings.",
+            exchange_failed:
+              "Failed to verify PayPal sign-in response. Verify your Return URL and client credentials.",
+          };
+          const baseMessage =
+            authErrorMessages[authErrorParam] ||
+            "PayPal sign-in could not be completed. Please try again.";
+          if (isSubscribed) {
+            setAuthError(
+              safeDetail && authErrorParam === "missing_email"
+                ? `${baseMessage} (Diagnostics: ${safeDetail})`
+                : baseMessage
+            );
+            setIsLoginModalOpen(true);
+          }
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      }
+
       if (!authedUser) {
         if (isSubscribed) setIsLoadingTransactions(false);
         return;
@@ -296,38 +334,12 @@ export default function Home() {
       if (typeof window !== "undefined") {
         const params = new URLSearchParams(window.location.search);
         const connectedParam = params.get("connected");
-        const authErrorParam = params.get("auth_error");
         const onboardedParam = params.get("paypal_onboarded");
         const orderStatusParam = params.get("order_status");
         const orderToken = params.get("token");
         const orderInvoiceId = params.get("invoice_id") || undefined;
 
-        if (authErrorParam) {
-          const authErrorMessages: Record<string, string> = {
-            missing_email:
-              "PayPal did not return an email address for your account. In PayPal Developer Dashboard -> App Settings, check 'Log in with PayPal' -> Manage (select Full name, Email, PayPal account ID, and Unconfirmed email), click Save, then Save Changes on your app.",
-            missing_credentials:
-              "PayPal OAuth credentials are missing in the server environment.",
-            invalid_state:
-              "PayPal sign-in state expired or did not match. Please try logging in again.",
-            missing_code:
-              "PayPal did not return an authorization code. Verify your Return URL matches this domain.",
-            access_denied:
-              "PayPal sign-in was cancelled before authorization was granted.",
-            invalid_scope:
-              "PayPal rejected the requested profile scope. Enable 'Log in with PayPal' (Full name + Email) in App Settings.",
-            exchange_failed:
-              "Failed to verify PayPal sign-in response. Verify your Return URL and client credentials.",
-          };
-          if (isSubscribed) {
-            setAuthError(
-              authErrorMessages[authErrorParam] ||
-                "PayPal sign-in could not be completed. Please try again."
-            );
-            setIsLoginModalOpen(true);
-          }
-          window.history.replaceState({}, document.title, window.location.pathname);
-        } else if (connectedParam === "paypal") {
+        if (connectedParam === "paypal") {
           const rawUserName = params.get("userName") || "PayPal User";
           const userName = rawUserName.replace(/[<>[\]()]/g, "").slice(0, 50);
           const firstName = userName.split(" ")[0] || userName;

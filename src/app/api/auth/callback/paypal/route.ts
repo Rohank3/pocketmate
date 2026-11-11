@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { exchangePayPalCodeForTokens, fetchPayPalUserInfo, resolvePublicOrigin } from "@/lib/paypal/auth";
+import {
+  exchangePayPalCodeForTokens,
+  fetchPayPalUserInfo,
+  PayPalMissingEmailError,
+  resolvePublicOrigin,
+} from "@/lib/paypal/auth";
 import { prisma } from "@/lib/db";
 import { createSignedSessionCookie } from "@/lib/auth/session";
 import crypto from "crypto";
@@ -38,10 +43,13 @@ export async function GET(req: NextRequest) {
 
     // Exchange auth code for user access token using the exact request origin callback URI
     const redirectUri = `${appUrl}/api/auth/callback/paypal`;
-    const { accessToken, idToken } = await exchangePayPalCodeForTokens(code, redirectUri);
+    const { accessToken, idToken, grantedScope } = await exchangePayPalCodeForTokens(
+      code,
+      redirectUri
+    );
 
-    // Fetch user profile from PayPal OpenID Connect / v1.1 / id_token claims
-    const profile = await fetchPayPalUserInfo(accessToken, idToken);
+    // Fetch user profile from PayPal OpenID Connect / oauth2 / v1.1 / id_token claims
+    const profile = await fetchPayPalUserInfo(accessToken, idToken, grantedScope);
 
     // Upsert user into live Neon PostgreSQL database
     const user = await prisma.user.upsert({
@@ -98,11 +106,14 @@ export async function GET(req: NextRequest) {
       }
     }
     console.error("[PayPal Auth Callback Error]", error);
-    const errorCode =
-      error instanceof Error && error.message === "MISSING_PAYPAL_EMAIL"
-        ? "missing_email"
-        : "exchange_failed";
-    return NextResponse.redirect(`${appUrl}/?auth_error=${errorCode}`);
+    if (error instanceof PayPalMissingEmailError || (error instanceof Error && error.message === "MISSING_PAYPAL_EMAIL")) {
+      const detailQuery =
+        error instanceof PayPalMissingEmailError && error.detail
+          ? `&auth_detail=${encodeURIComponent(error.detail.slice(0, 180))}`
+          : "";
+      return NextResponse.redirect(`${appUrl}/?auth_error=missing_email${detailQuery}`);
+    }
+    return NextResponse.redirect(`${appUrl}/?auth_error=exchange_failed`);
   }
 }
 
