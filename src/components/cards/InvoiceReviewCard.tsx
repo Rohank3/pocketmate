@@ -126,14 +126,17 @@ export const InvoiceReviewCard: React.FC<InvoiceReviewCardProps> = ({
     }
   };
 
+  const normalizedLiveStatus = liveStatus?.toLowerCase();
   const persistedPaid =
     cardData.resolvedStatus === "paid" ||
     cardData.resolvedAction === "pay" ||
-    liveStatus === "paid";
+    normalizedLiveStatus === "paid" ||
+    normalizedLiveStatus === "settled" ||
+    normalizedLiveStatus === "completed";
   const persistedDeclined =
     cardData.resolvedStatus === "declined" ||
     cardData.resolvedAction === "decline" ||
-    liveStatus === "cancelled";
+    normalizedLiveStatus === "cancelled";
 
   const effectiveResolved =
     resolvedStatus ||

@@ -82,10 +82,18 @@ export default function Home() {
   const [isStartingOnboard, setIsStartingOnboard] = useState(false);
   const [gridMutation, setGridMutation] = useState<GridMutationState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const isLoadingRef = useRef(false);
+  useEffect(() => {
+    isLoadingRef.current = isLoading;
+  }, [isLoading]);
 
   // Multi-Thread Autonomous Chat State
   const [threads, setThreads] = useState<ChatThreadItem[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const activeThreadIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    activeThreadIdRef.current = activeThreadId;
+  }, [activeThreadId]);
   const [messages, setMessages] = useState<ChatMessageItem[]>([DEFAULT_WELCOME_MESSAGE]);
 
   // Multi-user sandbox authentication & cross-account sync state
@@ -235,20 +243,87 @@ export default function Home() {
     }
   }, []);
 
+  // Load messages for a specific thread strictly from database API
+  const loadThreadMessages = useCallback(async (threadId: string, user?: UserAccount | null) => {
+    if (user?.email) {
+      try {
+        const res = await fetch(`/api/chat/messages?threadId=${threadId}`);
+        const data = await res.json();
+        if (data.success && Array.isArray(data.messages)) {
+          if (data.messages.length > 0) {
+            setMessages(data.messages.slice(-30));
+          } else {
+            setMessages([DEFAULT_WELCOME_MESSAGE]);
+          }
+          return;
+        }
+      } catch (err) {
+        console.warn("[Load Messages Warning]", err);
+      }
+    }
+    setMessages([DEFAULT_WELCOME_MESSAGE]);
+  }, []);
+
   // Initial load effect
   useEffect(() => {
     let isSubscribed = true;
 
     const init = async () => {
       let authedUser: UserAccount | null = null;
+      let captureErrorNotice: string | null = null;
       try {
         const userRes = await fetch("/api/auth/me");
         const userData = await userRes.json();
         if (isSubscribed && userData.user) {
           authedUser = userData.user;
-          currentUserRef.current = userData.user;
-          setCurrentUser(userData.user);
-          setPendingPayPal(null);
+
+          // If returning from an approved PayPal Checkout redirect, capture & settle in DB BEFORE
+          // hydrating threads/messages/transactions so every UI card renders Paid immediately without refresh.
+          if (typeof window !== "undefined") {
+            const urlParams = new URLSearchParams(window.location.search);
+            const orderStatusParam = urlParams.get("order_status");
+            const orderToken = urlParams.get("token");
+            const orderInvoiceId = urlParams.get("invoice_id") || undefined;
+
+            if (orderStatusParam === "approved" && orderToken) {
+              window.history.replaceState({}, document.title, window.location.pathname);
+              try {
+                const capRes = await fetch(
+                  `/api/paypal/orders/${encodeURIComponent(orderToken)}/capture`,
+                  {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ invoiceId: orderInvoiceId }),
+                  }
+                );
+                const capData = await capRes.json();
+                if (!capRes.ok || !capData.success) {
+                  captureErrorNotice = `Could not finalize PayPal checkout capture: ${
+                    capData.error || "Unknown error"
+                  }`;
+                }
+              } catch (capErr) {
+                console.error("[PayPal Order Capture Redirect Error]", capErr);
+                captureErrorNotice = "Could not finalize PayPal checkout capture due to a network error.";
+              }
+            }
+          }
+
+          if (isSubscribed) {
+            currentUserRef.current = authedUser;
+            setCurrentUser(authedUser);
+            setPendingPayPal(null);
+            if (captureErrorNotice) {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: `asst_cap_err_${Date.now()}`,
+                  role: "assistant",
+                  content: captureErrorNotice as string,
+                },
+              ]);
+            }
+          }
         } else if (isSubscribed) {
           currentUserRef.current = null;
           setCurrentUser(null);
@@ -349,14 +424,12 @@ export default function Home() {
         setInvoices(SandboxStore.getInvoices());
       }
 
-      // Check if redirected from PayPal OAuth callback, Partner Onboarding, or Orders Checkout
+      // Check remaining PayPal OAuth / cancelled order URL parameters
       if (typeof window !== "undefined") {
         const params = new URLSearchParams(window.location.search);
         const connectedParam = params.get("connected");
         const onboardedParam = params.get("paypal_onboarded");
         const orderStatusParam = params.get("order_status");
-        const orderToken = params.get("token");
-        const orderInvoiceId = params.get("invoice_id") || undefined;
 
         if (connectedParam === "paypal") {
           const rawUserName = params.get("userName") || "PayPal User";
@@ -402,62 +475,6 @@ export default function Home() {
               ]);
             }
           }
-        } else if (orderStatusParam === "approved" && orderToken) {
-          window.history.replaceState({}, document.title, window.location.pathname);
-          try {
-            const capRes = await fetch(
-              `/api/paypal/orders/${encodeURIComponent(orderToken)}/capture`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ invoiceId: orderInvoiceId }),
-              }
-            );
-            const capData = await capRes.json();
-            if (capRes.ok && capData.success) {
-              const paidAmt = Number(capData.capture?.amount || capData.settlement?.amount || 0);
-              const settledInvId = orderInvoiceId || capData.settlement?.invoiceId;
-              if (isSubscribed) {
-                setMessages((prev) => [
-                  ...prev.map((m) =>
-                    m.actionCard &&
-                    (m.actionCard.action === "REVIEW_INCOMING_INVOICE" ||
-                      m.actionCard.type === "incoming_invoice_review") &&
-                    (!settledInvId || m.actionCard.invoiceId === settledInvId)
-                      ? {
-                          ...m,
-                          actionCard: {
-                            ...m.actionCard,
-                            resolvedStatus: "paid",
-                            resolvedAction: "pay",
-                            resolvedMessage: `Settled $${paidAmt.toFixed(2)} via PayPal.`,
-                          },
-                        }
-                      : m
-                  ),
-                  {
-                    id: `asst_captured_${Date.now()}`,
-                    role: "assistant",
-                    content: `PayPal payment of **$${paidAmt.toFixed(2)} USD** (${
-                      orderInvoiceId || capData.capture?.orderId
-                    }) captured directly to the organizer's PayPal Business account and settled on your ledger.`,
-                  },
-                ]);
-              }
-              await Promise.all([loadTransactions(), loadSplits(), loadEvents()]);
-            } else if (isSubscribed) {
-              setMessages((prev) => [
-                ...prev,
-                {
-                  id: `asst_cap_err_${Date.now()}`,
-                  role: "assistant",
-                  content: `Could not finalize PayPal checkout capture: ${capData.error || "Unknown error"}`,
-                },
-              ]);
-            }
-          } catch (capErr) {
-            console.error("[PayPal Order Capture Redirect Error]", capErr);
-          }
         } else if (orderStatusParam === "cancelled") {
           window.history.replaceState({}, document.title, window.location.pathname);
           if (isSubscribed) {
@@ -476,22 +493,28 @@ export default function Home() {
 
     void init();
 
-    // Revalidate live transactions on window focus (e.g. user returns from PayPal payment/invoice tab)
-    const onFocus = () => {
-      if (currentUserRef.current) {
-        void loadTransactions();
+    // Revalidate live transactions, splits, events, and active chat thread cards on focus / interval
+    const syncLiveWorkspace = () => {
+      if (!currentUserRef.current) return;
+      void Promise.all([loadTransactions(), loadSplits(), loadEvents()]);
+      const threadId = activeThreadIdRef.current;
+      if (threadId && !threadId.startsWith("th_") && !isLoadingRef.current) {
+        void loadThreadMessages(threadId, currentUserRef.current);
       }
+    };
+
+    const onFocus = () => {
+      syncLiveWorkspace();
     };
     window.addEventListener("focus", onFocus);
 
     // Periodic background sync every 25 seconds when browser tab is active
     const interval = setInterval(() => {
       if (
-        currentUserRef.current &&
         typeof document !== "undefined" &&
         document.visibilityState === "visible"
       ) {
-        void loadTransactions();
+        syncLiveWorkspace();
       }
     }, 25000);
 
@@ -500,7 +523,7 @@ export default function Home() {
       window.removeEventListener("focus", onFocus);
       clearInterval(interval);
     };
-  }, [loadCategories, loadEvents, loadSplits, loadTransactions]);
+  }, [loadCategories, loadEvents, loadSplits, loadThreadMessages, loadTransactions]);
 
   // Request & Trigger Web Notifications for bills due in <= 48 hours
   useEffect(() => {
@@ -555,27 +578,6 @@ export default function Home() {
         // ignore
       }
     }
-  }, []);
-
-  // Load messages for a specific thread strictly from database API
-  const loadThreadMessages = useCallback(async (threadId: string, user?: UserAccount | null) => {
-    if (user?.email) {
-      try {
-        const res = await fetch(`/api/chat/messages?threadId=${threadId}`);
-        const data = await res.json();
-        if (data.success && Array.isArray(data.messages)) {
-          if (data.messages.length > 0) {
-            setMessages(data.messages.slice(-30));
-          } else {
-            setMessages([DEFAULT_WELCOME_MESSAGE]);
-          }
-          return;
-        }
-      } catch (err) {
-        console.warn("[Load Messages Warning]", err);
-      }
-    }
-    setMessages([DEFAULT_WELCOME_MESSAGE]);
   }, []);
 
   // Multi-thread chat hydration & synchronization effect (PostgreSQL sole source of truth)
