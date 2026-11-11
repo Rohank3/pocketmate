@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { paypalClient } from "../paypal/client";
-import { getUserLedgerTransactions } from "../paypal/sync";
+import { paypalClient, type InvoiceDispatchResult } from "../paypal/client";
+import { getUserLedgerTransactions, syncUserPayPalLedger } from "../paypal/sync";
 import {
   calculateEqualSplit,
   calculateUnequalSplit,
@@ -18,6 +18,41 @@ import {
   reclassifyTransactionWithScope,
 } from "../services/categorizer";
 import { resolveContact, saveOrUpdateContact } from "../contacts/contactResolver";
+
+async function syncLedgerAfterDispatch(
+  userId: string | undefined,
+  senderEmail: string | undefined,
+  recipientEmails: string[]
+): Promise<void> {
+  if (!userId) return;
+
+  const cleanRecipients = Array.from(
+    new Set(recipientEmails.map((e) => e.toLowerCase().trim()).filter(Boolean))
+  );
+  if (cleanRecipients.length > 0) {
+    try {
+      await prisma.user.updateMany({
+        where: {
+          email: { in: cleanRecipients },
+          lastSyncedAt: { not: null },
+        },
+        data: {
+          lastSyncedAt: new Date(Date.now() - 60_000),
+        },
+      });
+    } catch {
+      // ignore recipient checkpoint nudge failure
+    }
+  }
+
+  if (senderEmail) {
+    try {
+      await syncUserPayPalLedger(userId, senderEmail);
+    } catch (syncErr) {
+      console.warn("[Post-Dispatch Ledger Sync Warning]", syncErr);
+    }
+  }
+}
 
 // ============================================================================
 // Parameter Validation Schemas (Layer B: Validation Middleware)
@@ -732,6 +767,12 @@ export async function executeAgentTool(
         } catch (dbErr) {
           console.warn("[Split Record DB Persistence Warning]", dbErr);
         }
+
+        await syncLedgerAfterDispatch(
+          userId,
+          senderInfo?.email,
+          recipients.map((r) => r.email)
+        );
       }
 
       return {
@@ -810,6 +851,8 @@ export async function executeAgentTool(
         }
       }
 
+      await syncLedgerAfterDispatch(userId, senderInfo?.email, [recipientEmail]);
+
       return {
         success: true,
         action: "PAYOUT_COMPLETED",
@@ -865,6 +908,42 @@ export async function executeAgentTool(
         };
       }
 
+      const invoiceResults: InvoiceDispatchResult[] = [];
+      let senderInfo: { name?: string; email?: string } | undefined = undefined;
+
+      if (userId) {
+        try {
+          const userRec = await prisma.user.findFirst({
+            where: {
+              OR: [{ id: userId }, { email: userId }],
+            },
+            select: { name: true, email: true },
+          });
+          if (userRec) {
+            senderInfo = {
+              name: userRec.name || (userRec.email ? userRec.email.split("@")[0].replace(/[._]/g, " ") : "Organizer"),
+              email: userRec.email,
+            };
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (dispatchInvoices) {
+        for (const r of recipients) {
+          const res = await paypalClient.dispatchInvoice(r, senderInfo);
+          invoiceResults.push(res);
+          if (userId && r.email) {
+            try {
+              await saveOrUpdateContact(userId, r.name || r.email.split("@")[0], r.email);
+            } catch {
+              // ignore
+            }
+          }
+        }
+      }
+
       let savedRecord = null;
       if (userId) {
         try {
@@ -876,10 +955,11 @@ export async function executeAgentTool(
               description: title,
               itemsJson: calculated.allocations as unknown as Prisma.InputJsonValue,
               items: {
-                create: calculated.allocations.map((a) => ({
+                create: calculated.allocations.map((a, idx) => ({
                   participantName: a.name,
                   participantEmail: a.emailOrHandle.includes("@") ? a.emailOrHandle : `${a.name.toLowerCase().replace(/\s+/g, ".")}@personal.example.com`,
                   amount: a.amount,
+                  paypalInvoiceId: invoiceResults[idx]?.invoiceId ?? null,
                   status: dispatchInvoices ? "SENT" : "DRAFT",
                 })),
               },
@@ -889,37 +969,13 @@ export async function executeAgentTool(
         } catch (dbErr) {
           console.warn("[SplitRecord Create Warning]", dbErr);
         }
-      }
 
-      const invoiceResults = [];
-      if (dispatchInvoices) {
-        let senderInfo: { name?: string; email?: string } | undefined = undefined;
-        if (userId) {
-          try {
-            const userRec = await prisma.user.findFirst({
-              where: {
-                OR: [{ id: userId }, { email: userId }],
-              },
-              select: { name: true, email: true },
-            });
-            if (userRec) {
-              senderInfo = {
-                name: userRec.name || (userRec.email ? userRec.email.split("@")[0].replace(/[._]/g, " ") : "Organizer"),
-                email: userRec.email,
-              };
-            }
-          } catch {
-            // ignore
-          }
-        }
-
-        for (const r of recipients) {
-          try {
-            const res = await paypalClient.dispatchInvoice(r, senderInfo);
-            invoiceResults.push(res);
-          } catch (invErr) {
-            console.warn("[Dispatch Invoice in Split Error]", invErr);
-          }
+        if (dispatchInvoices) {
+          await syncLedgerAfterDispatch(
+            userId,
+            senderInfo?.email,
+            recipients.map((r) => r.email)
+          );
         }
       }
 
