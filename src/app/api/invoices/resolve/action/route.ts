@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedUser, getUserIdFromRequest } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { paypalClient } from "@/lib/paypal/client";
+import { markChatActionCardsResolved } from "@/lib/agent/dbSync";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 
@@ -86,12 +87,28 @@ export async function POST(req: NextRequest) {
         });
       }
 
+      const msgText = `Accepted adjusted payment from ${item?.participantName || "debtor"}. Remaining difference of $${(
+        differenceAmount || 0
+      ).toFixed(2)} has been absorbed into your host share.`;
+
+      await markChatActionCardsResolved({
+        userId,
+        match: (card) =>
+          (card.action === "DISPUTE_RESOLUTION" || card.type === "dispute_resolution") &&
+          Boolean(
+            (invoiceId && card.invoiceId === invoiceId) ||
+              (splitItemId && card.splitItemId === splitItemId)
+          ),
+        resolution: {
+          resolvedStatus: "accepted",
+          resolvedMessage: msgText,
+        },
+      });
+
       return NextResponse.json({
         success: true,
         action: "accept",
-        message: `Accepted adjusted payment from ${item?.participantName || "debtor"}. Remaining difference of $${(
-          differenceAmount || 0
-        ).toFixed(2)} has been absorbed into your host share.`,
+        message: msgText,
       });
     }
 
@@ -143,14 +160,30 @@ export async function POST(req: NextRequest) {
         });
       }
 
+      const msgText = `Dispatched supplemental PayPal invoice for $${diffToCharge.toFixed(
+        2
+      )} to ${targetName} (${targetEmail}) with note: "${desc}".`;
+
+      await markChatActionCardsResolved({
+        userId,
+        match: (card) =>
+          (card.action === "DISPUTE_RESOLUTION" || card.type === "dispute_resolution") &&
+          Boolean(
+            (invoiceId && card.invoiceId === invoiceId) ||
+              (splitItemId && card.splitItemId === splitItemId)
+          ),
+        resolution: {
+          resolvedStatus: "requested_difference",
+          resolvedMessage: msgText,
+        },
+      });
+
       return NextResponse.json({
         success: true,
         action: "request_difference",
         invoiceId: newInvoiceId,
         amount: diffToCharge,
-        message: `Dispatched supplemental PayPal invoice for $${diffToCharge.toFixed(
-          2
-        )} to ${targetName} (${targetEmail}) with note: "${desc}".`,
+        message: msgText,
       });
     }
 

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
 import { paypalClient } from "./client";
 import { syncUserPayPalLedger } from "./sync";
+import { markChatActionCardsResolved } from "@/lib/agent/dbSync";
 
 export interface InvoiceSettlementContext {
   invoiceId: string;
@@ -298,6 +299,24 @@ export async function finalizeInvoiceResolution(ctx: InvoiceSettlementContext) {
       data: { updatedAt: new Date() },
     });
   }
+
+  // Mark payer's matching incoming invoice chat cards as resolved in DB
+  await markChatActionCardsResolved({
+    userId: ctx.payerUserId,
+    match: (card) =>
+      (card.action === "REVIEW_INCOMING_INVOICE" || card.type === "incoming_invoice_review") &&
+      typeof card.invoiceId === "string" &&
+      card.invoiceId.trim() === resolvedInvoiceId,
+    resolution: {
+      resolvedStatus: ctx.action === "pay" ? "paid" : "declined",
+      resolvedAction: ctx.action,
+      resolvedReason: ctx.reason,
+      resolvedMessage:
+        ctx.action === "pay"
+          ? `Settled $${effectiveOriginal.toFixed(2)} via PayPal.`
+          : `Declined: ${ctx.reason || "No explanation provided"}`,
+    },
+  });
 
   // Trigger fast incremental ledger sync for payer & organizer in background
   await Promise.allSettled([

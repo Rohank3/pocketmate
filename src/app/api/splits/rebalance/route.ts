@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedUser, getUserIdFromRequest } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { paypalClient } from "@/lib/paypal/client";
+import { markChatActionCardsResolved } from "@/lib/agent/dbSync";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 
@@ -181,23 +182,36 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    const summaryMessage = `Successfully rebalanced split for ${memo || splitRecord.description}. ${
+      supplementalDispatched.length > 0
+        ? `Sent ${supplementalDispatched.length} supplemental invoice(s). `
+        : ""
+    }${
+      reissuedInvoices.length > 0 ? `Reissued ${reissuedInvoices.length} updated invoice(s). ` : ""
+    }${
+      refundsQueue.length > 0
+        ? `${refundsQueue.length} participant(s) are owed refund payouts.`
+        : ""
+    }`;
+
+    await markChatActionCardsResolved({
+      userId,
+      match: (card) =>
+        (card.action === "REINVOKE_SPLIT" || card.type === "split_reconciliation") &&
+        card.splitRecordId === splitRecordId,
+      resolution: {
+        resolvedStatus: "rebalanced",
+        resolvedMessage: summaryMessage.trim(),
+      },
+    });
+
     return NextResponse.json({
       success: true,
       splitRecordId,
       supplementalDispatched,
       reissuedInvoices,
       refundsQueue,
-      message: `Successfully rebalanced split for ${memo || splitRecord.description}. ${
-        supplementalDispatched.length > 0
-          ? `Sent ${supplementalDispatched.length} supplemental invoice(s). `
-          : ""
-      }${
-        reissuedInvoices.length > 0 ? `Reissued ${reissuedInvoices.length} updated invoice(s). ` : ""
-      }${
-        refundsQueue.length > 0
-          ? `${refundsQueue.length} participant(s) are owed refund payouts.`
-          : ""
-      }`,
+      message: summaryMessage,
     });
   } catch (error) {
     console.error("[Rebalance Split API Error]", error);

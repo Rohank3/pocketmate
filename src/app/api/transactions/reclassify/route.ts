@@ -7,6 +7,7 @@ import {
   normalizeMerchant,
   ReclassifyScope,
 } from "@/lib/services/categorizer";
+import { markChatActionCardsResolved, persistChatMessage } from "@/lib/agent/dbSync";
 import { z } from "zod";
 
 const ReclassifyRequestSchema = z.object({
@@ -14,6 +15,8 @@ const ReclassifyRequestSchema = z.object({
   merchantName: z.string().trim().min(1).max(100),
   targetCategory: z.string().trim().min(1).max(50),
   scope: z.enum(["single", "merchant", "similar"] as const),
+  messageId: z.string().trim().max(100).optional(),
+  threadId: z.string().trim().max(100).optional(),
   allTransactions: z
     .array(
       z.object({
@@ -46,7 +49,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { transactionId, merchantName, targetCategory, scope, allTransactions = [] } = parseResult.data;
+    const {
+      transactionId,
+      merchantName,
+      targetCategory,
+      scope,
+      messageId,
+      threadId,
+      allTransactions = [],
+    } = parseResult.data;
 
     const result = await reclassifyTransactionWithScope({
       userId,
@@ -55,6 +66,28 @@ export async function POST(req: NextRequest) {
       targetCategory,
       scope: scope as ReclassifyScope,
       allTransactions,
+    });
+
+    const resolvedCardIdsSet = new Set(result.updatedTransactionIds);
+    const merchantLower = merchantName.toLowerCase().trim();
+    await markChatActionCardsResolved({
+      userId,
+      messageId,
+      match: (card) => {
+        if (card.action !== "CATEGORY_TRIAGE" && card.type !== "category_triage") return false;
+        const cardTxId = typeof card.transactionId === "string" ? card.transactionId : "";
+        const cardMerchant = String(card.merchantName || card.merchant || "").toLowerCase().trim();
+        return (
+          cardTxId === transactionId ||
+          resolvedCardIdsSet.has(cardTxId) ||
+          (scope !== "single" && cardMerchant === merchantLower)
+        );
+      },
+      resolution: {
+        resolvedStatus: "categorized",
+        resolvedCategory: targetCategory,
+        resolvedMessage: result.message || `Categorized as '${targetCategory}'.`,
+      },
     });
 
     // Load fresh categorization context including updated rules and overrides
@@ -126,10 +159,46 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    let persistedFollowUpId: string | undefined = undefined;
+    if (threadId && messageId) {
+      const warningNotice = result.warning ? `\n\n⚠️ ${result.warning}` : "";
+      if (nextSuggestion) {
+        persistedFollowUpId = await persistChatMessage(
+          "assistant",
+          `Reclassified **${merchantName}** as *${targetCategory}*.${warningNotice} **${nextSuggestion.remainingCount} unclassified transaction(s) remaining** in your ledger. Next up: **${nextSuggestion.merchantName}** ($${nextSuggestion.amount.toFixed(2)}).`,
+          "GENERAL",
+          {
+            actionCard: {
+              action: "CATEGORY_TRIAGE",
+              type: "category_triage",
+              transactionId: nextSuggestion.transactionId,
+              merchantName: nextSuggestion.merchantName,
+              amount: nextSuggestion.amount,
+              suggestedCategory: nextSuggestion.suggestedCategory,
+              confidence: nextSuggestion.confidence,
+              reasoning: nextSuggestion.reasoning,
+            },
+          },
+          userId,
+          threadId
+        );
+      } else {
+        persistedFollowUpId = await persistChatMessage(
+          "assistant",
+          `🎉 **All transactions classified!** Every item in your ledger has been categorized and your budget spending caps are up to date.${warningNotice}`,
+          "GENERAL",
+          undefined,
+          userId,
+          threadId
+        );
+      }
+    }
+
     return NextResponse.json({
       success: true,
       ...result,
       nextSuggestion,
+      persistedFollowUpId,
     });
   } catch (error) {
     console.error("[Transactions Reclassify Route Error]", error);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { runAgentOrchestrator } from "@/lib/agent/orchestrator";
 import { executeAgentTool } from "@/lib/agent/tools";
 import { getAuthenticatedUser } from "@/lib/auth/session";
+import { markChatActionCardsResolved, persistChatMessage } from "@/lib/agent/dbSync";
 import { z } from "zod";
 
 const ActionToConfirmSchema = z.discriminatedUnion("action", [
@@ -85,6 +86,8 @@ const AgentPayloadSchema = z.object({
     .optional(),
   persona: z.enum(["GENERAL", "FREELANCER", "BUSINESS"]).default("GENERAL"),
   actionToConfirm: ActionToConfirmSchema.optional(),
+  messageId: z.string().trim().max(100).optional(),
+  threadId: z.string().trim().max(100).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -99,7 +102,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { messages, persona, actionToConfirm } = parseResult.data;
+    const { messages, persona, actionToConfirm, messageId, threadId } = parseResult.data;
     const authenticatedUser = await getAuthenticatedUser(req);
     if (!authenticatedUser) {
       return NextResponse.json(
@@ -108,6 +111,46 @@ export async function POST(req: NextRequest) {
       );
     }
     const userId = authenticatedUser.id;
+
+    const finalizeConfirmedAction = async (
+      resolvedStatus: string,
+      reply: string,
+      executedTools: Array<{ name: string; args: unknown; result: unknown }>
+    ) => {
+      await markChatActionCardsResolved({
+        userId,
+        messageId,
+        match: (card) => {
+          if (card.resolvedStatus) return false;
+          if (
+            actionToConfirm?.action === "DISPATCH_INVOICES" ||
+            actionToConfirm?.action === "PROPOSE_SPLIT_BREAKDOWN"
+          ) {
+            return (
+              card.action === "DISPATCH_INVOICES" ||
+              card.action === "PROPOSE_SPLIT_BREAKDOWN" ||
+              card.type === "split_breakdown"
+            );
+          }
+          return card.action === actionToConfirm?.action;
+        },
+        resolution: {
+          resolvedStatus,
+          resolvedMessage: reply,
+        },
+      });
+
+      const persistedMessageId = threadId
+        ? await persistChatMessage("assistant", reply, persona, undefined, userId, threadId)
+        : undefined;
+
+      return NextResponse.json({
+        reply,
+        actionCard: null,
+        persistedMessageId,
+        executedTools,
+      });
+    };
 
     // Handle single-tap confirmation of an action card (Layer D)
     if (actionToConfirm && (actionToConfirm.action === "DISPATCH_INVOICES" || actionToConfirm.action === "PROPOSE_SPLIT_BREAKDOWN")) {
@@ -121,11 +164,11 @@ export async function POST(req: NextRequest) {
         true
       );
 
-      return NextResponse.json({
-        reply: `✅ Successfully dispatched ${dispatchResult.dispatchedCount} PayPal invoices via Sandbox API.`,
-        actionCard: null,
-        executedTools: [{ name: "dispatch_paypal_invoices", args: actionToConfirm, result: dispatchResult }],
-      });
+      return finalizeConfirmedAction(
+        "dispatched",
+        `✅ Successfully dispatched ${dispatchResult.dispatchedCount} PayPal invoices via Sandbox API.`,
+        [{ name: "dispatch_paypal_invoices", args: actionToConfirm, result: dispatchResult }]
+      );
     }
 
     if (actionToConfirm && actionToConfirm.action === "DISPATCH_PAYOUT") {
@@ -153,42 +196,42 @@ export async function POST(req: NextRequest) {
         true
       );
 
-      return NextResponse.json({
-        reply: `✅ Successfully transferred $${Number(amount).toFixed(2)} to ${recipientEmail} via PayPal Payouts API.`,
-        actionCard: null,
-        executedTools: [{ name: "send_direct_payout", args: actionToConfirm, result: payoutResult }],
-      });
+      return finalizeConfirmedAction(
+        "transferred",
+        `✅ Successfully transferred $${Number(amount).toFixed(2)} to ${recipientEmail} via PayPal Payouts API.`,
+        [{ name: "send_direct_payout", args: actionToConfirm, result: payoutResult }]
+      );
     }
 
     if (actionToConfirm && actionToConfirm.action === "pay_invoice") {
       const amt = Number(actionToConfirm.amount || 0);
       const invId = actionToConfirm.invoiceId || "Invoice";
-      return NextResponse.json({
-        reply: `✅ Payment of **$${amt.toFixed(2)} USD** for invoice \`${invId}\` has been successfully settled via your PayPal Sandbox Wallet. Your ledger and budget have been updated.`,
-        actionCard: null,
-        executedTools: [],
-      });
+      return finalizeConfirmedAction(
+        "pay_invoice",
+        `✅ Payment of **$${amt.toFixed(2)} USD** for invoice \`${invId}\` has been successfully settled via your PayPal Sandbox Wallet. Your ledger and budget have been updated.`,
+        []
+      );
     }
 
     if (actionToConfirm && actionToConfirm.action === "split_invoice") {
       const amt = Number(actionToConfirm.amount || 0);
       const invId = actionToConfirm.invoiceId || "Invoice";
       const merchant = actionToConfirm.merchant || "Merchant";
-      return NextResponse.json({
-        reply: `Group split initiated for invoice \`${invId}\` (**$${amt.toFixed(2)}** from **${merchant}**).\n\nWho would you like to split this with? Reply with the participants (e.g. *"split this charge 3 ways with Alex and Sam"*).`,
-        actionCard: null,
-        executedTools: [],
-      });
+      return finalizeConfirmedAction(
+        "split_invoice",
+        `Group split initiated for invoice \`${invId}\` (**$${amt.toFixed(2)}** from **${merchant}**).\n\nWho would you like to split this with? Reply with the participants (e.g. *"split this charge 3 ways with Alex and Sam"*).`,
+        []
+      );
     }
 
     if (actionToConfirm && actionToConfirm.action === "dispute_invoice") {
       const invId = actionToConfirm.invoiceId || "Invoice";
       const merchant = actionToConfirm.merchant || "Merchant";
-      return NextResponse.json({
-        reply: `🛡️ **PayPal Dispute Filed**: Invoice \`${invId}\` for **${merchant}** has been flagged under PayPal Sandbox Buyer Protection for billing discrepancy review.`,
-        actionCard: null,
-        executedTools: [],
-      });
+      return finalizeConfirmedAction(
+        "dispute_invoice",
+        `🛡️ **PayPal Dispute Filed**: Invoice \`${invId}\` for **${merchant}** has been flagged under PayPal Sandbox Buyer Protection for billing discrepancy review.`,
+        []
+      );
     }
 
     if (!messages || !Array.isArray(messages)) {
