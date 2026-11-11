@@ -37,6 +37,8 @@ export async function syncUserPayPalLedger(
         lastSyncedAt: true,
         lastTransactionAt: true,
         lastTransactionId: true,
+        paypalMerchantId: true,
+        paypalOnboardingStatus: true,
       },
     });
 
@@ -87,8 +89,13 @@ export async function syncUserPayPalLedger(
       ? undefined
       : new Date(user.lastSyncedAt!.getTime() - INCREMENTAL_OVERLAP_MS);
 
+    const connectedMerchantId =
+      user.paypalOnboardingStatus === "CONNECTED" && user.paypalMerchantId
+        ? user.paypalMerchantId
+        : undefined;
+
     const [reportingTxs, invoiceTxs] = await Promise.all([
-      paypalClient.fetchReportingTransactionsWindow(startDate, endDate, cleanEmail),
+      paypalClient.fetchReportingTransactionsWindow(startDate, endDate, cleanEmail, connectedMerchantId),
       paypalClient.fetchInvoices({
         filterEmail: cleanEmail,
         knownSplitInvoiceIds,

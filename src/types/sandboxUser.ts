@@ -5,6 +5,8 @@ export interface UserAccount {
   avatar: string;
   persona: "GENERAL" | "FREELANCER" | "BUSINESS";
   industry?: string | null;
+  paypalMerchantId?: string | null;
+  paypalOnboardingStatus?: string | null;
 }
 
 export interface ContactRecord {

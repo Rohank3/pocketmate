@@ -232,6 +232,43 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // 10. Handle Partner Onboarding Completed / Consent Revoked
+    if (eventType === "MERCHANT.ONBOARDING.COMPLETED") {
+      const merchantId = (resource.merchant_id as string) || "";
+      const trackingId = (resource.tracking_id as string) || "";
+      if (merchantId && trackingId) {
+        try {
+          await prisma.user.updateMany({
+            where: { paypalPartnerTrackingId: trackingId },
+            data: {
+              paypalMerchantId: merchantId,
+              paypalOnboardingStatus: "CONNECTED",
+              lastSyncedAt: null,
+            },
+          });
+        } catch (onboardErr) {
+          console.warn("[PayPal Webhook Onboarding Warning]", onboardErr);
+        }
+      }
+    }
+
+    if (eventType === "MERCHANT.PARTNER-CONSENT.REVOKED") {
+      const merchantId = (resource.merchant_id as string) || "";
+      if (merchantId) {
+        try {
+          await prisma.user.updateMany({
+            where: { paypalMerchantId: merchantId },
+            data: {
+              paypalOnboardingStatus: "NOT_CONNECTED",
+              paypalMerchantId: null,
+            },
+          });
+        } catch (revokeErr) {
+          console.warn("[PayPal Webhook Consent Revoked Warning]", revokeErr);
+        }
+      }
+    }
+
     return NextResponse.json({ received: true, eventType });
   } catch (err: unknown) {
     console.error("[PayPal Webhook Error]", err);

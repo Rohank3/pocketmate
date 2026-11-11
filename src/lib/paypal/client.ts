@@ -66,6 +66,7 @@ export interface CreateOrderParams {
   customId?: string;
   returnUrl?: string;
   cancelUrl?: string;
+  payeeMerchantId?: string;
 }
 
 export interface PayPalOrderResult {
@@ -81,6 +82,14 @@ export interface CaptureOrderResult {
   amount: number;
   currency: string;
   payerEmail?: string;
+  customId?: string;
+  payeeMerchantId?: string;
+}
+
+export interface PartnerReferralResult {
+  trackingId: string;
+  actionUrl: string;
+  referralHref?: string;
 }
 
 export interface VerifyWebhookParams {
@@ -113,6 +122,102 @@ class PayPalSandboxClient {
     return process.env.PAYPAL_ENVIRONMENT === "live"
       ? "https://www.paypal.com/disputes"
       : "https://www.sandbox.paypal.com/disputes";
+  }
+
+  private buildAuthAssertionHeader(merchantPayerId: string): string {
+    const clientId = process.env.PAYPAL_CLIENT_ID || this.clientId;
+    const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url");
+    const payload = Buffer.from(
+      JSON.stringify({ iss: clientId, payer_id: merchantPayerId })
+    ).toString("base64url");
+    return `${header}.${payload}.`;
+  }
+
+  private getPartnerHeaders(merchantPayerId?: string): Record<string, string> {
+    const headers: Record<string, string> = {};
+    const bnCode = process.env.PAYPAL_BN_CODE?.trim();
+    if (bnCode) {
+      headers["PayPal-Partner-Attribution-Id"] = bnCode;
+    }
+    if (merchantPayerId?.trim()) {
+      headers["PayPal-Auth-Assertion"] = this.buildAuthAssertionHeader(merchantPayerId.trim());
+    }
+    return headers;
+  }
+
+  /**
+   * Generates a PayPal Partner Referrals v2 onboarding link so a Business user can grant
+   * third-party checkout, search, and dispute permissions directly to PocketMate.
+   */
+  async createPartnerReferral(params: {
+    trackingId: string;
+    returnUrl: string;
+  }): Promise<PartnerReferralResult> {
+    const token = await this.getAccessToken();
+    const res = await fetch(`${this.baseUrl}/v2/customer/partner-referrals`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        ...this.getPartnerHeaders(),
+      },
+      body: JSON.stringify({
+        tracking_id: params.trackingId,
+        partner_config_override: {
+          return_url: params.returnUrl,
+          return_url_description: "Return to PocketMate after connecting PayPal Business",
+        },
+        operations: [
+          {
+            operation: "API_INTEGRATION",
+            api_integration_preference: {
+              rest_api_integration: {
+                integration_method: "PAYPAL",
+                integration_type: "THIRD_PARTY",
+                third_party_details: {
+                  features: [
+                    "PAYMENT",
+                    "REFUND",
+                    "READ_SELLER_DISPUTE",
+                    "UPDATE_SELLER_DISPUTE",
+                    "ADVANCED_TRANSACTIONS_SEARCH",
+                    "ACCESS_MERCHANT_INFORMATION",
+                  ],
+                },
+              },
+            },
+          },
+        ],
+        products: ["EXPRESS_CHECKOUT"],
+        legal_consents: [
+          {
+            type: "SHARE_DATA_CONSENT",
+            granted: true,
+          },
+        ],
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`PayPal Partner Referrals failed: HTTP ${res.status} - ${errText}`);
+    }
+
+    const data = (await res.json()) as {
+      links?: Array<{ rel?: string; href?: string }>;
+    };
+    const actionUrl = data.links?.find((l) => l.rel === "action_url")?.href;
+    const selfHref = data.links?.find((l) => l.rel === "self")?.href;
+
+    if (!actionUrl) {
+      throw new Error("PayPal Partner Referrals response did not include an action_url link.");
+    }
+
+    return {
+      trackingId: params.trackingId,
+      actionUrl,
+      referralHref: selfHref,
+    };
   }
 
   /**
@@ -159,25 +264,29 @@ class PayPalSandboxClient {
 
   /**
    * Creates an order via PayPal Orders v2 API.
-   * Payer authenticates on PayPal's domain to approve settlement.
+   * When `payeeMerchantId` is supplied, PayPal routes captured funds directly
+   * to the onboarded organizer's PayPal Business account.
    */
   async createOrder(params: CreateOrderParams): Promise<PayPalOrderResult> {
     const token = await this.getAccessToken();
     const appUrl = process.env.RENDER_EXTERNAL_URL || process.env.NEXTAUTH_URL || "http://localhost:3000";
 
+    const purchaseUnit: Record<string, unknown> = {
+      reference_id: "pocketmate_settlement",
+      description: params.description || "Expense Settlement via PocketMate",
+      custom_id: params.customId,
+      amount: {
+        currency_code: params.currency || "USD",
+        value: params.amount.toFixed(2),
+      },
+    };
+    if (params.payeeMerchantId?.trim()) {
+      purchaseUnit.payee = { merchant_id: params.payeeMerchantId.trim() };
+    }
+
     const body = {
       intent: "CAPTURE",
-      purchase_units: [
-        {
-          reference_id: "pocketmate_settlement",
-          description: params.description || "Expense Settlement via PocketMate",
-          custom_id: params.customId,
-          amount: {
-            currency_code: params.currency || "USD",
-            value: params.amount.toFixed(2),
-          },
-        },
-      ],
+      purchase_units: [purchaseUnit],
       application_context: {
         brand_name: "PocketMate",
         user_action: "PAY_NOW",
@@ -192,6 +301,7 @@ class PayPalSandboxClient {
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
+        ...this.getPartnerHeaders(params.payeeMerchantId),
       },
       body: JSON.stringify(body),
     });
@@ -212,16 +322,41 @@ class PayPalSandboxClient {
   }
 
   /**
-   * Captures an approved PayPal order.
+   * Captures an approved PayPal order (automatically attaching PayPal-Auth-Assertion
+   * when the order routes funds to a connected sub-merchant `payee.merchant_id`).
    */
-  async captureOrder(orderId: string): Promise<CaptureOrderResult> {
+  async captureOrder(orderId: string, explicitPayeeMerchantId?: string): Promise<CaptureOrderResult> {
     const token = await this.getAccessToken();
+    let effectiveMerchantId = explicitPayeeMerchantId?.trim() || "";
+    let existingCustomId: string | undefined = undefined;
+
+    if (!effectiveMerchantId) {
+      try {
+        const orderGet = await fetch(`${this.baseUrl}/v2/checkout/orders/${encodeURIComponent(orderId)}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+            ...this.getPartnerHeaders(),
+          },
+        });
+        if (orderGet.ok) {
+          const orderInfo = (await orderGet.json()) as {
+            purchase_units?: Array<{ custom_id?: string; payee?: { merchant_id?: string } }>;
+          };
+          effectiveMerchantId = orderInfo.purchase_units?.[0]?.payee?.merchant_id || "";
+          existingCustomId = orderInfo.purchase_units?.[0]?.custom_id;
+        }
+      } catch {
+        // Proceed without lookup if unavailable
+      }
+    }
 
     const res = await fetch(`${this.baseUrl}/v2/checkout/orders/${encodeURIComponent(orderId)}/capture`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
+        ...this.getPartnerHeaders(effectiveMerchantId || undefined),
       },
     });
 
@@ -231,7 +366,8 @@ class PayPalSandboxClient {
     }
 
     const data = await res.json();
-    const captureUnit = data.purchase_units?.[0]?.payments?.captures?.[0];
+    const unit = data.purchase_units?.[0];
+    const captureUnit = unit?.payments?.captures?.[0];
 
     return {
       orderId: data.id,
@@ -240,6 +376,8 @@ class PayPalSandboxClient {
       amount: parseFloat(captureUnit?.amount?.value || "0.00"),
       currency: captureUnit?.amount?.currency_code || "USD",
       payerEmail: data.payer?.email_address,
+      customId: captureUnit?.custom_id || unit?.custom_id || existingCustomId,
+      payeeMerchantId: unit?.payee?.merchant_id || effectiveMerchantId || undefined,
     };
   }
 
@@ -310,7 +448,8 @@ class PayPalSandboxClient {
   async fetchReportingTransactionsWindow(
     startDate: Date,
     endDate: Date,
-    filterEmail?: string
+    filterEmail?: string,
+    merchantPayerId?: string
   ): Promise<PayPalTransaction[]> {
     const token = await this.getAccessToken();
     const results: PayPalTransaction[] = [];
@@ -337,12 +476,23 @@ class PayPalSandboxClient {
           startIso
         )}&end_date=${encodeURIComponent(endIso)}&fields=all&page_size=100`;
 
-        const repRes = await fetch(url, {
+        let repRes = await fetch(url, {
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
+            ...this.getPartnerHeaders(merchantPayerId),
           },
         });
+
+        // Fallback to platform-level Reporting API if merchant-level assertion isn't authorized yet
+        if ((repRes.status === 401 || repRes.status === 403) && merchantPayerId) {
+          repRes = await fetch(url, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          });
+        }
 
         if (!repRes.ok) return [];
         const data = await repRes.json();
@@ -1081,6 +1231,47 @@ class PayPalSandboxClient {
       status: "SENT",
       viewUrl,
     };
+  }
+
+  /**
+   * Records a settlement payment against an Invoicing v2 invoice (transitioning it to MARKED_AS_PAID)
+   * after an Orders v2 direct-payee checkout capture completes.
+   */
+  async recordInvoicePayment(
+    invoiceId: string,
+    amount: number,
+    note?: string,
+    currency: string = "USD"
+  ): Promise<boolean> {
+    if (!invoiceId || !invoiceId.startsWith("INV2-")) return false;
+    try {
+      const token = await this.getAccessToken();
+      const res = await fetch(
+        `${this.baseUrl}/v2/invoicing/invoices/${encodeURIComponent(invoiceId)}/payments`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            method: "PAYPAL",
+            payment_date: new Date().toISOString().split("T")[0],
+            amount: {
+              currency_code: currency,
+              value: amount.toFixed(2),
+            },
+            note: note || "Settled directly via PocketMate PayPal Checkout",
+          }),
+        }
+      );
+      if (res.ok) {
+        this.invoiceDetailCache.delete(invoiceId);
+      }
+      return res.ok;
+    } catch {
+      return false;
+    }
   }
 
   /**

@@ -7,11 +7,30 @@
  * - User profile retrieval (Full name, email, verified status)
  */
 
+import type { NextRequest } from "next/server";
+
 export interface PayPalUserProfile {
   userId: string;
+  payerId?: string;
   name: string;
   email: string;
   verifiedAccount?: boolean;
+}
+
+export function resolvePublicOrigin(req?: NextRequest): string {
+  if (req) {
+    const forwardedHost = req.headers.get("x-forwarded-host");
+    const forwardedProto = req.headers.get("x-forwarded-proto") || "https";
+    if (forwardedHost && !forwardedHost.includes("localhost")) {
+      return `${forwardedProto}://${forwardedHost}`.replace(/\/$/, "");
+    }
+    const origin = req.nextUrl?.origin;
+    if (origin && !origin.includes("0.0.0.0") && !origin.includes("127.0.0.1")) {
+      return origin.replace(/\/$/, "");
+    }
+  }
+  const envUrl = process.env.RENDER_EXTERNAL_URL || process.env.NEXTAUTH_URL || "http://localhost:3000";
+  return envUrl.replace(/\/$/, "");
 }
 
 export function getPayPalOAuthUrl(redirectUri?: string, state?: string): string {
@@ -92,6 +111,7 @@ export async function fetchPayPalUserInfo(accessToken: string): Promise<PayPalUs
 
   const data = (await res.json()) as {
     user_id?: string;
+    payer_id?: string;
     sub?: string;
     name?: string;
     email?: string;
@@ -100,6 +120,7 @@ export async function fetchPayPalUserInfo(accessToken: string): Promise<PayPalUs
 
   return {
     userId: data.user_id || data.sub || `pp_user_${Date.now()}`,
+    payerId: data.payer_id,
     name: data.name || "PayPal Sandbox User",
     email: data.email || "user@sandbox.paypal.com",
     verifiedAccount: data.verified_account,

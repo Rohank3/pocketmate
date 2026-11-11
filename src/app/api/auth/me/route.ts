@@ -34,6 +34,8 @@ export async function GET(req: NextRequest) {
         email: user.email,
         persona: user.persona,
         industry: user.industry,
+        paypalMerchantId: user.paypalMerchantId,
+        paypalOnboardingStatus: user.paypalOnboardingStatus,
         avatar: (user.name || user.email)
           .split(" ")
           .map((n) => n[0])
