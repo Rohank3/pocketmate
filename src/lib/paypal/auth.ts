@@ -46,9 +46,7 @@ export function getPayPalOAuthUrl(redirectUri?: string, state?: string): string 
   const appUrl = process.env.RENDER_EXTERNAL_URL || process.env.NEXTAUTH_URL || "http://localhost:3000";
   const targetRedirect = redirectUri || `${appUrl}/api/auth/callback/paypal`;
 
-  const scopes = encodeURIComponent(
-    "openid profile email https://uri.paypal.com/services/paypalattributes"
-  );
+  const scopes = encodeURIComponent("openid profile email");
   const stateQuery = state ? `&state=${encodeURIComponent(state)}` : "";
   return `${baseUrl}/signin/authorize?client_id=${encodeURIComponent(clientId)}&response_type=code&scope=${scopes}&redirect_uri=${encodeURIComponent(
     targetRedirect
@@ -127,17 +125,26 @@ export async function exchangePayPalCodeForTokens(
   };
 }
 
+export interface PayPalIdentityHint {
+  userId: string;
+  payerId?: string;
+  name?: string;
+}
+
 /**
  * Error thrown when PayPal's OAuth profile endpoints omit an email address.
- * Carries only non-sensitive response metadata (granted scopes, HTTP statuses, JSON keys).
+ * Carries only non-sensitive response metadata (granted scopes, HTTP statuses, JSON keys)
+ * plus the verified PayPal user/payer identifier when authenticated.
  */
 export class PayPalMissingEmailError extends Error {
   readonly detail: string;
+  readonly identity?: PayPalIdentityHint;
 
-  constructor(detail: string) {
+  constructor(detail: string, identity?: PayPalIdentityHint) {
     super("MISSING_PAYPAL_EMAIL");
     this.name = "PayPalMissingEmailError";
     this.detail = detail;
+    this.identity = identity;
   }
 }
 
@@ -198,7 +205,7 @@ function extractDisplayName(source?: {
   return [source.given_name?.trim(), source.family_name?.trim()].filter(Boolean).join(" ");
 }
 
-function formatNameFromEmail(email: string): string {
+export function formatNameFromEmail(email: string): string {
   const local = email.split("@")[0] || "";
   const formatted = local
     .split(/[._-]+/)
@@ -331,12 +338,36 @@ export async function fetchPayPalUserInfo(
   }
   const pp11 = pp11Res.data;
 
+  const payerId =
+    openid?.payer_id ||
+    oauth2Openid?.payer_id ||
+    v11?.payer_id ||
+    pp11?.payer_id ||
+    idClaims?.payer_id;
+  const userId =
+    openid?.user_id ||
+    openid?.sub ||
+    oauth2Openid?.user_id ||
+    oauth2Openid?.sub ||
+    v11?.user_id ||
+    pp11?.user_id ||
+    idClaims?.user_id ||
+    idClaims?.sub ||
+    payerId ||
+    "";
+  const detectedName =
+    extractDisplayName(openid) ||
+    extractDisplayName(oauth2Openid) ||
+    extractDisplayName(v11) ||
+    extractDisplayName(pp11) ||
+    extractDisplayName(idClaims);
+
   if (
     !openidRes.ok &&
     !oauth2OpenidRes.ok &&
     !v11Res.ok &&
     !pp11Res.ok &&
-    !extractEmailFromSource(idClaims)
+    !userId
   ) {
     throw new Error(`Failed to fetch PayPal user info: HTTP ${openidRes.status || oauth2OpenidRes.status}`);
   }
@@ -368,34 +399,13 @@ export async function fetchPayPalUserInfo(
     )}); jwt=(${keySummary(idClaims)})`;
 
     console.error("[PayPal OAuth Profile Missing Email]", detail, "rawScope:", grantedScope);
-    throw new PayPalMissingEmailError(detail);
+    throw new PayPalMissingEmailError(
+      detail,
+      userId ? { userId, payerId, name: detectedName || undefined } : undefined
+    );
   }
 
-  const name =
-    extractDisplayName(openid) ||
-    extractDisplayName(oauth2Openid) ||
-    extractDisplayName(v11) ||
-    extractDisplayName(pp11) ||
-    extractDisplayName(idClaims) ||
-    formatNameFromEmail(email);
-
-  const payerId =
-    openid?.payer_id ||
-    oauth2Openid?.payer_id ||
-    v11?.payer_id ||
-    pp11?.payer_id ||
-    idClaims?.payer_id;
-  const userId =
-    openid?.user_id ||
-    openid?.sub ||
-    oauth2Openid?.user_id ||
-    oauth2Openid?.sub ||
-    v11?.user_id ||
-    pp11?.user_id ||
-    idClaims?.user_id ||
-    idClaims?.sub ||
-    payerId ||
-    email;
+  const name = detectedName || formatNameFromEmail(email);
 
   return {
     userId,
